@@ -1,0 +1,106 @@
+import time
+import random
+import requests
+import uuid
+import datetime
+
+INGEST_URL = "http://localhost:8000/events"
+TENANTS = ["twitter", "Acme Corp", "Globex", "Initech"]
+USERS_PER_TENANT = 50
+
+# Funnel: login -> apply -> kyc -> approval
+# Other features: export_csv, invite_user, change_theme
+
+def generate_user_ids():
+    return {t: [str(uuid.uuid4()) for _ in range(USERS_PER_TENANT)] for t in TENANTS}
+
+def get_channel():
+    return random.choices(["web", "mobile", "api"], weights=[0.6, 0.3, 0.1])[0]
+
+def simulate_funnel(user_id, tenant_id, base_time):
+    # Determine how far they get in the funnel
+    drop_off_step = random.choices([1, 2, 3, 4, 5], weights=[0.1, 0.3, 0.4, 0.1, 0.1])[0]
+    
+    if tenant_id == "twitter":
+        events = ["login", "view_feed", "post_tweet", "like_tweet"]
+    else:
+        events = ["login", "apply", "kyc", "approval"]
+    
+    current_time = base_time
+    for i in range(min(drop_off_step, 4)):
+        event = events[i]
+        payload = {
+            "event_name": event,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "timestamp": current_time.timestamp(),
+            "channel": get_channel(),
+            "metadata": {"ip": "192.168.1.1", "device_type": "desktop" if i % 2 == 0 else "mobile"}
+        }
+        yield payload
+        current_time += datetime.timedelta(minutes=random.randint(1, 15))
+
+def simulate_random_features(user_id, tenant_id, base_time):
+    features = ["export_csv", "invite_user", "change_theme"]
+    
+    # Simulate a feature being rarely used (e.g. change_theme)
+    weights = [0.7, 0.25, 0.05]
+    
+    for _ in range(random.randint(0, 5)):
+        feature = random.choices(features, weights=weights)[0]
+        payload = {
+            "event_name": feature,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "timestamp": base_time.timestamp(),
+            "channel": get_channel(),
+            "metadata": {"user_email": "test@example.com"} # This will be masked by security.py
+        }
+        yield payload
+        base_time += datetime.timedelta(seconds=random.randint(10, 300))
+
+def main():
+    print("Initializing Data Seeder...")
+    users_db = generate_user_ids()
+    
+    # We will generate events for the last 7 days to populate historical data
+    end_date = datetime.datetime.now()
+    start_date = end_date - datetime.timedelta(days=7)
+    
+    events_to_send = []
+    
+    for _ in range(100): # Number of simulated sessions
+        tenant = random.choice(TENANTS)
+        user = random.choice(users_db[tenant])
+        
+        # Random time in the last 7 days
+        random_seconds = random.randint(0, int((end_date - start_date).total_seconds()))
+        session_start = start_date + datetime.timedelta(seconds=random_seconds)
+        
+        events_to_send.extend(list(simulate_funnel(user, tenant, session_start)))
+        events_to_send.extend(list(simulate_random_features(user, tenant, session_start)))
+        
+    # Sort events chronologically to simulate real stream
+    events_to_send.sort(key=lambda x: x["timestamp"])
+    
+    print(f"Generated {len(events_to_send)} events. Streaming to API...")
+    
+    for i, event in enumerate(events_to_send):
+        try:
+            resp = requests.post(INGEST_URL, json=event)
+            if resp.status_code == 202:
+                if i % 100 == 0:
+                    print(f"Sent {i}/{len(events_to_send)} events...")
+            else:
+                print(f"Error: {resp.status_code} - {resp.text}")
+        except requests.exceptions.ConnectionError:
+            print("Failed to connect to ingestion API. Is Docker Compose running?")
+            break
+            
+        # Add a tiny delay to simulate real-time
+        time.sleep(0.01)
+
+    print("Finished seeding data.")
+
+if __name__ == "__main__":
+    main()

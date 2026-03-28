@@ -1,0 +1,8 @@
+fastapi==0.111.0
+uvicorn==0.30.1
+pydantic==2.7.4
+pydantic-settings==2.3.4
+aiokafka==0.10.0
+confluent-kafka==2.4.0
+clickhouse-connect==0.7.16
+python-dotenv==1.0.1
