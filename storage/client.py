@@ -80,4 +80,3 @@ class ClickHouseClient:
 
 # Singleton instance
 ch_client = ClickHouseClient()
-
