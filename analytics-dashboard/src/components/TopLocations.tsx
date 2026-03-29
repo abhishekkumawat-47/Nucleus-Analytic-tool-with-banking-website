@@ -93,7 +93,7 @@ function TopLocations({ data }: TopLocationsProps) {
                     const countryName = geo.properties.name;
                     const locationData = data.find(d => 
                       d.country === countryName || 
-                      (countryName === 'United States of America' && (d.country === 'USA' || d.country === 'United States')) ||
+                      (countryName === 'United States of America' && (d.country === 'USA' || d.country === 'United States' || d.country === 'America')) ||
                       (countryName === 'United Kingdom' && d.country === 'UK')
                     );
 
@@ -130,7 +130,7 @@ function TopLocations({ data }: TopLocationsProps) {
         <div className="w-full lg:w-80 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-[13px] font-semibold text-gray-800 uppercase tracking-wider">Top by Region</h4>
-            <span className="text-[11px] text-gray-400 font-medium">Total: {(totalVisits/1000).toFixed(1)}k</span>
+            <span className="text-[11px] text-gray-400 font-medium">Total: {totalVisits >= 1000 ? `${(totalVisits / 1000).toFixed(1)}k` : totalVisits}</span>
           </div>
           
           <div className="space-y-1">
@@ -145,7 +145,7 @@ function TopLocations({ data }: TopLocationsProps) {
                     <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-all" />
                   </div>
                   <span className="text-[12px] font-bold text-gray-900 tabular-nums">
-                    {(item.visits / 1000).toFixed(1)}k
+                    {item.visits >= 1000 ? `${(item.visits / 1000).toFixed(1)}k` : item.visits}
                   </span>
                 </div>
                 <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">

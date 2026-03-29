@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { MapPin, ShieldAlert, X } from 'lucide-react';
+import { tracker } from '@/lib/tracker';
 
 export default function LocationConsent() {
   const [showModal, setShowModal] = useState(false);
@@ -37,6 +38,9 @@ export default function LocationConsent() {
       if (data.countryName) {
         localStorage.setItem('userCountry', data.countryName);
         localStorage.setItem('locationConsent', 'granted');
+        
+        // Immediately fire an event to register the newly fetched location in the analytics backend
+        tracker.track('location_granted', { location: data.countryName });
       } else {
         throw new Error('Country not found');
       }
