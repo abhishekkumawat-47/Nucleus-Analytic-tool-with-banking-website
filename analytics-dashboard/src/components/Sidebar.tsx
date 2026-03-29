@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Cloud,
+  Eye,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { toggleSidebar } from '@/lib/dashboardSlice';
@@ -36,6 +37,7 @@ const iconMap: Record<string, React.ElementType> = {
   settings: Settings,
   shield: Shield,
   cloud: Cloud,
+  eye: Eye,
 };
 
 interface SidebarProps {}
@@ -61,6 +63,7 @@ function Sidebar(_props: SidebarProps) {
       { id: 'tenants', label: 'Tenants', icon: 'users', href: '/tenants' },
       { id: 'config', label: 'Configuration', icon: 'settings', href: '/settings' },
       { id: 'governance', label: 'Governance', icon: 'shield', href: '/governance' },
+      { id: 'transparency', label: 'Trust & Transparency', icon: 'eye', href: '/transparency' },
     ];
   } else if (role === 'super_admin') {
     // Super admin sees only the Global Admin view

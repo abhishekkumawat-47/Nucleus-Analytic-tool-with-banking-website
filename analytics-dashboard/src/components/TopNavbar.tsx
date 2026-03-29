@@ -6,7 +6,7 @@
  * Matches the FinInsight design with clean, minimal styling.
  */
 
-import React, { memo, useState, useRef, useEffect } from 'react';
+import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
 import {
   Search,
   ChevronDown,
@@ -29,7 +29,6 @@ import {
 import { TimeRange, DeploymentMode } from '@/types';
 
 const timeRanges: TimeRange[] = ['Last 7 Days', 'Last 30 Days', 'Last 90 Days', 'Custom'];
-const tenantOptions = ['twitter', 'Beta Industries', 'Gamma Ltd'];
 
 function TopNavbar() {
   const dispatch = useAppDispatch();
@@ -38,6 +37,16 @@ function TopNavbar() {
   );
   const { data: session } = useSession();
 
+  const tenantOptions = useMemo(() => {
+    if (!session?.user) return ['twitter'];
+    if (session.user.role === 'super_admin') {
+      return ['twitter', 'Beta Industries', 'Gamma Ltd'];
+    }
+    return session.user.adminApps && session.user.adminApps.length > 0
+      ? session.user.adminApps
+      : ['twitter'];
+  }, [session]);
+
   const [showTenantDropdown, setShowTenantDropdown] = useState(false);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
@@ -45,6 +54,13 @@ function TopNavbar() {
   const [showTransparency, setShowTransparency] = useState(false);
   const [transparencyData, setTransparencyData] = useState<any>(null);
   const [transparencyLoading, setTransparencyLoading] = useState(false);
+
+  // Force reset the tenant if current selection is not authorized
+  useEffect(() => {
+    if (selectedTenant && tenantOptions.length > 0 && !tenantOptions.includes(selectedTenant)) {
+      dispatch(setSelectedTenant(tenantOptions[0]));
+    }
+  }, [tenantOptions, selectedTenant, dispatch]);
 
   const tenantRef = useRef<HTMLDivElement>(null);
   const timeRef = useRef<HTMLDivElement>(null);
