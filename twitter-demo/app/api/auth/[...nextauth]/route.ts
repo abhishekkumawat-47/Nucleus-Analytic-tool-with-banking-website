@@ -1,6 +1,5 @@
 import NextAuth from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
-import { getUserRole, getAdminApps } from '@/lib/rbac-server';
 
 const handler = NextAuth({
   providers: [
@@ -11,19 +10,25 @@ const handler = NextAuth({
   ],
   secret: process.env.NEXTAUTH_SECRET ?? 'fallback-secret-for-dev',
   session: { strategy: 'jwt' },
+  cookies: {
+    sessionToken: {
+      name: 'twitter-demo.session-token',
+      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
+    },
+    callbackUrl: {
+      name: 'twitter-demo.callback-url',
+      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
+    },
+    csrfToken: {
+      name: 'twitter-demo.csrf-token',
+      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
+    },
+  },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.role = getUserRole(user.email);
-        token.adminApps = getAdminApps(user.email);
-      }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).role = token.role || 'user';
-        (session.user as any).adminApps = token.adminApps || [];
-      }
       return session;
     }
   }

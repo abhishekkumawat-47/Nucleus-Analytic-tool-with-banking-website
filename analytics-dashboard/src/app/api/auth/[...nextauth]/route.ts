@@ -13,6 +13,20 @@ export const authOptions: NextAuthOptions = {
   ],
   secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
+  cookies: {
+    sessionToken: {
+      name: 'analytics-dash.session-token',
+      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
+    },
+    callbackUrl: {
+      name: 'analytics-dash.callback-url',
+      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
+    },
+    csrfToken: {
+      name: 'analytics-dash.csrf-token',
+      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
+    },
+  },
   callbacks: {
     async jwt({ token, user }) {
       // Incoming user is defined only on initial sign in

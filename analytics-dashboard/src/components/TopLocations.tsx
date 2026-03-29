@@ -93,7 +93,7 @@ function TopLocations({ data }: TopLocationsProps) {
                     const countryName = geo.properties.name;
                     const locationData = data.find(d => 
                       d.country === countryName || 
-                      (countryName === 'United States of America' && d.country === 'USA') ||
+                      (countryName === 'United States of America' && (d.country === 'USA' || d.country === 'United States')) ||
                       (countryName === 'United Kingdom' && d.country === 'UK')
                     );
 

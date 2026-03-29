@@ -5,6 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import TweetBox from '@/components/TweetBox';
 import Tweet from '@/components/Tweet';
+import LocationConsent from '@/components/LocationConsent';
 import { tracker } from '@/lib/tracker';
 import { BarChart3, Cloud, LogOut, Shield, Zap } from 'lucide-react';
 
@@ -28,7 +29,6 @@ export default function FeedPage() {
 
   const { data: session, status } = useSession();
   const router = useRouter();
-  const userRole = (session?.user as any)?.role || 'user';
 
   // Redirect unauthenticated users to login
   useEffect(() => {
@@ -78,42 +78,11 @@ export default function FeedPage() {
             <h1 className="text-xl font-bold">Home</h1>
             
             <div className="flex items-center gap-2">
-              {/* Role-based admin links */}
-              {userRole === 'app_admin' && (
-                <a
-                  href="http://localhost:3001/dashboard"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-full text-xs font-semibold transition-colors border border-orange-200"
-                  title="Open detailed analytics dashboard"
-                >
-                  <BarChart3 size={14} />
-                  <span>Analytics</span>
-                </a>
-              )}
-              
-              {userRole === 'super_admin' && (
-                <a
-                  href="http://localhost:3001/admin"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-semibold transition-colors border border-blue-200"
-                  title="Open company admin dashboard"
-                >
-                  <Cloud size={14} />
-                  <span>Admin</span>
-                </a>
-              )}
-
               {/* User info & sign out */}
               <div className="flex items-center gap-2">
                 <div className="text-right hidden sm:block">
                   <p className="text-xs font-medium text-gray-700 leading-tight">{session?.user?.name}</p>
-                  <p className="text-[10px] text-gray-400 leading-tight">{
-                    userRole === 'app_admin' ? '🔒 App Admin' : 
-                    userRole === 'super_admin' ? '☁️ Super Admin' : 
-                    '👤 User'
-                  }</p>
+                  <p className="text-[10px] text-gray-400 leading-tight">👤 User</p>
                 </div>
                 <button
                   onClick={() => signOut({ callbackUrl: '/' })}
@@ -142,6 +111,7 @@ export default function FeedPage() {
           ))}
         </div>
       </div>
+      <LocationConsent />
     </div>
   );
 }

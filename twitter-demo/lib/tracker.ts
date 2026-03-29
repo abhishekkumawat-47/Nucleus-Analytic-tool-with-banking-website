@@ -30,8 +30,9 @@ class AnalyticsTracker {
     const defaultIp = email?.includes('admin') ? '12.34.56.78' : '98.76.54.32'; 
     const finalIp = metadata.ip || defaultIp;
     
-    // Configurable location variable
-    const defaultLocation = 'America';
+    // Configurable location variable fetched via LocationConsent
+    const storedLocation = typeof window !== 'undefined' ? localStorage.getItem('userCountry') : null;
+    const defaultLocation = storedLocation || 'Unknown';
     const finalLocation = metadata.location || defaultLocation;
 
     const payload = {
