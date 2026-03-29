@@ -2,19 +2,47 @@
 
 /**
  * App Selector Landing Page
- * Lists all registered applications from the Feature Map config.
- * Provides links to both the app itself and its analytics dashboard.
+ * Role-based content:
+ *   super_admin  → Links to detailed dashboard + app interaction
+ *   company_admin → Links to cloud summaries + global admin
+ *   user         → Redirected away by AuthGuard (never reaches here)
  */
 
 import Link from 'next/link';
-import { BarChart3, ArrowRight, Zap } from 'lucide-react';
+import { useEffect } from 'react';
+import { BarChart3, ArrowRight, Zap, Shield, Cloud, LayoutDashboard, Eye } from 'lucide-react';
 import { APP_REGISTRY } from '@/lib/feature-map';
+import { useAppDispatch, useAppSelector } from '@/lib/store';
+import { fetchDeploymentInfo } from '@/lib/dashboardSlice';
+
+import { useSession } from 'next-auth/react';
+import AuthGuard from '@/components/AuthGuard';
 
 export default function AppSelectorPage() {
+  const dispatch = useAppDispatch();
+  const { deploymentMode } = useAppSelector((state) => state.dashboard);
+  const { data: session } = useSession();
+
+  useEffect(() => {
+    dispatch(fetchDeploymentInfo());
+  }, [dispatch]);
+
   const apps = Object.values(APP_REGISTRY);
+  const userRole = session?.user?.role || 'user';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center justify-center p-6">
+    <AuthGuard>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center justify-center p-6">
+      
+      {/* Role Badge */}
+      <div className="absolute top-6 right-6 flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+        {userRole === 'super_admin' ? (
+          <><Cloud className="w-4 h-4 text-blue-400" /><span className="text-sm font-medium text-blue-100">Super Admin</span></>
+        ) : (
+          <><Shield className="w-4 h-4 text-orange-400" /><span className="text-sm font-medium text-orange-100">App Admin</span></>
+        )}
+      </div>
+
       <div className="text-center mb-12">
         <div className="flex items-center justify-center space-x-2 mb-4">
           <Zap className="w-8 h-8 text-blue-400" />
@@ -24,7 +52,10 @@ export default function AppSelectorPage() {
           Feature Intelligence &amp; Usage Analytics Platform
         </p>
         <p className="text-gray-500 text-sm mt-2">
-          Select an app to interact with it, then view its live analytics dashboard
+          {userRole === 'super_admin' 
+            ? 'View aggregated cloud summaries for all connected apps'
+            : 'Select an app to view detailed analytics or interact with it'
+          }
         </p>
       </div>
 
@@ -50,25 +81,45 @@ export default function AppSelectorPage() {
             </div>
 
             <div className="space-y-2">
-              <Link
-                href={`/${app.appId}`}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-white transition-all duration-200 group/btn"
-                style={{ backgroundColor: app.color }}
-              >
-                <span>Open App</span>
-                <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
-              </Link>
+              {/* Super Admin: Detailed Dashboard + Open App */}
+              {userRole === 'app_admin' && (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-white transition-all duration-200 group/btn"
+                    style={{ backgroundColor: app.color }}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <LayoutDashboard size={16} />
+                      <span>View Detailed Dashboard</span>
+                    </div>
+                    <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
+                  </Link>
 
-              <Link
-                href={`/apps/${app.appId}`}
-                className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-medium text-gray-300 transition-all duration-200"
-              >
-                <div className="flex items-center space-x-2">
-                  <BarChart3 size={16} />
-                  <span>View Analytics Dashboard</span>
-                </div>
-                <ArrowRight size={16} />
-              </Link>
+                  <Link
+                    href={`/${app.appId}`}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-medium text-gray-300 transition-all duration-200"
+                  >
+                    <span>Open App</span>
+                    <ArrowRight size={16} />
+                  </Link>
+                </>
+              )}
+
+              {/* Company Admin: Cloud Summary Only */}
+              {userRole === 'super_admin' && (
+                <Link
+                  href={`/apps/${app.appId}`}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-white transition-all duration-200 group/btn"
+                  style={{ backgroundColor: app.color }}
+                >
+                  <div className="flex items-center space-x-2">
+                    <Eye size={16} />
+                    <span>View Cloud Summary</span>
+                  </div>
+                  <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
+                </Link>
+              )}
             </div>
 
             <div className="mt-4 pt-4 border-t border-white/10">
@@ -93,14 +144,19 @@ export default function AppSelectorPage() {
         </div>
       </div>
 
-      <div className="mt-8">
-        <Link
-          href="/dashboard"
-          className="text-gray-500 hover:text-gray-300 text-sm transition flex items-center space-x-1"
-        >
-          <span>Or view the global analytics dashboard →</span>
-        </Link>
-      </div>
+      {/* Super Admin: Global Admin link */}
+      {userRole === 'super_admin' && (
+        <div className="mt-8">
+          <Link
+            href="/admin"
+            className="flex items-center space-x-2 px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium text-white transition-all duration-300"
+          >
+            <Cloud size={16} className="text-blue-400" />
+            <span>Global Admin Overview →</span>
+          </Link>
+        </div>
+      )}
     </div>
+    </AuthGuard>
   );
 }

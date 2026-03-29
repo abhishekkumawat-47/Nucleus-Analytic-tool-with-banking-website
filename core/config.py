@@ -10,6 +10,13 @@ class Settings(BaseSettings):
     # Deployment Strategy
     DEPLOYMENT_MODE: DeploymentMode = DeploymentMode.CLOUD
     
+    # On-Prem: identifies the single tenant this instance serves
+    TENANT_ID: str = "twitter"
+    
+    # On-Prem: whether aggregate sync to central cloud is enabled
+    SYNC_ENABLED: bool = False
+    CENTRAL_API_URL: str = "http://cloud-api-placeholder"
+    
     # Kafka
     KAFKA_BROKER_URL: str = "broker:29092"
     KAFKA_TOPIC_EVENTS: str = "feature-events"
@@ -20,6 +27,15 @@ class Settings(BaseSettings):
     CLICKHOUSE_USER: str = "default"
     CLICKHOUSE_PASSWORD: str = ""
     CLICKHOUSE_DATABASE: str = "feature_intelligence"
+    
+    @property
+    def is_cloud(self) -> bool:
+        return self.DEPLOYMENT_MODE == DeploymentMode.CLOUD
+    
+    @property
+    def is_on_prem(self) -> bool:
+        return self.DEPLOYMENT_MODE == DeploymentMode.ON_PREM
+    
     
     class Config:
         env_file = ".env"

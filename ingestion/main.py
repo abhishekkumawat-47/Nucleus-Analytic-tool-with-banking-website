@@ -97,9 +97,21 @@ async def ingest_event(event: FeatureEvent):
     # 1. Mask PII in metadata
     event.metadata = sanitize_metadata(event.metadata)
     
-    if settings.DEPLOYMENT_MODE == DeploymentMode.ON_PREM:
+    if settings.is_on_prem:
+        if event.tenant_id != settings.TENANT_ID:
+            raise HTTPException(status_code=403, detail="Forbidden: Invalid tenant ID for this on-prem instance.")
         event.user_id = f"anon_{hash(event.user_id) % 1000000}"
         
+        # Serialize and write directly to ClickHouse
+        event_dict = event.model_dump()
+        try:
+            _insert_direct_to_clickhouse(event_dict)
+            return {"status": "Event inserted locally (ON_PREM mode)"}
+        except Exception as e:
+            logger.error(f"On-prem direct insert failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to ingest event")
+        
+    # ------------- CLOUD MODE LOGIC -------------
     # 2. Serialize
     event_dict = event.model_dump()
     

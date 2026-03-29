@@ -39,10 +39,20 @@ const apiClient: AxiosInstance = axios.create({
 
 // Request interceptor for auth tokens
 apiClient.interceptors.request.use(
-  (config) => {
-    // Add auth token when backend is connected
-    // const token = getAuthToken();
-    // if (token) config.headers.Authorization = `Bearer ${token}`;
+  async (config) => {
+    try {
+      // Safely import getSession
+      const { getSession } = await import('next-auth/react');
+      const session = await getSession();
+      if (session?.user) {
+        config.headers['X-User-Email'] = session.user.email;
+        if (session.user.role) {
+          config.headers['X-User-Role'] = session.user.role;
+        }
+      }
+    } catch (err) {
+      // Ignore if called in non-browser context
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -288,6 +298,63 @@ export const dashboardAPI = {
       return response.data;
     } catch {
       return mockData.retentionData;
+    }
+  },
+
+  /** ─────────────── Deployment & Admin APIs ─────────────── */
+
+  /** Fetch current backend deployment mode and local tenant (if on-prem) */
+  async getDeploymentInfo(): Promise<{ mode: string; is_cloud: boolean; is_on_prem: boolean; local_tenant: string | null }> {
+    try {
+      const response = await apiClient.get('/deployment/info');
+      return response.data;
+    } catch (err) {
+      console.warn('Failed to fetch deployment info, assuming CLOUD mode', err);
+      return { mode: 'CLOUD', is_cloud: true, is_on_prem: false, local_tenant: null };
+    }
+  },
+
+  /** Fetch global admin summary (CLOUD mode only) */
+  async getAdminSummary(): Promise<{ total_tenants: number; total_events: number; top_tenants: any[] }> {
+    try {
+      const response = await apiClient.get('/admin/summary');
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch admin summary', err);
+      return { total_tenants: 0, total_events: 0, top_tenants: [] };
+    }
+  },
+
+  /** Fetch single app lightweight summary (CLOUD mode only) */
+  async getAdminAppSummary(tenantId: string): Promise<{ kpi: KPIMetric[]; insights: AIInsight[] }> {
+    try {
+      const response = await apiClient.get(`/admin/app/${tenantId}/summary`);
+      const payload = response.data;
+      
+      const insights = (payload.insights || []).map((insight: any, ix: number) => ({
+        id: `ai-${ix}`,
+        type: insight.severity === 'high' ? 'warning' : insight.severity === 'medium' ? 'info' : 'success',
+        title: insight.type || 'Backend Insight',
+        description: insight.message || insight,
+        impact: insight.severity === 'high' ? 'High' : 'Medium',
+        actionRequired: insight.severity === 'high',
+      }));
+
+      return { kpi: payload.kpi || mockData.kpiMetrics, insights };
+    } catch (err) {
+      console.error('Failed to fetch admin app summary', err);
+      return { kpi: mockData.kpiMetrics, insights: mockData.aiInsights };
+    }
+  },
+
+  /** Fetch transparency info showing what data goes to the cloud */
+  async getTransparencyInfo(tenantId: string = 'twitter'): Promise<any> {
+    try {
+      const response = await apiClient.get(`/transparency/cloud-data?tenant_id=${tenantId}`);
+      return response.data;
+    } catch (err) {
+      console.warn('Failed to fetch transparency info', err);
+      return null;
     }
   },
 };

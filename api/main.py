@@ -9,6 +9,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from storage.client import ch_client
 from api.insights import generate_insights
+from core.config import settings
+from core.middleware import require_cloud_mode, require_tenant_access
 
 app = FastAPI(
     title="Feature Analytics API",
@@ -23,11 +25,85 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class RBACMiddleware(BaseHTTPMiddleware):
+    """
+    Strict Role-Based Access Control middleware.
+    
+    Roles:
+      super_admin  → Overall platform admin, aggregated summaries ONLY, NO raw/sensitive data
+      app_admin    → App-level admin, full access to detailed analytics for their app
+      user         → No API access at all
+    """
+    
+    # Endpoints that are too sensitive for company_admin (raw data, user-level details)
+    COMPANY_ADMIN_BLOCKED = [
+        "/audit_logs",
+        "/locations",
+        "/metrics/realtime_users",
+        "/metrics/pages_per_minute",
+        "/metrics/top_pages",
+        "/metrics/devices",
+        "/metrics/channels",
+        "/metrics/retention",
+        "/metrics/secondary_kpi",
+        "/metrics/traffic",
+        "/metrics/feature_usage_series",
+        "/features/activity",
+        "/features/configs",
+        "/funnels",
+        "/transparency",
+    ]
+    
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        
+        # Public paths — always accessible
+        if path.startswith("/deployment") or path.startswith("/health") or path == "/":
+            return await call_next(request)
+            
+        role = request.headers.get("X-User-Role", "user")
+        
+        # Normal users can't access any data APIs
+        if role == "user":
+            return JSONResponse(
+                status_code=403, 
+                content={"detail": "Forbidden: Access denied. Normal users cannot access analytics APIs."}
+            )
+            
+        # Super admin (overall admin): aggregated endpoints ONLY, block all sensitive/detailed data
+        if role == "super_admin":
+            # Check if the path matches any blocked endpoint
+            if any(path.startswith(blocked) for blocked in self.COMPANY_ADMIN_BLOCKED):
+                return JSONResponse(
+                    status_code=403, 
+                    content={"detail": "Forbidden: Super admins cannot access detailed analytics data. Use /admin/* for aggregated summaries."}
+                )
+            
+            # Explicitly allow only these patterns for super_admin
+            allowed = ["/admin", "/metrics/kpi", "/insights", "/tenants", "/features/usage", "/deployment"]
+            if not any(path.startswith(prefix) for prefix in allowed):
+                return JSONResponse(
+                    status_code=403, 
+                    content={"detail": "Forbidden: Endpoint not available for super admin role."}
+                )
+        
+        # app_admin: full access to all detailed endpoints (no additional restrictions)
+             
+        response = await call_next(request)
+        return response
+
+app.add_middleware(RBACMiddleware)
+
 @app.get("/features/usage")
 def get_feature_usage(tenant_id: str, days: int = Query(7, ge=1, le=365)):
     """
     Returns aggregated feature usage stats for a specific tenant over the last N days.
     """
+    require_tenant_access(tenant_id)
     sql = """
         SELECT 
             event_name, 
@@ -54,6 +130,7 @@ def get_funnel_analysis(
     Advanced funnel analysis leveraging Clickhouse's windowFunnel.
     Computes conversion drop-offs between a sequence of events.
     """
+    require_tenant_access(tenant_id)
     step_events = [s.strip() for s in steps.split(",") if s.strip()]
     
     if len(step_events) < 2:
@@ -128,6 +205,7 @@ def compare_tenants(feature: str = Query(..., description="Feature event to comp
     Compare feature adoption across all tenants. 
     Useful for seeing which clients are utilizing the platform most.
     """
+    require_cloud_mode()
     sql = """
         SELECT 
             tenant_id, 
@@ -149,6 +227,7 @@ def get_insights(tenant_id: str):
     Returns AI/Rule-based actionable insights for a tenant. 
     Detects features that are not being used or sudden spikes.
     """
+    require_tenant_access(tenant_id)
     insights_data = generate_insights(tenant_id)
     return {"tenant_id": tenant_id, "insights": insights_data}
 
@@ -157,6 +236,7 @@ def get_kpi_metrics(tenant_id: str):
     """
     Returns high-level KPI metrics for the dashboard header.
     """
+    require_tenant_access(tenant_id)
     sql = """
         SELECT 
             sum(total_events) as total_events,
@@ -210,6 +290,7 @@ def get_secondary_kpi(tenant_id: str):
     """
     Returns dynamically computed extended KPI metrics: Total Visits, Unique Visitors, Session Time, Bounce Rate.
     """
+    require_tenant_access(tenant_id)
     try:
         sql_basic = """
             SELECT 
@@ -296,6 +377,7 @@ def get_traffic_data(tenant_id: str, days: int = Query(7, ge=1, le=365)):
     """
     Time series data for traffic overview.
     """
+    require_tenant_access(tenant_id)
     sql = """
         SELECT 
             date,
@@ -317,6 +399,7 @@ def get_feature_usage_series(tenant_id: str, days: int = Query(7, ge=1, le=365))
     """
     Time series feature usage data points.
     """
+    require_tenant_access(tenant_id)
     sql = """
         SELECT 
             date,
@@ -337,6 +420,7 @@ def get_all_tenants():
     """
     Returns list of distinct tenants.
     """
+    require_cloud_mode()
     sql = """
         SELECT 
             tenant_id as id,
@@ -367,6 +451,7 @@ def get_device_breakdown(tenant_id: str):
     """
     Device breakdown parsed from metadata or roughly estimated.
     """
+    require_tenant_access(tenant_id)
     sql = """
         SELECT 
             JSONExtractString(metadata, 'device_type') as device,
@@ -408,6 +493,7 @@ def get_locations(tenant_id: str):
     """
     Dynamic locations derived from metadata.location variable, falling back to IP mapping.
     """
+    require_tenant_access(tenant_id)
     sql = """
         SELECT 
             JSONExtractString(metadata, 'location') as location,
@@ -448,6 +534,7 @@ def get_locations(tenant_id: str):
 
 @app.get("/audit_logs")
 def get_audit_logs(tenant_id: str):
+    require_tenant_access(tenant_id)
     sql = """
         SELECT 
             event_name,
@@ -486,6 +573,7 @@ def get_audit_logs(tenant_id: str):
 
 @app.get("/metrics/realtime_users")
 def get_realtime_users(tenant_id: str):
+    require_tenant_access(tenant_id)
     sql = """
         SELECT uniqExact(user_id) as users 
         FROM feature_intelligence.events_raw 
@@ -499,6 +587,7 @@ def get_realtime_users(tenant_id: str):
 
 @app.get("/metrics/pages_per_minute")
 def get_pages_per_minute(tenant_id: str):
+    require_tenant_access(tenant_id)
     sql = """
         SELECT toStartOfMinute(timestamp) as min, count() as val 
         FROM feature_intelligence.events_raw 
@@ -519,6 +608,7 @@ def get_pages_per_minute(tenant_id: str):
 
 @app.get("/metrics/top_pages")
 def get_top_pages(tenant_id: str):
+    require_tenant_access(tenant_id)
     sql = """
         SELECT event_name as url, count() as visits
         FROM feature_intelligence.events_raw 
@@ -539,6 +629,7 @@ def get_top_pages(tenant_id: str):
 
 @app.get("/metrics/channels")
 def get_channels(tenant_id: str):
+    require_tenant_access(tenant_id)
     sql = """
         SELECT channel as name, count() as value 
         FROM feature_intelligence.events_raw 
@@ -559,6 +650,7 @@ def get_channels(tenant_id: str):
 
 @app.get("/features/activity")
 def get_feature_activity(tenant_id: str):
+    require_tenant_access(tenant_id)
     sql = """
         SELECT event_name, count() as total
         FROM feature_intelligence.events_raw 
@@ -593,6 +685,7 @@ def get_feature_activity(tenant_id: str):
 
 @app.get("/features/configs")
 def get_feature_configs(tenant_id: str):
+    require_tenant_access(tenant_id)
     return [
         { "id": 'fc-1', "pattern": '/feed', "featureName": 'View Feed', "category": 'interaction', "isActive": True },
         { "id": 'fc-2', "pattern": '/api/tweet', "featureName": 'Post Tweet', "category": 'transaction', "isActive": True },
@@ -602,7 +695,94 @@ def get_feature_configs(tenant_id: str):
 
 @app.get("/metrics/retention")
 def get_retention(tenant_id: str):
+    require_tenant_access(tenant_id)
     return [
         { "cohort": 'This Week', "users": 42, "month1": 100, "month2": 50, "month3": 0 },
         { "cohort": 'Last Week', "users": 15, "month1": 80, "month2": 20, "month3": 10 },
     ]
+
+@app.get("/deployment/info")
+def get_deployment_info():
+    return {
+        "mode": settings.DEPLOYMENT_MODE,
+        "is_cloud": settings.is_cloud,
+        "is_on_prem": settings.is_on_prem,
+        "local_tenant": settings.TENANT_ID if settings.is_on_prem else None
+    }
+
+@app.get("/admin/summary")
+def get_admin_summary():
+    """Returns high-level global aggregated stats (Cloud mode only)."""
+    require_cloud_mode()
+    try:
+        sql = """
+            SELECT count(distinct tenant_id) as total_tenants, 
+                   sum(total_events) as total_events
+            FROM feature_intelligence.daily_feature_usage
+            WHERE date >= today() - 30
+        """
+        basic = ch_client.query(sql)[0] if ch_client.query(sql) else {"total_tenants": 0, "total_events": 0}
+        
+        sql_top = """
+            SELECT tenant_id as name, sum(total_events) as events
+            FROM feature_intelligence.daily_feature_usage
+            GROUP BY tenant_id
+            ORDER BY events DESC LIMIT 5
+        """
+        top_tenants_raw = ch_client.query(sql_top)
+        top_tenants = [
+            {"name": row["name"].capitalize(), "events": int(row["events"])} 
+            for row in top_tenants_raw
+        ]
+        
+        return {
+            "total_tenants": basic["total_tenants"],
+            "total_events": basic["total_events"],
+            "top_tenants": top_tenants
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/app/{tenant_id}/summary")
+def get_admin_app_summary(tenant_id: str):
+    """Returns basic KPIs and Insights for a specfic app (Cloud mode only)."""
+    require_cloud_mode()
+    return {
+        "kpi": get_kpi_metrics(tenant_id),
+        "insights": get_insights(tenant_id)["insights"]
+    }
+
+@app.get("/transparency/cloud-data")
+def get_transparency_data(tenant_id: str):
+    """Summarizes what data is visible to the cloud/admin."""
+    require_tenant_access(tenant_id)
+    
+    # In a fully deployed setup, this could query exact synced row counts.
+    # For now, it describes the privacy boundaries based on settings.
+    return {
+        "deploymentMode": settings.DEPLOYMENT_MODE,
+        "visible_categories": [
+            {
+                "category": "Feature Usage KPIs", 
+                "is_synced": True, 
+                "details": "Aggregated counts of feature interactions. Used for billing and top-level analytics."
+            },
+            {
+                "category": "AI Insights", 
+                "is_synced": True, 
+                "details": "High-level alerts on stable/trending features without exposing user paths."
+            },
+            {
+                "category": "Raw Audit Logs", 
+                "is_synced": False, 
+                "details": "Strictly local. Contains PII, emails, roles, and deep user behavior."
+            },
+            {
+                "category": "Traffic & Locations", 
+                "is_synced": False, 
+                "details": "Strictly local. IP addresses, geographic mapping, and device breakdown."
+            }
+        ],
+        "message": "In ON_PREM mode, no user-level details leave the premises." if settings.is_on_prem else "In CLOUD mode, full data is managed centrally."
+    }
+

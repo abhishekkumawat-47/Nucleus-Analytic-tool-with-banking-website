@@ -2,8 +2,10 @@
 
 /**
  * Sidebar navigation component.
- * Provides the main navigation for the dashboard with icon + label items.
- * Matches the FinInsight design with blue active state highlighting.
+ * Role-based navigation:
+ *   super_admin  → Full detailed analytics pages (Dashboard, Features, Funnel, etc.)
+ *   company_admin → Only Global Admin overview
+ *   user         → Never sees this (blocked by AuthGuard)
  */
 
 import React, { memo } from 'react';
@@ -18,10 +20,12 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
+  Cloud,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { toggleSidebar } from '@/lib/dashboardSlice';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 
 /** Maps icon string identifiers to Lucide icon components */
 const iconMap: Record<string, React.ElementType> = {
@@ -31,6 +35,7 @@ const iconMap: Record<string, React.ElementType> = {
   users: Users,
   settings: Settings,
   shield: Shield,
+  cloud: Cloud,
 };
 
 interface SidebarProps {}
@@ -40,14 +45,30 @@ function Sidebar(_props: SidebarProps) {
   const { sidebarCollapsed } = useAppSelector((state) => state.dashboard);
   const pathname = usePathname();
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', href: '/dashboard' },
-    { id: 'features', label: 'Feature Analytics', icon: 'bar-chart-3', href: '/features' },
-    { id: 'funnel', label: 'Funnel Analysis', icon: 'filter', href: '/funnel' },
-    { id: 'tenants', label: 'Tenants', icon: 'users', href: '/tenants' },
-    { id: 'config', label: 'Configuration', icon: 'settings', href: '/settings' },
-    { id: 'governance', label: 'Governance', icon: 'shield', href: '/governance' },
-  ];
+  const { data: session } = useSession();
+  const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'Admin';
+  const role = session?.user?.role || 'user';
+
+  // Build nav items based on role
+  let navItems: { id: string; label: string; icon: string; href: string }[] = [];
+
+  if (role === 'app_admin') {
+    // App admin sees full detailed analytics for their app
+    navItems = [
+      { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', href: '/dashboard' },
+      { id: 'features', label: 'Feature Analytics', icon: 'bar-chart-3', href: '/features' },
+      { id: 'funnel', label: 'Funnel Analysis', icon: 'filter', href: '/funnel' },
+      { id: 'tenants', label: 'Tenants', icon: 'users', href: '/tenants' },
+      { id: 'config', label: 'Configuration', icon: 'settings', href: '/settings' },
+      { id: 'governance', label: 'Governance', icon: 'shield', href: '/governance' },
+    ];
+  } else if (role === 'super_admin') {
+    // Super admin sees only the Global Admin view
+    navItems = [
+      { id: 'admin', label: 'Global Overview', icon: 'cloud', href: '/admin' },
+    ];
+  }
+  // Normal users: no nav items (they shouldn't even reach the dashboard)
 
   return (
     <aside
@@ -57,10 +78,10 @@ function Sidebar(_props: SidebarProps) {
     >
       {/* Logo / Brand */}
       <div className={`flex items-center gap-2 border-b border-gray-100 h-16 ${sidebarCollapsed ? 'justify-center' : 'px-6'}`}>
-        <Link href="/dashboard" className="relative w-10 h-10 flex-shrink-0 transition-transform duration-300">
+        <Link href="/" className="relative w-10 h-10 flex-shrink-0 transition-transform duration-300">
           <Image
             src="/logo1.png"
-            alt="FinInsight Logo"
+            alt="Nucleus Logo"
             fill
             className="object-contain"
             priority
@@ -69,10 +90,27 @@ function Sidebar(_props: SidebarProps) {
         </Link>
         {!sidebarCollapsed && (
           <span className="text-[18px] font-bold text-gray-900 tracking-tight">
-            <span className='text-[#1a73e8] font-bold'>Fin</span>Insight
+            <span className='text-[#1a73e8] font-bold'>Nuc</span>leus
           </span>
         )}
       </div>
+
+      {/* Role Badge */}
+      {!sidebarCollapsed && (
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+            role === 'app_admin' 
+              ? 'bg-orange-50 text-orange-700 border border-orange-200' 
+              : 'bg-blue-50 text-blue-700 border border-blue-200'
+          }`}>
+            {role === 'app_admin' ? (
+              <><Shield className="w-3 h-3" /> App Admin</>
+            ) : (
+              <><Cloud className="w-3 h-3" /> Super Admin</>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Navigation Items */}
       <nav className="flex-1 py-4 space-y-1">

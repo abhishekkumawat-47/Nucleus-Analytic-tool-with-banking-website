@@ -10,6 +10,7 @@ import { ReactNode } from 'react';
 import Sidebar from '@/components/Sidebar';
 import TopNavbar from '@/components/TopNavbar';
 import { useAppSelector, RootState } from '@/lib/store';
+import AuthGuard from '@/components/AuthGuard';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -19,6 +20,7 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
   const { sidebarCollapsed } = useAppSelector((state: RootState) => state.dashboard);
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-[#f8f9fa] font-sans">
       {/* Sidebar - hidden on mobile via CSS, toggled via Redux */}
       <div className="hidden lg:block">
@@ -46,5 +48,6 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
         <main className="p-4 lg:p-6 max-w-[1600px] mx-auto">{children}</main>
       </div>
     </div>
+    </AuthGuard>
   );
 }

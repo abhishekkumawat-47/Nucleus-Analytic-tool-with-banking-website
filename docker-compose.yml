@@ -56,6 +56,9 @@ services:
       - "8000:8000"
     environment:
       - DEPLOYMENT_MODE=CLOUD
+      # --- On-Prem Overrides ---
+      # - DEPLOYMENT_MODE=ON_PREM
+      # - TENANT_ID=twitter
       - KAFKA_BROKER_URL=broker:29092
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_USER=default
@@ -81,6 +84,10 @@ services:
     ports:
       - "8001:8001"
     environment:
+      - DEPLOYMENT_MODE=CLOUD
+      # --- On-Prem Overrides ---
+      # - DEPLOYMENT_MODE=ON_PREM
+      # - TENANT_ID=twitter
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=clickhouse

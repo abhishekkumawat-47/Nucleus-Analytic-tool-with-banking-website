@@ -107,6 +107,13 @@ export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
   }
 );
 
+export const fetchDeploymentInfo = createAsyncThunk(
+  'dashboard/fetchDeploymentInfo',
+  async () => {
+    return await dashboardAPI.getDeploymentInfo();
+  }
+);
+
 /* ─────────────── Slice Definition ─────────────── */
 
 const dashboardSlice = createSlice({
@@ -168,6 +175,12 @@ const dashboardSlice = createSlice({
       .addCase(fetchDashboardData.rejected, (state) => {
         state.isLoading = false;
         state.isFetching = false;
+      })
+      .addCase(fetchDeploymentInfo.fulfilled, (state, action) => {
+        state.deploymentMode = action.payload.mode.toLowerCase() as DeploymentMode;
+        if (action.payload.is_on_prem && action.payload.local_tenant) {
+          state.selectedTenant = action.payload.local_tenant;
+        }
       });
   },
 });
