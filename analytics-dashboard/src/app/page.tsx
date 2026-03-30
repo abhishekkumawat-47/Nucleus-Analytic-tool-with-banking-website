@@ -10,10 +10,11 @@
 
 import Link from 'next/link';
 import { useEffect } from 'react';
-import { BarChart3, ArrowRight, Zap, Shield, Cloud, LayoutDashboard, Eye } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { BarChart3, ArrowRight, Zap, Shield, Cloud, LayoutDashboard, Eye, Wallet } from 'lucide-react';
 import { APP_REGISTRY } from '@/lib/feature-map';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
-import { fetchDeploymentInfo } from '@/lib/dashboardSlice';
+import { fetchDeploymentInfo, setSelectedTenant } from '@/lib/dashboardSlice';
 
 import { useSession } from 'next-auth/react';
 import AuthGuard from '@/components/AuthGuard';
@@ -22,13 +23,27 @@ export default function AppSelectorPage() {
   const dispatch = useAppDispatch();
   const { deploymentMode } = useAppSelector((state) => state.dashboard);
   const { data: session } = useSession();
+  const router = useRouter();
 
   useEffect(() => {
     dispatch(fetchDeploymentInfo());
   }, [dispatch]);
 
-  const apps = Object.values(APP_REGISTRY);
+  const handleViewDashboard = (appId: string) => {
+    dispatch(setSelectedTenant(appId));
+    router.push('/dashboard');
+  };
+
+  const allApps = Object.values(APP_REGISTRY);
   const userRole = session?.user?.role || 'user';
+  const adminApps: string[] = session?.user?.adminApps || [];
+
+  // Filter apps based on role:
+  // - super_admin sees all apps
+  // - app_admin sees only their assigned apps
+  const apps = userRole === 'super_admin'
+    ? allApps
+    : allApps.filter(app => adminApps.includes(app.appId));
 
   return (
     <AuthGuard>
@@ -70,9 +85,13 @@ export default function AppSelectorPage() {
                 className="w-12 h-12 rounded-xl flex items-center justify-center"
                 style={{ backgroundColor: app.color + '20' }}
               >
-                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" style={{ color: app.color }}>
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                </svg>
+                {app.icon === 'wallet' ? (
+                  <Wallet className="w-6 h-6" style={{ color: app.color }} />
+                ) : (
+                  <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" style={{ color: app.color }}>
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                )}
               </div>
               <div>
                 <h2 className="text-xl font-bold text-white">{app.displayName}</h2>
@@ -84,9 +103,9 @@ export default function AppSelectorPage() {
               {/* Super Admin: Detailed Dashboard + Open App */}
               {userRole === 'app_admin' && (
                 <>
-                  <Link
-                    href="/dashboard"
-                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-white transition-all duration-200 group/btn"
+                  <button
+                    onClick={() => handleViewDashboard(app.appId)}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-white transition-all duration-200 group/btn cursor-pointer"
                     style={{ backgroundColor: app.color }}
                   >
                     <div className="flex items-center space-x-2">
@@ -94,7 +113,7 @@ export default function AppSelectorPage() {
                       <span>View Detailed Dashboard</span>
                     </div>
                     <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
-                  </Link>
+                  </button>
 
                   <Link
                     href={`/${app.appId}`}

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import axios from "axios";
 import { API_BASE_URL } from "@/lib/api";
+import { nexaTracker } from "@/lib/tracker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import {
 
 import { UserData } from "@/components/context/UserContext";
 
-const login = async (email: string, password: string): Promise<{ userId?: string; error?: string } | null> => {
+const login = async (email: string, password: string): Promise<{ userId?: string; role?: string; tenantId?: string; error?: string } | null> => {
   try {
     const response = await axios.post(
       `${API_BASE_URL}/auth/login`,
@@ -64,6 +65,9 @@ export default function LoginPage() {
 
       if (result?.userId) {
         setUserId(result.userId);
+        // Track the login event to the analytics pipeline
+        nexaTracker.setUser(result.userId, result.role || 'user', email);
+        nexaTracker.track('login', { email });
         await Auth(); // Refresh auth state in context
         toast.success("Login successful");
         router.push("/dashboard");

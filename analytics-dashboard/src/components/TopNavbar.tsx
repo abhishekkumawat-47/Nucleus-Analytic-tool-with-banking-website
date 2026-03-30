@@ -25,6 +25,7 @@ import {
   setTimeRange,
   setSelectedTenant,
   toggleSidebar,
+  fetchDashboardData,
 } from '@/lib/dashboardSlice';
 import { TimeRange, DeploymentMode } from '@/types';
 
@@ -40,7 +41,7 @@ function TopNavbar() {
   const tenantOptions = useMemo(() => {
     if (!session?.user) return ['twitter'];
     if (session.user.role === 'super_admin') {
-      return ['twitter', 'Beta Industries', 'Gamma Ltd'];
+      return ['twitter', 'nexabank', 'Beta Industries', 'Gamma Ltd'];
     }
     return session.user.adminApps && session.user.adminApps.length > 0
       ? session.user.adminApps
@@ -143,6 +144,8 @@ function TopNavbar() {
                     key={tenant}
                     onClick={() => {
                       dispatch(setSelectedTenant(tenant));
+                      // Immediately re-fetch all data for the new tenant
+                      setTimeout(() => dispatch(fetchDashboardData()), 0);
                       setShowTenantDropdown(false);
                     }}
                     className={`w-full cursor-pointer text-left px-4 py-2 text-sm transition-colors ${

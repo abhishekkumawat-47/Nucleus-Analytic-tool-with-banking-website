@@ -175,27 +175,19 @@ export const featureActivity: FeatureActivityRow[] = [
 
 export const tenants: Tenant[] = [
   {
-    id: 't1',
-    name: 'Acme Corp',
+    id: 'nexabank',
+    name: 'NexaBank',
     featureUsage: 78,
     errors: 12,
     adoptionRate: 85,
     plan: 'enterprise',
   },
   {
-    id: 't2',
-    name: 'Beta Industries',
+    id: 'twitter',
+    name: 'Twitter',
     featureUsage: 62,
     errors: 8,
     adoptionRate: 72,
-    plan: 'pro',
-  },
-  {
-    id: 't3',
-    name: 'Gamma Ltd',
-    featureUsage: 55,
-    errors: 15,
-    adoptionRate: 60,
     plan: 'pro',
   },
 ];

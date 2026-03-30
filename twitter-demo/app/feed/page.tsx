@@ -72,24 +72,24 @@ export default function FeedPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex justify-center">
-      <div className="w-full max-w-2xl bg-white border-x border-gray-200 min-h-screen shadow-sm">
-        <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-gray-200 z-10">
-          <div className="flex items-center justify-between p-4">
-            <h1 className="text-xl font-bold">Home</h1>
+      <div className="w-full max-w-2xl bg-white border-x border-gray-100 min-h-screen shadow-sm sm:my-0">
+        <header className="sticky top-0 bg-white/70 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] backdrop-blur-xl border-b border-gray-100 z-10 transition-colors">
+          <div className="flex items-center justify-between p-4 px-5">
+            <h1 className="text-xl font-extrabold tracking-tight">Home</h1>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {/* User info & sign out */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
-                  <p className="text-xs font-medium text-gray-700 leading-tight">{session?.user?.name}</p>
-                  <p className="text-[10px] text-gray-400 leading-tight">👤 User</p>
+                  <p className="text-sm font-bold text-gray-900 leading-tight">{session?.user?.name || 'Anonymous'}</p>
+                  <p className="text-[11px] text-gray-500 font-medium leading-tight mt-0.5">@{session?.user?.email?.split('@')[0] || 'user'}</p>
                 </div>
                 <button
                   onClick={() => signOut({ callbackUrl: '/' })}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2.5 text-gray-500 bg-gray-50 hover:text-red-600 hover:bg-red-50 rounded-full transition-all duration-200"
                   title="Sign out"
                 >
-                  <LogOut size={16} />
+                  <LogOut size={16} className="stroke-[2.5]" />
                 </button>
               </div>
             </div>
@@ -98,7 +98,7 @@ export default function FeedPage() {
         
         <TweetBox onTweet={handleNewTweet} />
         
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-100 h-full pb-96">
           {tweets.map(t => (
             <Tweet 
               key={t.id}

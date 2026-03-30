@@ -152,7 +152,12 @@ export const dashboardAPI = {
   /** Fetch user journey funnel data using backend /funnels endpoint */
   async getFunnelData(tenantId: string = 'twitter'): Promise<FunnelStep[]> {
     try {
-      const response = await apiClient.get(`/funnels?tenant_id=${tenantId}&steps=login,view_feed,post_tweet,like_tweet&window_minutes=60`);
+      // Dynamically resolve funnel steps from APP_REGISTRY
+      const { APP_REGISTRY } = await import('./feature-map');
+      const appConfig = APP_REGISTRY[tenantId];
+      const steps = appConfig?.funnelSteps?.join(',') || 'login,view_feed,post_tweet,like_tweet';
+      
+      const response = await apiClient.get(`/funnels?tenant_id=${tenantId}&steps=${steps}&window_minutes=60`);
       const funnel = response.data.funnel || [];
       
       return funnel.map((step: any) => ({
@@ -178,11 +183,19 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch tenant comparison data */
-  async getTenants(): Promise<Tenant[]> {
+  /** Fetch tenant comparison data — scoped to the selected tenant for app_admins */
+  async getTenants(tenantId?: string): Promise<Tenant[]> {
     try {
       const response = await apiClient.get('/tenants');
-      return response.data;
+      const allTenants: Tenant[] = response.data;
+      
+      // If a specific tenantId is selected, filter to only show that tenant
+      if (tenantId) {
+        return allTenants.filter(
+          (t: Tenant) => t.id === tenantId || t.name?.toLowerCase() === tenantId.toLowerCase()
+        );
+      }
+      return allTenants;
     } catch (err) {
       console.error('Failed to fetch tenants, using mock', err);
       return mockData.tenants;

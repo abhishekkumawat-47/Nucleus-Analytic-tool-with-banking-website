@@ -46,6 +46,24 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
       { pattern: '/twitter/admin',     featureName: 'view_admin_panel', category: 'navigation' },
     ],
   },
+  nexabank: {
+    appId: 'nexabank',
+    displayName: 'NexaBank',
+    description: 'Modern digital banking platform',
+    tenantId: 'nexabank',
+    icon: 'wallet',
+    color: '#7C3AED',
+    funnelSteps: ['login', 'loan_applied', 'kyc_started', 'kyc_completed'],
+    routes: [
+      { pattern: '/nexabank/login',        featureName: 'login',              category: 'navigation',   funnel: 1 },
+      { pattern: '/nexabank/dashboard',    featureName: 'view_dashboard',     category: 'navigation' },
+      { pattern: '/nexabank/transactions', featureName: 'view_transactions',  category: 'navigation' },
+      { pattern: '/nexabank/loans',        featureName: 'loan_applied',       category: 'transaction',  funnel: 2 },
+      { pattern: '/nexabank/accounts',     featureName: 'view_accounts',      category: 'navigation' },
+      { pattern: '/nexabank/payees',       featureName: 'view_payees',        category: 'navigation' },
+      { pattern: '/nexabank/profile',      featureName: 'view_profile',       category: 'navigation' },
+    ],
+  },
 };
 
 /**

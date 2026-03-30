@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
+import axios from "axios";
 import { prisma } from "../prisma";
+
+const INGESTION_API_URL = process.env.INGESTION_API_URL || "http://localhost:8000/events";
 
 /**
  * Hashes a userId using SHA-256 for analytics privacy.
@@ -10,7 +13,38 @@ export function hashUserId(userId: string): string {
 }
 
 /**
- * Tracks an analytics event to the DB.
+ * Forwards an event to the Pathway ingestion API (Kafka → ClickHouse)
+ * so the analytics dashboard can visualize NexaBank data.
+ * Fire-and-forget — analytics should never break the primary app.
+ */
+async function forwardToIngestionAPI(
+  eventName: string,
+  userId: string,
+  tenantId: string,
+  metadata: Record<string, any>
+): Promise<void> {
+  try {
+    await axios.post(INGESTION_API_URL, {
+      event_name: eventName,
+      tenant_id: "nexabank",
+      user_id: userId,
+      timestamp: Date.now() / 1000,
+      channel: "web",
+      metadata: {
+        ...metadata,
+        source_tenant: tenantId,
+        role: metadata.role || "user",
+        device_type: metadata.device_type || "desktop",
+      },
+    }, { timeout: 3000 });
+    console.log(`[EVENT_TRACKER] Forwarded to ingestion: ${eventName}`);
+  } catch (err: any) {
+    console.warn("[EVENT_TRACKER] Ingestion API forwarding failed:", err.message || err);
+  }
+}
+
+/**
+ * Tracks an analytics event to the DB and forwards to Pathway ingestion API.
  */
 export async function trackEvent(
   eventName: string,
@@ -29,6 +63,9 @@ export async function trackEvent(
         metadata,
       },
     });
+
+    // Also forward to the Pathway analytics pipeline (fire-and-forget)
+    forwardToIngestionAPI(eventName, hashedUserId, tenantId, metadata).catch(() => {});
   } catch (err) {
     console.error("[EVENT_TRACKER] Failed to store event:", err);
   }

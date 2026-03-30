@@ -71,7 +71,7 @@ export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
       dashboardAPI.getTopFeatures(tenantId),
       dashboardAPI.getFunnelData(tenantId),
       dashboardAPI.getFeatureActivity(tenantId),
-      dashboardAPI.getTenants(),
+      dashboardAPI.getTenants(tenantId),
       dashboardAPI.getAIInsights(tenantId),
       dashboardAPI.getRealTimeUsers(tenantId),
       dashboardAPI.getPagesPerMinute(tenantId),

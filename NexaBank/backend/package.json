@@ -19,6 +19,7 @@
     "@prisma/client": "^6.5.0",
     "@types/pdfkit": "^0.13.9",
     "@types/ua-parser-js": "^0.7.39",
+    "axios": "^1.14.0",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

@@ -4,7 +4,7 @@ import type React from "react"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Menu, User, Wallet } from "lucide-react"
+import { BarChart3, Menu, User, Wallet } from "lucide-react"
 import axios from "axios"
 import { toast } from "sonner"
 
@@ -179,6 +179,14 @@ export function Navbar() {
                         <Link href="/admin/simulate" className="cursor-pointer">
                           Simulate Users
                         </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 py-1">Nucleus Platform</DropdownMenuLabel>
+                      <DropdownMenuItem asChild>
+                        <a href="http://localhost:3001" target="_blank" rel="noopener noreferrer" className="cursor-pointer">
+                          <BarChart3 className="mr-2 h-4 w-4" />
+                          Analytics Dashboard
+                        </a>
                       </DropdownMenuItem>
                     </>
                   )}

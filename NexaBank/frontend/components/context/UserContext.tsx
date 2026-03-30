@@ -8,6 +8,7 @@ import {
 } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "@/lib/api";
+import { nexaTracker } from "@/lib/tracker";
 
 interface Payee {
   name: string;
@@ -247,11 +248,18 @@ export const UserContextProvider = ({ children }: UserContextProviderProps) => {
         }
       );
       const nextUserId = response.data?.id ?? "";
+      const nextRole = response.data?.role;
       setUserId(nextUserId);
-      setRole(response.data?.role);
+      setRole(nextRole);
       setTenantId(response.data?.tenantId);
       setPan(response.data?.pan);
       setIsAuth(Boolean(nextUserId));
+
+      // Register user with the Pathway analytics tracker
+      if (nextUserId) {
+        nexaTracker.setUser(nextUserId, nextRole || 'user');
+        nexaTracker.track('page_view', { page: typeof window !== 'undefined' ? window.location.pathname : '/' });
+      }
 
       // Auto-fetch accounts right after auth succeeds — cookie is guaranteed valid here
       if (nextUserId) {

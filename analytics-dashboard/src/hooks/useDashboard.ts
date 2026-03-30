@@ -5,20 +5,30 @@
  * Provides reusable data-fetching and state management hooks.
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { fetchDashboardData, setTimeRange, setSelectedTenant } from '@/lib/dashboardSlice';
 import { TimeRange } from '@/types';
+import { useSession } from 'next-auth/react';
 
 /**
  * Hook to initialize and access all dashboard data.
  * Dispatches the fetch action on mount and provides typed state access.
+ * Auto-sets the tenant to the user's first adminApp.
  */
 export function useDashboardData() {
   const dispatch = useAppDispatch();
   const dashboardState = useAppSelector((state) => state.dashboard);
+  const { data: session } = useSession();
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
+    // On first mount, set the tenant to the user's first assigned app
+    if (session?.user?.adminApps && session.user.adminApps.length > 0 && !hasInitialized.current) {
+      hasInitialized.current = true;
+      dispatch(setSelectedTenant(session.user.adminApps[0]));
+    }
+    
     dispatch(fetchDashboardData());
     
     // Auto-refresh every 10 seconds for real-time updates
@@ -27,7 +37,7 @@ export function useDashboardData() {
     }, 10000);
     
     return () => clearInterval(interval);
-  }, [dispatch]);
+  }, [dispatch, session]);
 
   const changeTimeRange = useCallback(
     (range: TimeRange) => {
