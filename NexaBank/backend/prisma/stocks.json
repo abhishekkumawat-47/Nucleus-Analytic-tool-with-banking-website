@@ -1,0 +1,32 @@
+[
+    {
+        "id": 1,
+        "stockName": "Apple",
+        "stockPrice": 100,
+        "stockSymbol": "AAPL"
+    },
+    {
+        "id": 2,
+        "stockName": "Google",
+        "stockPrice": 200,
+        "stockSymbol": "GOOGL"
+    },
+    {
+        "id": 3,
+        "stockName": "Microsoft",
+        "stockPrice": 300,
+        "stockSymbol": "MSFT"
+    },
+    {
+        "id": 4,
+        "stockName": "Amazon",
+        "stockPrice": 400,
+        "stockSymbol": "AMZN"
+    },
+    {
+        "id": 5,
+        "stockName": "Facebook",
+        "stockPrice": 500,
+        "stockSymbol": "FB"
+    }
+]
