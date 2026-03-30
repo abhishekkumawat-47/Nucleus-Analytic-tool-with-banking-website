@@ -4,6 +4,7 @@ import time
 from typing import List, Dict, Any
 import os
 import sys
+from datetime import datetime
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -53,7 +54,7 @@ class ClickHouseClient:
                 e['event_name'], 
                 e['user_id'], 
                 e['channel'], 
-                e['timestamp'], 
+                datetime.utcfromtimestamp(e['timestamp']), 
                 str(e['metadata']) # Encode dict as string
             ]
             for e in events

@@ -1,6 +1,9 @@
-version: '3.8'
 
 services:
+  # ═══════════════════════════════════════════════════════════
+  # INFRASTRUCTURE
+  # ═══════════════════════════════════════════════════════════
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     environment:
@@ -8,6 +11,9 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
 
   broker:
     image: confluentinc/cp-server:7.4.0
@@ -27,13 +33,16 @@ services:
       KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
 
   # Create topics on startup
   init-kafka:
     image: confluentinc/cp-server:7.4.0
     depends_on:
       - broker
-    command: "bash -c 'echo Waiting for Kafka to be ready... && cub kafka-ready -b broker:29092 1 40 && kafka-topics --create --topic feature-events --partitions 1 --replication-factor 1 --if-not-exists --bootstrap-server broker:29092'"
+    restart: on-failure
+    command: "bash -c 'echo Waiting for Kafka to be ready... && cub kafka-ready -b broker:29092 1 120 && kafka-topics --create --topic feature-events --partitions 1 --replication-factor 1 --if-not-exists --bootstrap-server broker:29092'"
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.3
@@ -42,13 +51,21 @@ services:
       - "9000:9000"
     volumes:
       - ./storage/schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
     environment:
       CLICKHOUSE_DB: feature_intelligence
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: clickhouse
 
+  # ═══════════════════════════════════════════════════════════
+  # NUCLEUS PYTHON BACKEND SERVICES
+  # ═══════════════════════════════════════════════════════════
+
   ingestion-api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
       - broker
       - clickhouse
@@ -56,39 +73,165 @@ services:
       - "8000:8000"
     environment:
       - DEPLOYMENT_MODE=CLOUD
-      # --- On-Prem Overrides ---
-      # - DEPLOYMENT_MODE=ON_PREM
-      # - TENANT_ID=twitter
       - KAFKA_BROKER_URL=broker:29092
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=clickhouse
     command: uvicorn ingestion.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
 
   processor-worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
-      - broker
-      - clickhouse
+      init-kafka:
+        condition: service_completed_successfully
+      broker:
+        condition: service_started
+      clickhouse:
+        condition: service_started
     environment:
       - KAFKA_BROKER_URL=broker:29092
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=clickhouse
     command: python processing/worker.py
+    restart: unless-stopped
 
   analytics-api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
       - clickhouse
     ports:
       - "8001:8001"
     environment:
       - DEPLOYMENT_MODE=CLOUD
-      # --- On-Prem Overrides ---
-      # - DEPLOYMENT_MODE=ON_PREM
-      # - TENANT_ID=twitter
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=clickhouse
     command: uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════
+  # TWITTER DEMO — port 3000
+  # ═══════════════════════════════════════════════════════════
+
+  twitter-demo:
+    build:
+      context: ./twitter-demo
+      dockerfile: Dockerfile
+    container_name: nucleus-twitter-demo
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=fallback-secret-for-dev
+    env_file:
+      - ./twitter-demo/.env.local
+    volumes:
+      # Hot-reload: mount source directories
+      - ./twitter-demo/app:/app/app
+      - ./twitter-demo/components:/app/components
+      - ./twitter-demo/lib:/app/lib
+      - ./twitter-demo/public:/app/public
+    depends_on:
+      - ingestion-api
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════
+  # ANALYTICS DASHBOARD — port 3001
+  # ═══════════════════════════════════════════════════════════
+
+  analytics-dashboard:
+    build:
+      context: ./analytics-dashboard
+      dockerfile: Dockerfile
+    container_name: nucleus-analytics-dashboard
+    ports:
+      - "3001:3001"
+    environment:
+      - NEXTAUTH_URL=http://localhost:3001
+      - NEXTAUTH_SECRET=nucleus-analytics-secret-key-2026
+      - ANALYTICS_API_HOST=analytics-api
+      - INGESTION_API_HOST=ingestion-api
+    env_file:
+      - ./analytics-dashboard/.env.local
+    volumes:
+      # Mount central RBAC config
+      - ./rbac.json:/rbac.json:ro
+      # Hot-reload: mount source directories
+      - ./analytics-dashboard/src:/app/src
+      - ./analytics-dashboard/lib:/app/lib
+      - ./analytics-dashboard/components:/app/components
+      - ./analytics-dashboard/public:/app/public
+      - ./analytics-dashboard/types:/app/types
+    depends_on:
+      - analytics-api
+      - ingestion-api
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════
+  # NEXABANK — Backend (5000) + Frontend (3002)
+  # ═══════════════════════════════════════════════════════════
+
+  nexabank-backend:
+    build:
+      context: ./NexaBank/backend
+      dockerfile: Dockerfile
+    container_name: nexabank-backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./NexaBank/backend/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - FRONTEND_URL=http://localhost:3002
+      - INGESTION_API_URL=http://ingestion-api:8000/events
+    volumes:
+      # Hot-reload: mount source code (but NOT node_modules)
+      - ./NexaBank/backend/src:/app/src
+      - ./NexaBank/backend/prisma:/app/prisma
+    restart: unless-stopped
+
+  nexabank-frontend:
+    build:
+      context: ./NexaBank/frontend
+      dockerfile: Dockerfile
+    container_name: nexabank-frontend
+    ports:
+      - "3002:3002"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+    volumes:
+      # Hot-reload: mount source directories
+      - ./NexaBank/frontend/app:/app/app
+      - ./NexaBank/frontend/components:/app/components
+      - ./NexaBank/frontend/hooks:/app/hooks
+      - ./NexaBank/frontend/lib:/app/lib
+      - ./NexaBank/frontend/src:/app/src
+      - ./NexaBank/frontend/types:/app/types
+      - ./NexaBank/frontend/public:/app/public
+    depends_on:
+      - nexabank-backend
+      - ingestion-api
+    restart: unless-stopped
+
+# ═══════════════════════════════════════════════════════════
+# PERSISTENT VOLUMES — survive `docker compose down`
+# Only removed with `docker compose down -v`
+# ═══════════════════════════════════════════════════════════
+volumes:
+  clickhouse_data:
+    driver: local
+  clickhouse_logs:
+    driver: local
+  kafka_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local

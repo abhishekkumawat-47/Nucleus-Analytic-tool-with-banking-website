@@ -1,0 +1,4 @@
+INFO:__main__:Worker started, waiting for events...
+INFO:__main__:Flushing batch of 1 events to ClickHouse.
+INFO:__main__:Flushing batch of 1 events to ClickHouse.
+INFO:__main__:Flushing batch of 1 events to ClickHouse.

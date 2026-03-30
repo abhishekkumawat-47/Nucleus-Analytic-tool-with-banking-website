@@ -294,11 +294,20 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch feature routing configurations */
+  /** Fetch feature routing configurations dynamically from APP_REGISTRY */
   async getFeatureConfigs(tenantId: string = 'twitter'): Promise<FeatureConfig[]> {
     try {
-      const response = await apiClient.get(`/features/configs?tenant_id=${tenantId}`);
-      return response.data;
+      const { APP_REGISTRY } = await import('./feature-map');
+      const appConfig = APP_REGISTRY[tenantId];
+      if (!appConfig) return [];
+      
+      return appConfig.routes.map((route, idx) => ({
+        id: `fc-${idx}`,
+        pattern: route.pattern,
+        featureName: route.featureName,
+        category: route.category,
+        isActive: true,
+      }));
     } catch {
       return mockData.featureConfigs;
     }

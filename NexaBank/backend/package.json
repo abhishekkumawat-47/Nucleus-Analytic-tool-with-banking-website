@@ -16,7 +16,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@prisma/client": "^6.5.0",
+    "@prisma/client": "^6.19.2",
     "@types/pdfkit": "^0.13.9",
     "@types/ua-parser-js": "^0.7.39",
     "axios": "^1.14.0",

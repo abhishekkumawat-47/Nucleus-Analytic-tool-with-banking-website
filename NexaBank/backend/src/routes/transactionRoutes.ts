@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import express, { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { trackEvent } from "../middleware/eventTracker";
 
 const router = express.Router();
 
@@ -286,6 +287,24 @@ router.post(
           return newTransaction;
         }
       );
+
+      // Fire analytics event for the successful transaction
+      try {
+        const senderInfo = await prisma.account.findUnique({
+          where: { accNo: senderAccNo },
+          include: { customer: true }
+        });
+        if (senderInfo) {
+          await trackEvent(
+            transactionType === "TRANSFER" ? "transfer_completed" : "payment_completed",
+            senderInfo.customerId,
+            senderInfo.customer.tenantId || "bank_a",
+            { amount, category: result.category, transactionId: result.id }
+          );
+        }
+      } catch (trackErr) {
+        console.error("Failed to track transaction:", trackErr);
+      }
 
       res.status(201).json(result);
     } catch (error) {

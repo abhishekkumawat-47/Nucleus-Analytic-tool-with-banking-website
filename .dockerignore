@@ -1,0 +1,33 @@
+# Node dependencies (these get installed inside each container)
+**/node_modules
+**/.next
+
+# Git
+.git
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode
+.idea
+
+# Docker
+docker-compose.yml
+**/Dockerfile
+**/.dockerignore
+
+# NexaBank (built separately)
+NexaBank/
+
+# Twitter demo (built separately)
+twitter-demo/
+
+# Analytics dashboard (built separately)
+analytics-dashboard/
+
+# Misc
+build_log.txt
+.qodo

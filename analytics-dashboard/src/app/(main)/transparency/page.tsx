@@ -11,7 +11,8 @@
  *            blocked-data placeholders to show what is NOT shared.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import { useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
@@ -149,7 +150,7 @@ const sensitivityConfig = {
 
 export default function TransparencyPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('on-prem');
-  const [adminSummary, setAdminSummary] = useState<{
+  const [rawAdminSummary, setRawAdminSummary] = useState<{
     total_tenants: number;
     total_events: number;
     top_tenants: any[];
@@ -157,23 +158,55 @@ export default function TransparencyPage() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const { selectedTenant } = useAppSelector((state) => state.dashboard);
+  const { data: session } = useSession();
+
+  const userRole = session?.user?.role || 'user';
+  const isAppAdmin = userRole === 'app_admin';
 
   // Full dashboard data for on-prem view
   const dashboardData = useDashboardData();
 
   // Fetch cloud admin summary when switching to cloud mode
   useEffect(() => {
-    if (viewMode === 'cloud' && !adminSummary) {
+    if (viewMode === 'cloud' && !rawAdminSummary) {
       setAdminLoading(true);
       dashboardAPI
         .getAdminSummary()
         .then((res) => {
-          setAdminSummary(res);
+          setRawAdminSummary(res);
           setAdminLoading(false);
         })
         .catch(() => setAdminLoading(false));
     }
-  }, [viewMode, adminSummary]);
+  }, [viewMode, rawAdminSummary]);
+
+  /**
+   * For App Admins: filter the admin summary to only show their own tenant.
+   * This ensures an App Admin cannot see other tenants' data in the cloud preview.
+   * Super Admins see the full cross-tenant summary as-is.
+   */
+  const adminSummary = useMemo(() => {
+    if (!rawAdminSummary) return null;
+    if (!isAppAdmin || !selectedTenant) return rawAdminSummary;
+
+    const myTenants = rawAdminSummary.top_tenants.filter(
+      (t: any) =>
+        t.id === selectedTenant ||
+        t.name?.toLowerCase() === selectedTenant.toLowerCase() ||
+        t.tenant_id === selectedTenant
+    );
+
+    const myTotalEvents = myTenants.reduce(
+      (sum: number, t: any) => sum + (t.events || 0),
+      0
+    );
+
+    return {
+      total_tenants: myTenants.length || 1,
+      total_events: myTotalEvents,
+      top_tenants: myTenants,
+    };
+  }, [rawAdminSummary, isAppAdmin, selectedTenant]);
 
   const cloudVisibleCount = dataCategories.filter((c) => c.cloudVisible).length;
   const blockedCount = dataCategories.filter((c) => !c.cloudVisible).length;
@@ -195,8 +228,9 @@ export default function TransparencyPage() {
               Trust & Transparency
             </h1>
             <p className="text-gray-500 text-sm mt-2 max-w-xl leading-relaxed">
-              Audit exactly what data the Super Admin can access vs. what stays
-              private on your infrastructure. Toggle between views to compare.
+               {isAppAdmin
+                 ? `Audit exactly what data the Super Admin can access about your app (${selectedTenant}) vs. what stays private on your infrastructure.`
+                 : 'Audit exactly what data the Super Admin can access vs. what stays private on your infrastructure. Toggle between views to compare.'}
             </p>
           </div>
 
@@ -490,12 +524,16 @@ export default function TransparencyPage() {
                 <h2 className="text-lg font-bold text-gray-900">
                   {viewMode === 'on-prem'
                     ? 'Your Full Dashboard (On-Prem)'
-                    : "Super Admin's View (Cloud)"}
+                    : isAppAdmin
+                      ? `Super Admin's View of ${selectedTenant} (Cloud)`
+                      : "Super Admin's View (Cloud)"}
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {viewMode === 'on-prem'
                     ? 'This is the complete data your on-premise installation holds'
-                    : 'This is exactly what the Super Admin sees — nothing more, nothing less'}
+                    : isAppAdmin
+                      ? `This is exactly what the Super Admin sees about your app — nothing more, nothing less`
+                      : 'This is exactly what the Super Admin sees — nothing more, nothing less'}
                 </p>
               </div>
             </div>
@@ -637,9 +675,13 @@ export default function TransparencyPage() {
                           <Users size={24} />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-500">Total Active Tenants</p>
+                          <p className="text-sm font-medium text-gray-500">
+                            {isAppAdmin ? 'Your Tenant' : 'Total Active Tenants'}
+                          </p>
                           <h2 className="text-3xl font-bold text-gray-900">
-                            {adminSummary?.total_tenants || 0}
+                            {isAppAdmin
+                              ? (selectedTenant ? selectedTenant.charAt(0).toUpperCase() + selectedTenant.slice(1) : '—')
+                              : (adminSummary?.total_tenants || 0)}
                           </h2>
                         </div>
                       </div>
@@ -648,7 +690,9 @@ export default function TransparencyPage() {
                           <Activity size={24} />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-500">Total Events (30d)</p>
+                          <p className="text-sm font-medium text-gray-500">
+                            {isAppAdmin ? `Events (30d) — ${selectedTenant}` : 'Total Events (30d)'}
+                          </p>
                           <h2 className="text-3xl font-bold text-gray-900">
                             {(adminSummary?.total_events || 0).toLocaleString()}
                           </h2>
@@ -661,10 +705,10 @@ export default function TransparencyPage() {
                   <section>
                     <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-blue-500" />
-                      Tenant Volume Summary
-                      <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold uppercase">
-                        Visible
-                      </span>
+                       {isAppAdmin ? 'Your Tenant Summary' : 'Tenant Volume Summary'}
+                       <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold uppercase">
+                         Visible
+                       </span>
                     </h3>
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                       {adminSummary?.top_tenants &&

@@ -107,10 +107,10 @@ def get_feature_usage(tenant_id: str, days: int = Query(7, ge=1, le=365)):
     sql = """
         SELECT 
             event_name, 
-            sum(total_events) as total_interactions,
-            uniqMerge(unique_users) as unique_users
-        FROM feature_intelligence.daily_feature_usage
-        WHERE tenant_id = %(tenant_id)s AND date >= today() - %(days)s
+            count() as total_interactions,
+            uniq(user_id) as unique_users
+        FROM feature_intelligence.events_raw
+        WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - %(days)s
         GROUP BY event_name
         ORDER BY total_interactions DESC
     """
@@ -329,8 +329,14 @@ def get_secondary_kpi(tenant_id: str):
                 HAVING session_duration > 0
             )
         """
+        import math
         res_time = ch_client.query(sql_time, {"tenant_id": tenant_id})
-        avg_time_sec = int(res_time[0]["avg_time"]) if res_time and res_time[0]["avg_time"] else 0
+        raw_avg = res_time[0]["avg_time"] if res_time and "avg_time" in res_time[0] else 0
+        if raw_avg is None or (isinstance(raw_avg, float) and math.isnan(raw_avg)):
+            avg_time_sec = 0
+        else:
+            avg_time_sec = int(raw_avg)
+            
         mins = avg_time_sec // 60
         secs = avg_time_sec % 60
         avg_time_str = f"{mins}m {secs}s" if avg_time_sec > 0 else "0m 0s"
@@ -380,11 +386,11 @@ def get_traffic_data(tenant_id: str, days: int = Query(7, ge=1, le=365)):
     require_tenant_access(tenant_id)
     sql = """
         SELECT 
-            date,
-            sum(total_events) as pageViews,
-            uniqMerge(unique_users) as visitors
-        FROM feature_intelligence.daily_feature_usage
-        WHERE tenant_id = %(tenant_id)s AND date >= today() - %(days)s
+            toDate(timestamp) as date,
+            count() as pageViews,
+            uniq(user_id) as visitors
+        FROM feature_intelligence.events_raw
+        WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - %(days)s
         GROUP BY date
         ORDER BY date ASC
     """
@@ -402,10 +408,10 @@ def get_feature_usage_series(tenant_id: str, days: int = Query(7, ge=1, le=365))
     require_tenant_access(tenant_id)
     sql = """
         SELECT 
-            date,
-            sum(total_events) as usage
-        FROM feature_intelligence.daily_feature_usage
-        WHERE tenant_id = %(tenant_id)s AND date >= today() - %(days)s
+            toDate(timestamp) as date,
+            count() as usage
+        FROM feature_intelligence.events_raw
+        WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - %(days)s
         GROUP BY date
         ORDER BY date ASC
     """
@@ -425,8 +431,8 @@ def get_all_tenants():
         SELECT 
             tenant_id as id,
             tenant_id as name,
-            toUInt64(sum(total_events)) as featureUsage
-        FROM feature_intelligence.daily_feature_usage
+            toUInt64(count()) as featureUsage
+        FROM feature_intelligence.events_raw
         GROUP BY tenant_id
         ORDER BY featureUsage DESC
     """
@@ -661,10 +667,14 @@ def get_feature_activity(tenant_id: str):
         results = ch_client.query(sql, {"tenant_id": tenant_id})
         activities = []
         colors = ['#1a73e8', '#4285F4', '#8AB4F8', '#34A853', '#F59E0B', '#EF4444']
-        import random
         for i, r in enumerate(results):
             c = r['total']
-            pieces = [random.uniform(0.1, 0.4) for _ in range(3)]
+            # Compute a stable deterministic pseudo-random hash to make segments repeatable without random
+            h1 = (hash(r['event_name']) % 40) + 10
+            h2 = ((hash(r['event_name']) * 3) % 40) + 10
+            h3 = 100 - (h1 + h2)
+            
+            pieces = [h1, h2, h3]
             norm = sum(pieces)
             segments = []
             for j, p in enumerate(pieces):
