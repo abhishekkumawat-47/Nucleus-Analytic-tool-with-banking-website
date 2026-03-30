@@ -112,8 +112,30 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=clickhouse
+      - OLLAMA_URL=http://ollama:11434
     command: uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
     restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════
+  # OLLAMA Local LLM SERVER
+  # ═══════════════════════════════════════════════════════════
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nucleus-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  init-ollama:
+    image: curlimages/curl:latest
+    container_name: nucleus-init-ollama
+    depends_on:
+      - ollama
+    command: >
+      sh -c "echo 'Waiting for Ollama API...' && until curl -s http://ollama:11434/api/tags; do sleep 5; done && echo 'Pulling llama3.2:1b model...' && curl -X POST -H 'Content-Type: application/json' -d '{\"name\": \"llama3.2:1b\"}' http://ollama:11434/api/pull"
 
   # ═══════════════════════════════════════════════════════════
   # TWITTER DEMO — port 3000
@@ -234,4 +256,6 @@ volumes:
   zookeeper_data:
     driver: local
   zookeeper_logs:
+    driver: local
+  ollama_data:
     driver: local
