@@ -146,6 +146,10 @@ const dashboardSlice = createSlice({
     updateRealTimeUsers(state, action: PayloadAction<number>) {
       state.realTimeUsers = action.payload;
     },
+    /** Updates KPI metrics dynamically from WebSockets */
+    updateKPIMetrics(state, action: PayloadAction<any[]>) {
+      state.kpiMetrics = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -199,6 +203,7 @@ export const {
   setDeploymentMode,
   toggleSidebar,
   updateRealTimeUsers,
+  updateKPIMetrics,
 } = dashboardSlice.actions;
 
 export default dashboardSlice.reducer;

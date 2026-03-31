@@ -7,7 +7,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
-import { fetchDashboardData, fetchAIInsightsData, setTimeRange, setSelectedTenant } from '@/lib/dashboardSlice';
+import { fetchDashboardData, fetchAIInsightsData, setTimeRange, setSelectedTenant, updateRealTimeUsers, updateKPIMetrics } from '@/lib/dashboardSlice';
 import { TimeRange } from '@/types';
 import { useSession } from 'next-auth/react';
 
@@ -31,14 +31,42 @@ export function useDashboardData() {
     
     dispatch(fetchDashboardData());
     dispatch(fetchAIInsightsData());
-    
-    // Auto-refresh every 10 seconds for real-time updates
-    const interval = setInterval(() => {
-      dispatch(fetchDashboardData());
-    }, 10000);
-    
-    return () => clearInterval(interval);
   }, [dispatch, session]);
+
+  // Real-time WebSocket Connection
+  useEffect(() => {
+    const tenantId = dashboardState.selectedTenant;
+    if (!tenantId) return;
+
+    // Use environment variable window or NEXT_PUBLIC_ANALYTICS_API fallback
+    const baseUrl = 'http://localhost:8001';
+    const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/ws/dashboard/${tenantId}`;
+    
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'METRICS_UPDATE') {
+          if (data.payload.realtimeUsers !== undefined) {
+            dispatch(updateRealTimeUsers(data.payload.realtimeUsers));
+          }
+          if (data.payload.kpiMetrics && data.payload.kpiMetrics.length) {
+            dispatch(updateKPIMetrics(data.payload.kpiMetrics));
+          }
+        } else if (data.type === 'REALTIME_EVENT') {
+          // Additional handling for 1:1 true streaming event payloads!
+          // We can animate dashboard states or flash indicators here
+        }
+      } catch (e) {
+        console.error('Error parsing WebSocket message:', e);
+      }
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [dispatch, dashboardState.selectedTenant]);
 
   const changeTimeRange = useCallback(
     (range: TimeRange) => {

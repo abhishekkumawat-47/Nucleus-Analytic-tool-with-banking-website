@@ -26,7 +26,7 @@ import {
 import * as mockData from './mock-data';
 
 /** Base API configuration */
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE_URL = 'http://localhost:8001';
 
 /** Configured axios instance with interceptors */
 const apiClient: AxiosInstance = axios.create({

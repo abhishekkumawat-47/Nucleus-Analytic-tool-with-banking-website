@@ -23,16 +23,16 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
     <AuthGuard>
     <div className="min-h-screen bg-[#f8f9fa] font-sans">
       {/* Sidebar - hidden on mobile via CSS, toggled via Redux */}
-      <div className="hidden lg:block">
+      <div className="hidden lg:block print:hidden">
         <Sidebar />
       </div>
 
       {/* Mobile sidebar overlay */}
-      <div className="lg:hidden">
+      <div className="lg:hidden print:hidden">
         {!sidebarCollapsed && (
           <>
             {/* Backdrop */}
-            <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20" />
+            <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 print:hidden" />
             <Sidebar />
           </>
         )}
@@ -40,12 +40,14 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
 
       {/* Main Content Area */}
       <div
-        className={`transition-all duration-300 ${
+        className={`transition-all duration-300 print:ml-0 ${
           sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-56'
         }`}
       >
-        <TopNavbar />
-        <main className="p-4 lg:p-6 max-w-[1600px] mx-auto">{children}</main>
+        <div className="print:hidden">
+          <TopNavbar />
+        </div>
+        <main className="p-4 lg:p-6 max-w-[1600px] mx-auto print:p-0 print:max-w-none">{children}</main>
       </div>
     </div>
     </AuthGuard>
