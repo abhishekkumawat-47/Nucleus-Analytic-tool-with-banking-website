@@ -26,30 +26,32 @@ export function getUserRole(email: string | null | undefined): UserRole {
   
   const config = getRbacConfig();
   
+  // Super admins: strict whitelist
   if (config.super_admins?.includes(email)) return 'super_admin';
   
-  for (const appId in config.app_admins) {
-    const admins = config.app_admins[appId];
-    if (admins && admins.includes(email)) {
-      return 'app_admin';
-    }
-  }
-  
-  return 'user';
+  // Any authenticated user gets app_admin access
+  // (Any logged-in user can view the analytics dashboard)
+  return 'app_admin';
 }
 
 export function getAdminApps(email: string | null | undefined): string[] {
   if (!email) return [];
   
   const config = getRbacConfig();
-  const apps: string[] = [];
   
+  // Check if user has specific app assignments in rbac.json
+  const assignedApps: string[] = [];
   for (const appId in config.app_admins) {
     const admins = config.app_admins[appId];
     if (admins && admins.includes(email)) {
-      apps.push(appId);
+      assignedApps.push(appId);
     }
   }
   
-  return apps;
+  // If user has explicit assignments, return those
+  if (assignedApps.length > 0) return assignedApps;
+  
+  // Otherwise, grant access to all registered apps
+  // (Any authenticated admin can see all apps)
+  return Object.keys(config.app_admins);
 }

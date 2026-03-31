@@ -25,7 +25,7 @@ export default function UnauthorizedPage() {
         
         <div className="space-y-3">
           <a
-            href="http://localhost:3000"
+            href={process.env.NEXT_PUBLIC_MAIN_APP_URL || "http://localhost:3000"}
             className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-colors font-medium"
           >
             <ExternalLink className="w-4 h-4" />

@@ -183,7 +183,7 @@ export function Navbar() {
                       <DropdownMenuSeparator />
                       <DropdownMenuLabel className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 py-1">Nucleus Platform</DropdownMenuLabel>
                       <DropdownMenuItem asChild>
-                        <a href="http://localhost:3001" target="_blank" rel="noopener noreferrer" className="cursor-pointer">
+                        <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001"} target="_blank" rel="noopener noreferrer" className="cursor-pointer">
                           <BarChart3 className="mr-2 h-4 w-4" />
                           Analytics Dashboard
                         </a>

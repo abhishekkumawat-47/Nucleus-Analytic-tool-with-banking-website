@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const INGESTION_API_URL = 'http://localhost:8000/events';
+const INGESTION_API_URL = process.env.NEXT_PUBLIC_INGESTION_URL || 'http://localhost:8000/events';
 const TENANT_ID = 'twitter';
 
 class AnalyticsTracker {

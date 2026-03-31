@@ -116,8 +116,10 @@ export default function AppSelectorPage() {
                   </button>
 
                   <Link
-                    href={`/${app.appId}`}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-medium text-gray-300 transition-all duration-200"
+                    href={app.appUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-medium text-gray-300 transition-all duration-200 cursor-pointer"
                   >
                     <span>Open App</span>
                     <ArrowRight size={16} />

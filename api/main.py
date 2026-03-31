@@ -11,6 +11,11 @@ from storage.client import ch_client
 from api.insights import generate_insights
 from core.config import settings
 from core.middleware import require_cloud_mode, require_tenant_access
+import time
+
+# In-memory dictionary to cache AI reports: { tenant_id: { "timestamp": float, "report": str } }
+AI_REPORT_CACHE = {}
+AI_CACHE_TTL = 3600  # 1 hour cache duration
 
 app = FastAPI(
     title="Feature Analytics API",
@@ -1262,9 +1267,17 @@ def get_predictive_adoption(tenant_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/ai_report")
-def get_ai_report(tenant_id: str):
+def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")):
     """Generates a comprehensive AI-powered summarization report for the dashboard."""
     require_tenant_access(tenant_id)
+    
+    # Check cache first
+    now = time.time()
+    if not force_refresh and tenant_id in AI_REPORT_CACHE:
+        cached_data = AI_REPORT_CACHE[tenant_id]
+        if now - cached_data["timestamp"] < AI_CACHE_TTL:
+            return {"tenant_id": tenant_id, "report": cached_data["report"], "cached": True}
+            
     try:
         # Fetch basic context
         kpi = get_kpi_metrics(tenant_id)
@@ -1408,7 +1421,13 @@ def get_ai_report(tenant_id: str):
         # Combine HTML payload with Markdown report
         final_report = f"{kpi_cards_html}\n{activity_html}\n{geo_html}\n{divider}\n{llm_response}"
              
-        return {"tenant_id": tenant_id, "report": final_report}
+        # Store in cache
+        AI_REPORT_CACHE[tenant_id] = {
+            "timestamp": time.time(),
+            "report": final_report
+        }
+        
+        return {"tenant_id": tenant_id, "report": final_report, "cached": False}
     except Exception as e:
         import traceback
         traceback.print_exc()

@@ -21,6 +21,7 @@ export interface AppConfig {
   tenantId: string;       // Maps to tenant_id in ClickHouse
   icon: string;           // Lucide icon name
   color: string;          // Brand color
+  appUrl: string;         // The URL to open the app (e.g., http://localhost:3002/nexabank)
   funnelSteps: string[];  // Ordered funnel event names
   routes: FeatureMapping[];
 }
@@ -37,6 +38,7 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     tenantId: 'twitter',
     icon: 'twitter',
     color: '#1DA1F2',
+    appUrl: process.env.NEXT_PUBLIC_TWITTER_URL || 'http://localhost:3000/twitter',
     funnelSteps: ['login', 'view_feed', 'post_tweet', 'like_tweet'],
     routes: [
       { pattern: '/twitter',           featureName: 'login',           category: 'navigation',  funnel: 1 },
@@ -53,6 +55,7 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     tenantId: 'nexabank',
     icon: 'wallet',
     color: '#7C3AED',
+    appUrl: process.env.NEXT_PUBLIC_NEXABANK_URL || 'http://localhost:3002/nexabank',
     funnelSteps: ['login', 'loan_applied', 'kyc_started', 'kyc_completed'],
     routes: [
       { pattern: '/nexabank/login',        featureName: 'login',              category: 'navigation',   funnel: 1 },

@@ -39,7 +39,7 @@ export function useDashboardData() {
     if (!tenantId) return;
 
     // Use environment variable window or NEXT_PUBLIC_ANALYTICS_API fallback
-    const baseUrl = 'http://localhost:8001';
+    const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8001';
     const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/ws/dashboard/${tenantId}`;
     
     const ws = new WebSocket(wsUrl);
