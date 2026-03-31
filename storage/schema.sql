@@ -37,3 +37,45 @@ SELECT
     uniqState(user_id) AS unique_users
 FROM feature_intelligence.events_raw
 GROUP BY tenant_id, event_name, date;
+
+-- ═══════════════════════════════════════════════════════════
+-- Tenant Feature Licenses
+-- Tracks which features each tenant has paid for.
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS feature_intelligence.tenant_licenses (
+    tenant_id String,
+    feature_name String,
+    is_licensed UInt8 DEFAULT 1,
+    plan_tier String DEFAULT 'pro',
+    updated_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (tenant_id, feature_name);
+
+-- ═══════════════════════════════════════════════════════════
+-- Admin Tracking Toggles
+-- Allows admins to enable/disable tracking per feature.
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS feature_intelligence.tracking_toggles (
+    tenant_id String,
+    feature_name String,
+    is_enabled UInt8 DEFAULT 1,
+    changed_by String DEFAULT '',
+    changed_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(changed_at)
+ORDER BY (tenant_id, feature_name);
+
+-- ═══════════════════════════════════════════════════════════
+-- Configuration Audit Log
+-- Records who changed which system setting and when.
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS feature_intelligence.config_audit_log (
+    tenant_id String,
+    actor_email String,
+    action String,
+    target String,
+    old_value String DEFAULT '',
+    new_value String DEFAULT '',
+    timestamp DateTime DEFAULT now()
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (tenant_id, timestamp);

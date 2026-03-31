@@ -390,6 +390,113 @@ export const dashboardAPI = {
       return null;
     }
   },
+
+  /* ─────────────── License vs Usage ─────────────── */
+
+  async getLicenseUsage(tenantId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/license/usage?tenant_id=${tenantId}`);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch license usage', err);
+      return { summary: { total_licensed: 0, total_used: 0, waste_pct: 0 }, licensed: [], unused_licensed: [], unlicensed_used: [] };
+    }
+  },
+
+  async syncLicenses(tenantId: string, features: any[]): Promise<any> {
+    try {
+      const response = await apiClient.post('/license/sync', { tenant_id: tenantId, features });
+      return response.data;
+    } catch (err) {
+      console.error('Failed to sync licenses', err);
+      return { status: 'error' };
+    }
+  },
+
+  /* ─────────────── Tracking Toggles ─────────────── */
+
+  async getTrackingToggles(tenantId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/tracking/toggles?tenant_id=${tenantId}`);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch tracking toggles', err);
+      return { toggles: [] };
+    }
+  },
+
+  async setTrackingToggle(tenantId: string, featureName: string, isEnabled: boolean, actorEmail: string): Promise<any> {
+    try {
+      const response = await apiClient.post('/tracking/toggles', {
+        tenant_id: tenantId,
+        feature_name: featureName,
+        is_enabled: isEnabled,
+        actor_email: actorEmail,
+      });
+      return response.data;
+    } catch (err) {
+      console.error('Failed to set tracking toggle', err);
+      return { status: 'error' };
+    }
+  },
+
+  /* ─────────────── Config Audit Log ─────────────── */
+
+  async getConfigAuditLog(tenantId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/config/audit-log?tenant_id=${tenantId}`);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch config audit log', err);
+      return { logs: [] };
+    }
+  },
+
+  /* ─────────────── User Journey ─────────────── */
+
+  async getUserJourney(tenantId: string, userId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/journey/user?tenant_id=${tenantId}&user_id=${userId}`);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch user journey', err);
+      return { events: [], sessions: [], total_events: 0, total_sessions: 0 };
+    }
+  },
+
+  async getJourneyUsers(tenantId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/journey/users?tenant_id=${tenantId}`);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch journey users', err);
+      return { users: [] };
+    }
+  },
+
+  /* ─────────────── Segmentation ─────────────── */
+
+  async getSegmentationComparison(tenantId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/segmentation/compare?tenant_id=${tenantId}`);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch segmentation', err);
+      return { segments: [] };
+    }
+  },
+
+  /* ─────────────── Predictive Adoption ─────────────── */
+
+  async getPredictiveAdoption(tenantId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/predictive/adoption?tenant_id=${tenantId}`);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch predictive adoption', err);
+      return { predictions: [], total_users: 0 };
+    }
+  },
 };
 
 export default apiClient;

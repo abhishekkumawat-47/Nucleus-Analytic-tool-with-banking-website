@@ -23,6 +23,9 @@ import {
   Cloud,
   Eye,
   FileText,
+  Key,
+  Route,
+  TrendingUp,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { toggleSidebar } from '@/lib/dashboardSlice';
@@ -40,6 +43,9 @@ const iconMap: Record<string, React.ElementType> = {
   cloud: Cloud,
   eye: Eye,
   'file-text': FileText,
+  key: Key,
+  route: Route,
+  'trending-up': TrendingUp,
 };
 
 interface SidebarProps {}
@@ -62,6 +68,9 @@ function Sidebar(_props: SidebarProps) {
       { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', href: '/dashboard' },
       { id: 'features', label: 'Feature Analytics', icon: 'bar-chart-3', href: '/features' },
       { id: 'funnel', label: 'Funnel Analysis', icon: 'filter', href: '/funnel' },
+      { id: 'user-journey', label: 'User Journey', icon: 'route', href: '/user-journey' },
+      { id: 'license-usage', label: 'License vs Usage', icon: 'key', href: '/license-usage' },
+      { id: 'predictive', label: 'Predictive Insights', icon: 'trending-up', href: '/predictive' },
       { id: 'tenants', label: 'Tenants', icon: 'users', href: '/tenants' },
       { id: 'config', label: 'Configuration', icon: 'settings', href: '/settings' },
       { id: 'governance', label: 'Governance', icon: 'shield', href: '/governance' },

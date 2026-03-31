@@ -39,7 +39,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
       user         → No API access at all
     """
     
-    # Endpoints that are too sensitive for company_admin (raw data, user-level details)
+    # Endpoints that are too sensitive for super_admin (raw data, user-level details, tenant-specific analytics)
     COMPANY_ADMIN_BLOCKED = [
         "/audit_logs",
         "/locations",
@@ -56,6 +56,10 @@ class RBACMiddleware(BaseHTTPMiddleware):
         "/features/configs",
         "/funnels",
         "/transparency",
+        "/license",
+        "/journey",
+        "/predictive",
+        "/segmentation",
     ]
     
     async def dispatch(self, request: Request, call_next):
@@ -84,7 +88,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 )
             
             # Explicitly allow only these patterns for super_admin
-            allowed = ["/admin", "/metrics/kpi", "/insights", "/tenants", "/features/usage", "/deployment", "/ai_report"]
+            allowed = ["/admin", "/metrics/kpi", "/insights", "/tenants", "/features/usage", "/deployment", "/ai_report", "/tracking", "/config"]
             if not any(path.startswith(prefix) for prefix in allowed):
                 return JSONResponse(
                     status_code=403, 
@@ -831,6 +835,431 @@ def get_transparency_data(tenant_id: str):
         ],
         "message": "In ON_PREM mode, no user-level details leave the premises." if settings.is_on_prem else "In CLOUD mode, full data is managed centrally."
     }
+
+# ═══════════════════════════════════════════════════════════
+# LICENSE VS USAGE
+# ═══════════════════════════════════════════════════════════
+
+from core.models import LicenseSyncRequest, TrackingToggleRequest
+
+@app.get("/license/usage")
+def get_license_usage(tenant_id: str):
+    """Compare licensed features vs actual usage for a tenant."""
+    require_tenant_access(tenant_id)
+    try:
+        # Get licensed features
+        sql_licensed = """
+            SELECT feature_name, is_licensed, plan_tier
+            FROM feature_intelligence.tenant_licenses FINAL
+            WHERE tenant_id = %(tenant_id)s AND is_licensed = 1
+        """
+        licensed = ch_client.query(sql_licensed, {"tenant_id": tenant_id})
+        licensed_set = {r["feature_name"] for r in licensed}
+        
+        # Get actually used features (last 30 days)
+        sql_used = """
+            SELECT event_name as feature_name, sum(total_events) as usage_count, uniqMerge(unique_users) as unique_users
+            FROM feature_intelligence.daily_feature_usage
+            WHERE tenant_id = %(tenant_id)s AND date >= today() - 30
+            GROUP BY event_name
+            ORDER BY usage_count DESC
+        """
+        used = ch_client.query(sql_used, {"tenant_id": tenant_id})
+        used_set = {r["feature_name"] for r in used}
+        used_map = {r["feature_name"]: r for r in used}
+        
+        # Build comparison
+        licensed_list = []
+        for r in licensed:
+            usage = used_map.get(r["feature_name"], {})
+            licensed_list.append({
+                "feature_name": r["feature_name"],
+                "plan_tier": r["plan_tier"],
+                "is_used": r["feature_name"] in used_set,
+                "usage_count": int(usage.get("usage_count", 0)),
+                "unique_users": int(usage.get("unique_users", 0)),
+            })
+        
+        unused_licensed = [f for f in licensed_list if not f["is_used"]]
+        unlicensed_used = [{"feature_name": f, "usage_count": int(used_map[f]["usage_count"])} 
+                          for f in used_set - licensed_set]
+        
+        total_licensed = len(licensed_set)
+        total_used_licensed = len([f for f in licensed_list if f["is_used"]])
+        waste_pct = round(((total_licensed - total_used_licensed) / max(total_licensed, 1)) * 100, 1)
+        
+        return {
+            "tenant_id": tenant_id,
+            "summary": {
+                "total_licensed": total_licensed,
+                "total_used": len(used_set),
+                "total_used_licensed": total_used_licensed,
+                "waste_pct": waste_pct,
+            },
+            "licensed": licensed_list,
+            "unused_licensed": unused_licensed,
+            "unlicensed_used": unlicensed_used
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/license/sync")
+def sync_licenses(req: LicenseSyncRequest):
+    """Upsert license records for a tenant."""
+    require_tenant_access(req.tenant_id)
+    try:
+        from datetime import datetime
+        rows = []
+        for f in req.features:
+            rows.append([req.tenant_id, f.feature_name, 1 if f.is_licensed else 0, f.plan_tier, datetime.utcnow()])
+        
+        client = ch_client._get_client()
+        client.insert(
+            'feature_intelligence.tenant_licenses',
+            rows,
+            column_names=['tenant_id', 'feature_name', 'is_licensed', 'plan_tier', 'updated_at']
+        )
+        return {"status": "ok", "synced": len(rows)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════
+# TRACKING TOGGLES
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/tracking/toggles")
+def get_tracking_toggles(tenant_id: str):
+    """Get all feature tracking toggles for a tenant."""
+    require_tenant_access(tenant_id)
+    try:
+        sql = """
+            SELECT feature_name, is_enabled, changed_by, changed_at
+            FROM feature_intelligence.tracking_toggles FINAL
+            WHERE tenant_id = %(tenant_id)s
+        """
+        results = ch_client.query(sql, {"tenant_id": tenant_id})
+        toggles = []
+        for r in results:
+            toggles.append({
+                "feature_name": r["feature_name"],
+                "is_enabled": bool(r["is_enabled"]),
+                "changed_by": r["changed_by"],
+                "changed_at": str(r["changed_at"]) if hasattr(r["changed_at"], "strftime") else str(r["changed_at"]),
+            })
+        return {"tenant_id": tenant_id, "toggles": toggles}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/tracking/toggles")
+def set_tracking_toggle(req: TrackingToggleRequest):
+    """Set a tracking toggle and record it in audit log."""
+    require_tenant_access(req.tenant_id)
+    try:
+        from datetime import datetime
+        now = datetime.utcnow()
+        
+        # Get existing state for audit
+        sql_old = """
+            SELECT is_enabled FROM feature_intelligence.tracking_toggles FINAL
+            WHERE tenant_id = %(tenant_id)s AND feature_name = %(feature_name)s
+        """
+        old = ch_client.query(sql_old, {"tenant_id": req.tenant_id, "feature_name": req.feature_name})
+        old_val = "enabled" if (old and old[0]["is_enabled"]) else "disabled"
+        new_val = "enabled" if req.is_enabled else "disabled"
+        
+        # Upsert toggle
+        client = ch_client._get_client()
+        client.insert(
+            'feature_intelligence.tracking_toggles',
+            [[req.tenant_id, req.feature_name, 1 if req.is_enabled else 0, req.actor_email, now]],
+            column_names=['tenant_id', 'feature_name', 'is_enabled', 'changed_by', 'changed_at']
+        )
+        
+        # Write audit log
+        client.insert(
+            'feature_intelligence.config_audit_log',
+            [[req.tenant_id, req.actor_email, "tracking_toggle", req.feature_name, old_val, new_val, now]],
+            column_names=['tenant_id', 'actor_email', 'action', 'target', 'old_value', 'new_value', 'timestamp']
+        )
+        
+        return {"status": "ok", "feature_name": req.feature_name, "is_enabled": req.is_enabled}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════
+# CONFIGURATION AUDIT LOG
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/config/audit-log")
+def get_config_audit_log(tenant_id: str):
+    """Returns configuration change audit trail for a tenant."""
+    require_tenant_access(tenant_id)
+    try:
+        sql = """
+            SELECT actor_email, action, target, old_value, new_value, timestamp
+            FROM feature_intelligence.config_audit_log
+            WHERE tenant_id = %(tenant_id)s
+            ORDER BY timestamp DESC
+            LIMIT 100
+        """
+        results = ch_client.query(sql, {"tenant_id": tenant_id})
+        logs = []
+        for r in results:
+            logs.append({
+                "actor": r["actor_email"],
+                "action": r["action"],
+                "target": r["target"],
+                "old_value": r["old_value"],
+                "new_value": r["new_value"],
+                "timestamp": r["timestamp"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(r["timestamp"], "strftime") else str(r["timestamp"]),
+            })
+        return {"tenant_id": tenant_id, "logs": logs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════
+# USER JOURNEY MAPPING
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/journey/user")
+def get_user_journey(tenant_id: str, user_id: str):
+    """Returns a single user's complete event timeline with session detection."""
+    require_tenant_access(tenant_id)
+    try:
+        sql = """
+            SELECT event_name, channel, timestamp, metadata
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND user_id = %(user_id)s
+            ORDER BY timestamp ASC
+            LIMIT 500
+        """
+        results = ch_client.query(sql, {"tenant_id": tenant_id, "user_id": user_id})
+        
+        events = []
+        sessions = []
+        current_session = []
+        SESSION_GAP_SECONDS = 1800  # 30 minutes
+        
+        for i, r in enumerate(results):
+            ts = r["timestamp"]
+            ts_str = ts.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts, "strftime") else str(ts)
+            
+            event = {
+                "event_name": r["event_name"],
+                "channel": r["channel"],
+                "timestamp": ts_str,
+                "metadata": r["metadata"],
+            }
+            events.append(event)
+            
+            # Session break detection
+            if i > 0:
+                prev_ts = results[i - 1]["timestamp"]
+                if hasattr(ts, "timestamp") and hasattr(prev_ts, "timestamp"):
+                    gap = (ts - prev_ts).total_seconds()
+                elif hasattr(ts, "__sub__"):
+                    gap = (ts - prev_ts).total_seconds()
+                else:
+                    gap = 0
+                    
+                if gap > SESSION_GAP_SECONDS:
+                    sessions.append(current_session)
+                    current_session = []
+            
+            current_session.append(event)
+        
+        if current_session:
+            sessions.append(current_session)
+        
+        # Drop-off detection: did user complete common flow?
+        event_names = [e["event_name"] for e in events]
+        drop_off_point = None
+        if len(events) > 0 and len(sessions) > 0:
+            last_event = events[-1]["event_name"] if events else None
+            drop_off_point = last_event
+        
+        return {
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "total_events": len(events),
+            "total_sessions": len(sessions),
+            "events": events,
+            "sessions": sessions,
+            "last_event": drop_off_point,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/journey/users")
+def list_journey_users(tenant_id: str):
+    """Returns list of users with event counts for journey selection."""
+    require_tenant_access(tenant_id)
+    try:
+        sql = """
+            SELECT user_id, count() as event_count, min(timestamp) as first_seen, max(timestamp) as last_seen
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s
+            GROUP BY user_id
+            ORDER BY event_count DESC
+            LIMIT 50
+        """
+        results = ch_client.query(sql, {"tenant_id": tenant_id})
+        users = []
+        for r in results:
+            users.append({
+                "user_id": r["user_id"],
+                "event_count": int(r["event_count"]),
+                "first_seen": r["first_seen"].strftime("%Y-%m-%d %H:%M") if hasattr(r["first_seen"], "strftime") else str(r["first_seen"]),
+                "last_seen": r["last_seen"].strftime("%Y-%m-%d %H:%M") if hasattr(r["last_seen"], "strftime") else str(r["last_seen"]),
+            })
+        return {"tenant_id": tenant_id, "users": users}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════
+# CUSTOMER SEGMENTATION COMPARISON
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/segmentation/compare")
+def get_segmentation_comparison(tenant_id: str):
+    """Group features by plan tier and compare adoption rates."""
+    require_tenant_access(tenant_id)
+    try:
+        # Get license tiers
+        sql_tiers = """
+            SELECT feature_name, plan_tier
+            FROM feature_intelligence.tenant_licenses FINAL
+            WHERE tenant_id = %(tenant_id)s AND is_licensed = 1
+        """
+        tiers = ch_client.query(sql_tiers, {"tenant_id": tenant_id})
+        tier_map = {r["feature_name"]: r["plan_tier"] for r in tiers}
+        
+        # Get usage
+        sql_usage = """
+            SELECT event_name, sum(total_events) as total, uniqMerge(unique_users) as users
+            FROM feature_intelligence.daily_feature_usage
+            WHERE tenant_id = %(tenant_id)s AND date >= today() - 30
+            GROUP BY event_name
+        """
+        usage = ch_client.query(sql_usage, {"tenant_id": tenant_id})
+        
+        # Group by segment
+        segments = {}
+        for u in usage:
+            tier = tier_map.get(u["event_name"], "unlicensed")
+            if tier not in segments:
+                segments[tier] = {"tier": tier, "features": 0, "total_usage": 0, "unique_users": 0}
+            segments[tier]["features"] += 1
+            segments[tier]["total_usage"] += int(u["total"])
+            segments[tier]["unique_users"] += int(u["users"])
+        
+        return {
+            "tenant_id": tenant_id,
+            "segments": list(segments.values()),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════
+# PREDICTIVE ADOPTION INSIGHTS
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/predictive/adoption")
+def get_predictive_adoption(tenant_id: str):
+    """
+    Predicts feature adoption likelihood using a weighted heuristic:
+    score = (recent_trend * 0.4) + (unique_users_pct * 0.3) + (frequency * 0.3)
+    """
+    require_tenant_access(tenant_id)
+    try:
+        # Recent 7d vs previous 7d trend
+        sql_trend = """
+            SELECT 
+                event_name,
+                sumIf(total_events, date >= today() - 7) as recent_7d,
+                sumIf(total_events, date >= today() - 14 AND date < today() - 7) as prev_7d
+            FROM feature_intelligence.daily_feature_usage
+            WHERE tenant_id = %(tenant_id)s AND date >= today() - 14
+            GROUP BY event_name
+        """
+        trend_data = ch_client.query(sql_trend, {"tenant_id": tenant_id})
+        
+        # Total unique users for the tenant
+        sql_total_users = """
+            SELECT uniqExact(user_id) as total_users
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s
+        """
+        total_users_result = ch_client.query(sql_total_users, {"tenant_id": tenant_id})
+        total_users = int(total_users_result[0]["total_users"]) if total_users_result else 1
+        total_users = max(total_users, 1)
+        
+        # Per-feature unique users
+        sql_feature_users = """
+            SELECT event_name, uniqExact(user_id) as feature_users
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 14
+            GROUP BY event_name
+        """
+        feature_users = ch_client.query(sql_feature_users, {"tenant_id": tenant_id})
+        feature_users_map = {r["event_name"]: int(r["feature_users"]) for r in feature_users}
+        
+        # Frequency consistency (how many of the 14 days had activity)
+        sql_frequency = """
+            SELECT event_name, count(distinct date) as active_days
+            FROM feature_intelligence.daily_feature_usage
+            WHERE tenant_id = %(tenant_id)s AND date >= today() - 14
+            GROUP BY event_name
+        """
+        frequency_data = ch_client.query(sql_frequency, {"tenant_id": tenant_id})
+        frequency_map = {r["event_name"]: int(r["active_days"]) for r in frequency_data}
+        
+        predictions = []
+        for row in trend_data:
+            name = row["event_name"]
+            recent = int(row["recent_7d"])
+            prev = int(row["prev_7d"])
+            
+            # Trend score (0-100): growth rate capped at 100%
+            if prev > 0:
+                growth = ((recent - prev) / prev) * 100
+            elif recent > 0:
+                growth = 100
+            else:
+                growth = 0
+            trend_score = min(max(growth + 50, 0), 100)  # Normalize: 50 = flat
+            
+            # Unique users percentage (0-100)
+            fu = feature_users_map.get(name, 0)
+            users_pct = min((fu / total_users) * 100, 100)
+            
+            # Frequency consistency (0-100): active_days / 14 * 100
+            active_days = frequency_map.get(name, 0)
+            freq_score = min((active_days / 14) * 100, 100)
+            
+            # Weighted score
+            score = round(trend_score * 0.4 + users_pct * 0.3 + freq_score * 0.3, 1)
+            
+            predictions.append({
+                "feature_name": name,
+                "score": score,
+                "trend_score": round(trend_score, 1),
+                "users_pct": round(users_pct, 1),
+                "frequency_score": round(freq_score, 1),
+                "recent_7d": recent,
+                "prev_7d": prev,
+                "status": "High Adoption" if score >= 70 else "Growing" if score >= 40 else "At Risk",
+            })
+        
+        predictions.sort(key=lambda x: x["score"], reverse=True)
+        
+        return {
+            "tenant_id": tenant_id,
+            "total_users": total_users,
+            "predictions": predictions,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/ai_report")
 def get_ai_report(tenant_id: str):

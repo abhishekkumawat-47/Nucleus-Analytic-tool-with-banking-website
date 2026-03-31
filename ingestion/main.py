@@ -97,6 +97,27 @@ async def ingest_event(event: FeatureEvent):
     # 1. Mask PII in metadata
     event.metadata = sanitize_metadata(event.metadata)
     
+    # 2. Check tracking toggles — reject if admin disabled tracking for this feature
+    try:
+        import clickhouse_connect
+        ch_host = os.environ.get("CLICKHOUSE_HOST", "localhost")
+        ch_user = os.environ.get("CLICKHOUSE_USER", "default")
+        ch_pass = os.environ.get("CLICKHOUSE_PASSWORD", "clickhouse")
+        client = clickhouse_connect.get_client(host=ch_host, username=ch_user, password=ch_pass)
+        toggle_result = client.query(
+            "SELECT is_enabled FROM feature_intelligence.tracking_toggles FINAL "
+            "WHERE tenant_id = %(tenant_id)s AND feature_name = %(feature_name)s",
+            parameters={"tenant_id": event.tenant_id, "feature_name": event.event_name}
+        )
+        if toggle_result.result_rows and toggle_result.result_rows[0][0] == 0:
+            logger.info(f"Tracking disabled for feature '{event.event_name}' on tenant '{event.tenant_id}'. Rejecting event.")
+            raise HTTPException(status_code=403, detail=f"Tracking disabled for feature '{event.event_name}' by admin.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        # If toggle check fails (e.g. table doesn't exist yet), allow the event through
+        logger.debug(f"Tracking toggle check skipped: {e}")
+    
     if settings.is_on_prem:
         if event.tenant_id != settings.TENANT_ID:
             raise HTTPException(status_code=403, detail="Forbidden: Invalid tenant ID for this on-prem instance.")

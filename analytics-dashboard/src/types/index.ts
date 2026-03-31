@@ -207,3 +207,94 @@ export interface DashboardState {
   featureConfigs: FeatureConfig[];
   retentionData: RetentionData[];
 }
+
+/* ─────────────── License vs Usage ─────────────── */
+
+export interface LicenseFeature {
+  feature_name: string;
+  plan_tier: string;
+  is_used: boolean;
+  usage_count: number;
+  unique_users: number;
+}
+
+export interface LicenseUsageResponse {
+  tenant_id: string;
+  summary: {
+    total_licensed: number;
+    total_used: number;
+    total_used_licensed: number;
+    waste_pct: number;
+  };
+  licensed: LicenseFeature[];
+  unused_licensed: LicenseFeature[];
+  unlicensed_used: { feature_name: string; usage_count: number }[];
+}
+
+/* ─────────────── Tracking Toggle ─────────────── */
+
+export interface TrackingToggle {
+  feature_name: string;
+  is_enabled: boolean;
+  changed_by: string;
+  changed_at: string;
+}
+
+/* ─────────────── Config Audit Log ─────────────── */
+
+export interface ConfigAuditEntry {
+  actor: string;
+  action: string;
+  target: string;
+  old_value: string;
+  new_value: string;
+  timestamp: string;
+}
+
+/* ─────────────── User Journey ─────────────── */
+
+export interface JourneyEvent {
+  event_name: string;
+  channel: string;
+  timestamp: string;
+  metadata: string;
+}
+
+export interface UserJourneyResponse {
+  tenant_id: string;
+  user_id: string;
+  total_events: number;
+  total_sessions: number;
+  events: JourneyEvent[];
+  sessions: JourneyEvent[][];
+  last_event: string | null;
+}
+
+export interface JourneyUser {
+  user_id: string;
+  event_count: number;
+  first_seen: string;
+  last_seen: string;
+}
+
+/* ─────────────── Predictive Adoption ─────────────── */
+
+export interface PredictiveFeature {
+  feature_name: string;
+  score: number;
+  trend_score: number;
+  users_pct: number;
+  frequency_score: number;
+  recent_7d: number;
+  prev_7d: number;
+  status: 'High Adoption' | 'Growing' | 'At Risk';
+}
+
+/* ─────────────── Segmentation ─────────────── */
+
+export interface SegmentData {
+  tier: string;
+  features: number;
+  total_usage: number;
+  unique_users: number;
+}
