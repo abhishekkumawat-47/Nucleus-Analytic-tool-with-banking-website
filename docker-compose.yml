@@ -36,7 +36,6 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
 
-  # Create topics on startup
   init-kafka:
     image: confluentinc/cp-server:7.4.0
     depends_on:

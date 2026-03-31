@@ -7,7 +7,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
-import { fetchDashboardData, setTimeRange, setSelectedTenant } from '@/lib/dashboardSlice';
+import { fetchDashboardData, fetchAIInsightsData, setTimeRange, setSelectedTenant } from '@/lib/dashboardSlice';
 import { TimeRange } from '@/types';
 import { useSession } from 'next-auth/react';
 
@@ -30,6 +30,7 @@ export function useDashboardData() {
     }
     
     dispatch(fetchDashboardData());
+    dispatch(fetchAIInsightsData());
     
     // Auto-refresh every 10 seconds for real-time updates
     const interval = setInterval(() => {
@@ -44,6 +45,7 @@ export function useDashboardData() {
       dispatch(setTimeRange(range));
       // Re-fetch data when time range changes
       dispatch(fetchDashboardData());
+      dispatch(fetchAIInsightsData());
     },
     [dispatch]
   );
@@ -52,6 +54,7 @@ export function useDashboardData() {
     (tenant: string) => {
       dispatch(setSelectedTenant(tenant));
       dispatch(fetchDashboardData());
+      dispatch(fetchAIInsightsData());
     },
     [dispatch]
   );

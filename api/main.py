@@ -84,7 +84,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 )
             
             # Explicitly allow only these patterns for super_admin
-            allowed = ["/admin", "/metrics/kpi", "/insights", "/tenants", "/features/usage", "/deployment"]
+            allowed = ["/admin", "/metrics/kpi", "/insights", "/tenants", "/features/usage", "/deployment", "/ai_report"]
             if not any(path.startswith(prefix) for prefix in allowed):
                 return JSONResponse(
                     status_code=403, 
@@ -796,3 +796,42 @@ def get_transparency_data(tenant_id: str):
         "message": "In ON_PREM mode, no user-level details leave the premises." if settings.is_on_prem else "In CLOUD mode, full data is managed centrally."
     }
 
+@app.get("/ai_report")
+def get_ai_report(tenant_id: str):
+    """Generates a comprehensive AI-powered summarization report for the dashboard."""
+    require_tenant_access(tenant_id)
+    try:
+        # Fetch basic context
+        kpi = get_kpi_metrics(tenant_id)
+        secondary = get_secondary_kpi(tenant_id)
+        locations = get_locations(tenant_id)[:5] # Top 5
+        activities = get_feature_activity(tenant_id)
+        
+        context_str = f"KPI Metrics: {kpi}\n\nSecondary Metrics: {secondary}\n\nTop Locations: {locations}\n\nFeature Activities: {activities}"
+        
+        prompt = f"""
+You are an expert Data Analyst AI for the 'NexaBank' feature analytics platform.
+Write a detailed, professional AI Summarization Report based on the following raw metrics for tenant '{tenant_id}'.
+Context Data:
+{context_str}
+
+Please generate a beautifully formatted Markdown report with:
+1. An Executive Summary (highlighting key numbers and bounce rates).
+2. Feature Adoption Analysis (what's working, what's not).
+3. Geographic insights (if any).
+4. Strategic Recommendations.
+
+Do not include any surrounding code or text outside the markdown. Do not include raw json, output it as readable analytical paragraphs and markdown lists.
+"""
+        from api.insights import query_ollama
+        llm_response = query_ollama(prompt)
+        
+        if not llm_response:
+             # Fallback if Ollama is not available
+             llm_response = f"# Executive Summary\n\nAI Summarization is currently unavailable or initializing. Please ensure Ollama is running and has downloaded the model.\n\n### Raw Data Snippet:\n\n* **KPI Metrics:** {kpi}\n* **Active Features:** {activities}"
+             
+        return {"tenant_id": tenant_id, "report": llm_response}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")

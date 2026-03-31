@@ -53,7 +53,6 @@ export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
       funnelData,
       featureActivity,
       tenants,
-      aiInsights,
       realTimeUsers,
       pagesPerMinute,
       topPages,
@@ -72,7 +71,6 @@ export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
       dashboardAPI.getFunnelData(tenantId),
       dashboardAPI.getFeatureActivity(tenantId),
       dashboardAPI.getTenants(tenantId),
-      dashboardAPI.getAIInsights(tenantId),
       dashboardAPI.getRealTimeUsers(tenantId),
       dashboardAPI.getPagesPerMinute(tenantId),
       dashboardAPI.getTopPages(tenantId),
@@ -93,7 +91,6 @@ export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
       funnelData,
       featureActivity,
       tenants,
-      aiInsights,
       realTimeUsers,
       pagesPerMinute,
       topPages,
@@ -104,6 +101,15 @@ export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
       featureConfigs,
       retentionData,
     };
+  }
+);
+
+export const fetchAIInsightsData = createAsyncThunk<any, void, { state: any }>(
+  'dashboard/fetchAIInsights',
+  async (_, { getState }) => {
+    const state = getState();
+    const tenantId = state.dashboard.selectedTenant;
+    return await dashboardAPI.getAIInsights(tenantId);
   }
 );
 
@@ -161,7 +167,6 @@ const dashboardSlice = createSlice({
         state.funnelData = action.payload.funnelData;
         state.featureActivity = action.payload.featureActivity;
         state.tenants = action.payload.tenants;
-        state.aiInsights = action.payload.aiInsights;
         state.realTimeUsers = action.payload.realTimeUsers;
         state.pagesPerMinute = action.payload.pagesPerMinute;
         state.topPages = action.payload.topPages;
@@ -171,6 +176,9 @@ const dashboardSlice = createSlice({
         state.auditLogs = action.payload.auditLogs;
         state.featureConfigs = action.payload.featureConfigs;
         state.retentionData = action.payload.retentionData;
+      })
+      .addCase(fetchAIInsightsData.fulfilled, (state, action) => {
+        state.aiInsights = action.payload;
       })
       .addCase(fetchDashboardData.rejected, (state) => {
         state.isLoading = false;

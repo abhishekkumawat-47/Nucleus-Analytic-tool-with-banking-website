@@ -205,19 +205,30 @@ export const dashboardAPI = {
   /** Fetch AI-generated insights using backend /insights endpoint */
   async getAIInsights(tenantId: string = 'twitter'): Promise<AIInsight[]> {
     try {
-      const response = await apiClient.get(`/insights?tenant_id=${tenantId}`);
+      const response = await apiClient.get(`/insights?tenant_id=${tenantId}`, { timeout: 1200000 });
       const insights = response.data.insights || [];
       return insights.map((insight: any, ix: number) => ({
         id: `ai-${ix}`,
         type: insight.severity === 'high' ? 'warning' : insight.severity === 'medium' ? 'info' : 'success',
         title: insight.type || 'Backend Insight',
-        description: insight.message || insight,
+        message: insight.message || insight,
         impact: insight.severity === 'high' ? 'High' : 'Medium',
         actionRequired: insight.severity === 'high',
       }));
     } catch (err) {
       console.error('Failed to fetch AI Insights, using mock', err);
       return mockData.aiInsights;
+    }
+  },
+
+  /** Fetch AI Summarization Report */
+  async getAIReport(tenantId: string = 'nexabank'): Promise<string> {
+    try {
+      const response = await apiClient.get(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
+      return response.data.report || '';
+    } catch (err) {
+      console.error('Failed to fetch AI Report', err);
+      return '# AI Report Unavailable\n\nThe summarization model is currently unavailable or generating the report failed.';
     }
   },
 

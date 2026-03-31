@@ -54,6 +54,7 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
     if (pathname.startsWith('/settings')) return true;
     if (pathname.startsWith('/governance')) return true;
     if (pathname.startsWith('/transparency')) return true;
+    if (pathname.startsWith('/ai-report')) return true;
     // Block super admin routes — app admin shouldn't see cross-tenant data
     if (pathname === '/admin') return false;
     if (pathname.startsWith('/apps/')) return false;
