@@ -1,13 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../prisma";
-
-type PayeeType =
-  | "INDIVIDUAL"
-  | "SHOPPING"
-  | "ENTERTAINMENT"
-  | "HOUSING"
-  | "FOOD"
-  | "OTHERS";
+import { CustomerType } from "@prisma/client";
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string };
@@ -15,7 +8,7 @@ interface AuthenticatedRequest extends Request {
     name: string;
     payeeifsc: string;
     payeeAccNo: string;
-    payeeType: PayeeType;
+    payeeType: CustomerType;
   };
 }
 

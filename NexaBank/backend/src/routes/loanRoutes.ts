@@ -133,6 +133,13 @@ router.post(
         return;
       }
 
+      // Verify target account exists
+      const targetAccount = await prisma.account.findUnique({ where: { accNo } });
+      if (!targetAccount) {
+        res.status(400).json({ error: "Target account for disbursal not found" });
+        return;
+      }
+
       const app = await prisma.loanApplication.findUnique({
         where: { id: applicationId }
       });
@@ -187,17 +194,16 @@ router.post(
 
         // Create Transaction Record
         const loanRef = activeLoan.id.slice(0, 4).toUpperCase();
-        const senderId = `${customer.tenant.ifscPrefix}-LOAN-${loanRef}`;
 
         await tx.transaction.create({
           data: {
             transactionType: "TRANSFER",
-            senderAccNo: senderId,
+            senderAccNo: "NEXABANK-SYSTEM",
             receiverAccNo: accNo,
             amount: app.principalAmount,
-            status: true,
+            status: "SUCCESS",
             category: "LOAN_DISBURSAL",
-            description: `${app.loanType} Loan Disbursal`,
+            description: `${app.loanType} Loan Disbursal (${loanRef})`,
             loanId: activeLoan.id,
           }
         });

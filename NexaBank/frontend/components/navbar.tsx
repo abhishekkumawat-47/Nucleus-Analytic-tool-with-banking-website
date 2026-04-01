@@ -54,7 +54,8 @@ export function Navbar() {
     { name: "Transactions", href: "/transactions" },
     { name: "Payees", href: "/payees" },
     { name: "Loans", href: "/loans" },
-    { name: "Profile", href: "/profile" },
+    { name: "Finance Library", href: "/pro-feature?id=ai-insights", pro: true },
+    { name: "Crypto Trading", href: "/pro-feature?id=crypto-trading", pro: true },
   ]
 
   return (
@@ -94,6 +95,9 @@ export function Navbar() {
                             }`}
                         >
                           {page.name}
+                          {page.pro && (
+                            <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0 h-4 uppercase tracking-widest border-0 ml-auto">Pro</Badge>
+                          )}
                         </Link>
                       ))}
                     </nav>
@@ -116,14 +120,17 @@ export function Navbar() {
 
           {!isHomePage && (
             <nav className="hidden md:flex items-center gap-6 ml-6">
-              {pages.slice(0, -1).map((page) => (
+              {pages.map((page) => (
                 <Link
                   key={page.name}
                   href={page.href}
-                  className={`text-sm font-medium transition-colors hover:text-foreground ${pathname === page.href ? "text-nav hover:text-nav" : "text-muted-foreground"
+                  className={`text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1 ${pathname === page.href ? "text-nav hover:text-nav" : "text-muted-foreground"
                     }`}
                 >
                   {page.name}
+                  {page.pro && (
+                    <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[9px] px-1 py-0 h-4 uppercase tracking-widest border-0">Pro</Badge>
+                  )}
                 </Link>
               ))}
             </nav>

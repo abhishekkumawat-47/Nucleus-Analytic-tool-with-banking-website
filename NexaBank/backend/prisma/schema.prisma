@@ -28,6 +28,10 @@ model Customer {
   payee            Payee[]           @relation("payee")
   payer            Payee[]           @relation("payer")
   locations        UserLocation[]
+  licenses         UserLicense[]
+  kycStatus        KycStatus         @default(NOT_STARTED)
+  kycCompletedAt   DateTime?
+  lastLogin        DateTime?
 }
 
 model Tenant {
@@ -63,14 +67,15 @@ model Transaction {
   senderAccNo     String
   receiverAccNo   String
   amount          Float
-  status          Boolean
+  status          TransactionStatus @default(SUCCESS)
   category        String
+  channel         TransactionChannel @default(WEB)
   description     String?
-  timestamp       DateTime        @default(now())
-  loanId          String?         @db.Uuid
-  loan            Loan?           @relation(fields: [loanId], references: [id])
-  receiverAccount Account         @relation("received", fields: [receiverAccNo], references: [accNo])
-  senderAccount   Account         @relation("sent", fields: [senderAccNo], references: [accNo])
+  timestamp       DateTime           @default(now())
+  loanId          String?            @db.Uuid
+  loan            Loan?              @relation(fields: [loanId], references: [id])
+  receiverAccount Account            @relation("received", fields: [receiverAccNo], references: [accNo])
+  senderAccount   Account            @relation("sent", fields: [senderAccNo], references: [accNo])
 }
 
 model Loan {
@@ -148,6 +153,19 @@ model UserLocation {
   customer   Customer @relation(fields: [customerId], references: [id])
 }
 
+model UserLicense {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @db.Uuid
+  featureId  String
+  amount     Float
+  expiryDate DateTime
+  active     Boolean  @default(true)
+  createdOn  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([customerId, featureId])
+}
+
 model FeatureToggle {
   id       String  @id @default(uuid()) @db.Uuid
   key      String
@@ -183,6 +201,9 @@ enum AccountType {
 enum TransactionType {
   PAYMENT
   TRANSFER
+  PRO_LICENSE_FEE
+  DEPOSIT
+  WITHDRAWAL
 }
 
 enum LoanType {
@@ -198,4 +219,24 @@ enum ApplicationStatus {
   REJECTED
   KYC_PENDING
   UNDER_REVIEW
+}
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum TransactionChannel {
+  WEB
+  MOBILE
+  ATM
+  POS
+}
+
+enum TransactionStatus {
+  SUCCESS
+  FAILED
+  PENDING
 }

@@ -28,7 +28,7 @@ export default function FeaturesPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        <FeatureHeatmap data={featureActivity} />
+        <FeatureHeatmap />
       </div>
     </div>
   );

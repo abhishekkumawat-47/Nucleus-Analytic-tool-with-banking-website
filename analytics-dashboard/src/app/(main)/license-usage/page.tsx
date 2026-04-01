@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
+import { TableSkeleton } from '@/components/Skeletons';
 import { Key, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import ChartContainer from '@/components/ChartContainer';
 
@@ -26,14 +27,35 @@ export default function LicenseUsagePage() {
     return (
       <div className="animate-in fade-in duration-500 space-y-6">
         <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">License vs. Usage</h1>
-        <div className="flex items-center justify-center p-20">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        </div>
+        <TableSkeleton rows={6} />
       </div>
     );
   }
 
   const summary = data?.summary || {};
+  const hasWastedLicenses = (summary.waste_pct || 0) > 20;
+
+  const handleSeedLicenses = async () => {
+    try {
+      setLoading(true);
+      const features = [
+        { feature_name: "login", is_licensed: true, plan_tier: "basic" },
+        { feature_name: "transfer_funds", is_licensed: true, plan_tier: "basic" },
+        { feature_name: "view_dashboard", is_licensed: true, plan_tier: "basic" },
+        { feature_name: "apply_loan", is_licensed: true, plan_tier: "premium" },
+        { feature_name: "ai_insights", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "wealth_management_pro", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "crypto_trading", is_licensed: true, plan_tier: "premium" }
+      ];
+      await dashboardAPI.syncLicenses(tenantId, features);
+      const result = await dashboardAPI.getLicenseUsage(tenantId);
+      setData(result);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="animate-in fade-in duration-500 space-y-6">
@@ -43,6 +65,19 @@ export default function LicenseUsagePage() {
           <p className="text-sm text-gray-500 mt-1">Compare what features are paid for vs. what is actually used.</p>
         </div>
       </div>
+
+      {hasWastedLicenses && (
+        <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 flex items-start gap-3 shadow-sm">
+          <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold">Underutilized Licenses Detected</h3>
+            <p className="text-sm mt-1">
+              You are currently paying for <strong>{data?.unused_licensed?.length || 0}</strong> features that are not being used. 
+              Review your enterprise plan to optimize costs and eliminate up to <strong>{summary.waste_pct}%</strong> in wasted licensing fees.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -110,7 +145,24 @@ export default function LicenseUsagePage() {
                 </tr>
               ))}
               {(data?.licensed || []).length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No license data found. Use the API to sync license records.</td></tr>
+                <tr>
+                  <td colSpan={5} className="px-4 py-16 text-center text-gray-400">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="p-3 bg-gray-50 rounded-full">
+                        <Key className="h-6 w-6 text-gray-400" />
+                      </div>
+                      <p>No license data found for this tenant.</p>
+                      <button 
+                        onClick={handleSeedLicenses}
+                        disabled={loading}
+                        className="mt-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                        Seed Demo Licenses
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

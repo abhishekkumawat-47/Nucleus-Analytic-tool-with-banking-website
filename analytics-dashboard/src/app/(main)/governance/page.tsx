@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { dashboardAPI } from '@/lib/api';
-import { DashboardSkeleton } from '@/components/Skeletons';
+import { DashboardSkeleton, TableSkeleton } from '@/components/Skeletons';
 import ChartContainer from '@/components/ChartContainer';
 import { Shield, ToggleLeft, ToggleRight, History, Loader2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
@@ -121,7 +121,7 @@ export default function GovernancePage() {
             <ChartContainer title="Feature Tracking Toggles" id="tracking-toggles">
               <p className="text-xs text-gray-500 mt-1 mb-4">Enable or disable tracking for specific features. Changes are recorded in the audit log.</p>
               {loadingToggles ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+                <div className="p-4"><TableSkeleton rows={4} /></div>
               ) : toggles.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <p className="text-sm">No tracking toggles configured yet.</p>
@@ -163,7 +163,7 @@ export default function GovernancePage() {
       {activeTab === 'audit' && (
         <ChartContainer title="Configuration Change History" id="config-audit">
           {loadingConfigLogs ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+            <div className="p-4"><TableSkeleton rows={4} /></div>
           ) : (
             <div className="overflow-x-auto mt-2">
               <table className="w-full text-left text-sm text-gray-600">

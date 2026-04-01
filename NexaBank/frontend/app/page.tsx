@@ -7,13 +7,8 @@ import {
   CreditCard,
   Lock,
   Shield,
-  Wallet,
   BarChart3,
   DollarSign,
-  Users,
-  BadgeCheck,
-  ChevronDown,
-  MousePointer,
   Star,
   Twitter,
   Linkedin,
@@ -434,21 +429,6 @@ export default function HomePage() {
                 Secure, simple banking for a complex world. Manage your finances
                 with confidence using our award-winning digital platform.
               </p>
-
-              <div className="pt-2">
-                <div className="flex flex-wrap gap-3">
-                  {["App Store", "Google Play", "Web App"].map(
-                    (platform, i) => (
-                      <span
-                        key={i}
-                        className="px-3 py-1 text-xs font-medium bg-white/10 backdrop-blur-sm rounded-md text-gray-300 border border-white/5 hover:bg-white/15 transition-colors cursor-pointer"
-                      >
-                        {platform}
-                      </span>
-                    )
-                  )}
-                </div>
-              </div>
             </div>
 
             {/* Links Section */}

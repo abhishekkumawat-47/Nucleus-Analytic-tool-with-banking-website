@@ -160,13 +160,6 @@ export default function Register2() {
                       <SelectContent>
                         <SelectGroup>
                           <SelectItem value="INDIVIDUAL">Individual</SelectItem>
-                          <SelectItem value="SHOPPING">Shopping</SelectItem>
-                          <SelectItem value="ENTERTAINMENT">
-                            Entertainment
-                          </SelectItem>
-                          <SelectItem value="HOUSING">Housing</SelectItem>
-                          <SelectItem value="FOOD">Food</SelectItem>
-                          <SelectItem value="OTHERS">Others</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>

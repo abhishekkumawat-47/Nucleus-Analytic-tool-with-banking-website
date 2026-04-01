@@ -146,6 +146,12 @@ export const LoginController = async (
     const fingerprint = generateClientFingerprint(req);
     createTokenAndCookie(res, user.id, fingerprint);
 
+    // Update lastLogin timestamp for retention analytics
+    await prisma.customer.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
+    });
+
     await trackEvent("login", user.id, user.tenantId || "bank_a", { email, ip: req.ip });
 
     res.status(200).json({ userId: user.id, role: user.role, tenantId: user.tenantId });
