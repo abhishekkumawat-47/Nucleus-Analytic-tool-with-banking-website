@@ -81,6 +81,10 @@ function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps)
     </div>
   );
 
+  const totalVisitors = data.reduce((sum, item) => sum + (item.visitors || 0), 0);
+  const totalPageViews = data.reduce((sum, item) => sum + (item.pageViews || 0), 0);
+  const formatTotal = (val: number) => val >= 1000 ? (val / 1000).toFixed(1) + 'K' : val.toString();
+
   return (
     <ChartContainer
       title="Traffic Overview"
@@ -148,12 +152,12 @@ function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps)
       <div className="flex items-center gap-6 mt-2 px-1">
         <div className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
           <span className="w-3 h-3 rounded-full bg-[#1a73e8]" />
-          <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">82.4K</span>
+          <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">{formatTotal(totalVisitors)}</span>
           <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Visitors</span>
         </div>
         <div className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
           <span className="w-3 h-3 rounded-full bg-[#4285F4]" />
-          <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">154.6K</span>
+          <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">{formatTotal(totalPageViews)}</span>
           <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Page Views</span>
         </div>
       </div>

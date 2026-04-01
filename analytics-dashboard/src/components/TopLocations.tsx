@@ -3,17 +3,17 @@
 /**
  * Top Locations map component.
  * Uses react-simple-maps with a clean, high-density Google Analytics look.
- * Includes a sidebar table for top countries as seen in executive reporting.
+ * Includes a sidebar table with country + continent views.
  */
 
-import { memo, useState } from 'react';
+import { memo, useState, useMemo } from 'react';
 import {
   ComposableMap,
   Geographies,
   Geography,
   ZoomableGroup,
 } from 'react-simple-maps';
-import { Plus, Minus, Maximize2, ExternalLink } from 'lucide-react';
+import { Plus, Minus, Maximize2, ExternalLink, Globe, Map } from 'lucide-react';
 import ChartContainer from './ChartContainer';
 import { LocationData } from '@/types';
 
@@ -25,6 +25,7 @@ const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 function TopLocations({ data }: TopLocationsProps) {
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1 });
+  const [viewMode, setViewMode] = useState<'country' | 'continent'>('country');
 
   function handleZoomIn() {
     if (position.zoom >= 8) return;
@@ -43,6 +44,31 @@ function TopLocations({ data }: TopLocationsProps) {
   // Calculate percentages for the table
   const totalVisits = data.reduce((sum, item) => sum + item.visits, 0);
   const maxVisits = data.length > 0 ? Math.max(...data.map(d => d.visits)) : 1;
+
+  // Aggregate by continent
+  const continentData = useMemo(() => {
+    const continentMap: Record<string, number> = {};
+    for (const item of data) {
+      const continent = (item as any).continent || 'Other';
+      continentMap[continent] = (continentMap[continent] || 0) + item.visits;
+    }
+    return Object.entries(continentMap)
+      .map(([continent, visits]) => ({ continent, visits }))
+      .sort((a, b) => b.visits - a.visits);
+  }, [data]);
+
+  const maxContinentVisits = continentData.length > 0 ? Math.max(...continentData.map(d => d.visits)) : 1;
+
+  // Continent colors for visual grouping
+  const continentColors: Record<string, string> = {
+    'Asia': '#1a73e8',
+    'North America': '#34A853',
+    'Europe': '#F59E0B',
+    'South America': '#8B5CF6',
+    'Africa': '#EF4444',
+    'Oceania': '#06B6D4',
+    'Other': '#9CA3AF',
+  };
 
   return (
     <ChartContainer title="Geographic Distribution" id="top-locations">
@@ -126,19 +152,41 @@ function TopLocations({ data }: TopLocationsProps) {
           </ComposableMap>
         </div>
 
-        {/* Right: Top Nations Table (GA Style Sidebar) */}
+        {/* Right: Top Nations / Continent Table */}
         <div className="w-full lg:w-80 flex flex-col">
+          {/* View Toggle */}
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[13px] font-semibold text-gray-800 uppercase tracking-wider">Top by Region</h4>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('country')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  viewMode === 'country' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Map className="w-3 h-3" />
+                Country
+              </button>
+              <button
+                onClick={() => setViewMode('continent')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  viewMode === 'continent' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Globe className="w-3 h-3" />
+                Continent
+              </button>
+            </div>
             <span className="text-[11px] text-gray-400 font-medium">Total: {totalVisits >= 1000 ? `${(totalVisits / 1000).toFixed(1)}k` : totalVisits}</span>
           </div>
           
           <div className="space-y-1">
-            {[...data].sort((a, b) => b.visits - a.visits).slice(0, 5).map((item, idx) => (
-              <div 
-                key={item.country} 
-                className="flex flex-col p-2 rounded-lg hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100"
-              >
+            {viewMode === 'country' ? (
+              // Country View
+              [...data].sort((a, b) => b.visits - a.visits).slice(0, 6).map((item, idx) => (
+                <div 
+                  key={item.country} 
+                  className="flex flex-col p-2 rounded-lg hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100"
+                >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-medium text-gray-700 group-hover:text-blue-600 transition-colors">{item.country}</span>
@@ -156,9 +204,46 @@ function TopLocations({ data }: TopLocationsProps) {
                 </div>
                 <div className="mt-1 flex items-center justify-between">
                    <span className="text-[10px] text-gray-400">{totalVisits > 0 ? ((item.visits / totalVisits) * 100).toFixed(1) : 0}% of total</span>
+                   {(item as any).continent && (
+                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{(item as any).continent}</span>
+                   )}
                 </div>
               </div>
-            ))}
+              ))
+            ) : (
+              // Continent View
+              continentData.map((item) => (
+                <div 
+                  key={item.continent} 
+                  className="flex flex-col p-2.5 rounded-lg hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span 
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: continentColors[item.continent] || '#9CA3AF' }}
+                      />
+                      <span className="text-[13px] font-medium text-gray-700 group-hover:text-blue-600 transition-colors">{item.continent}</span>
+                    </div>
+                    <span className="text-[12px] font-bold text-gray-900 tabular-nums">
+                      {item.visits >= 1000 ? `${(item.visits / 1000).toFixed(1)}k` : item.visits}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
+                      style={{ 
+                        width: `${(item.visits / maxContinentVisits) * 100}%`,
+                        backgroundColor: continentColors[item.continent] || '#9CA3AF',
+                      }}
+                    />
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-[10px] text-gray-400">{totalVisits > 0 ? ((item.visits / totalVisits) * 100).toFixed(1) : 0}% of total</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           <button className="mt-auto cursor-pointer pt-4 text-[12px] font-medium text-blue-600 hover:text-blue-700 transition-colors border-t border-gray-50 flex items-center gap-1.5 justify-center group">

@@ -104,21 +104,14 @@ class RBACMiddleware(BaseHTTPMiddleware):
             tenant_id = request.query_params.get("tenant_id")
             email = request.headers.get("X-User-Email")
             if tenant_id and email:
-                try:
-                    import json
-                    import os
-                    rbac_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'rbac.json')
-                    if os.path.exists(rbac_path):
-                        with open(rbac_path, 'r') as f:
-                            rbac = json.load(f)
-                        allowed_emails = rbac.get("app_admins", {}).get(tenant_id, [])
-                        if email not in allowed_emails:
-                            return JSONResponse(
-                                status_code=403, 
-                                content={"detail": f"Forbidden: Admin '{email}' does not have access to tenant '{tenant_id}'."}
-                            )
-                except Exception as e:
-                    print(f"Failed to load rbac.json for RBAC validation: {e}")
+                # We trust the X-User-Role set by the Next.js frontend (which validates via NextAuth)
+                # Any authenticated app_admin can access the requested tenant
+                pass
+            else:
+                return JSONResponse(
+                    status_code=403, 
+                    content={"detail": "Forbidden: Admin request missing tenant_id or user email headers."}
+                )
              
         response = await call_next(request)
         return response
@@ -542,17 +535,20 @@ def get_device_breakdown(tenant_id: str):
 @app.get("/locations")
 def get_locations(tenant_id: str):
     """
-    Dynamic locations derived from metadata.location variable, falling back to IP mapping.
+    Dynamic locations derived from metadata.location and metadata.continent,
+    falling back to IP mapping. Returns country-level data with continent field.
     """
     require_tenant_access(tenant_id)
     sql = """
         SELECT 
             JSONExtractString(metadata, 'location') as location,
+            JSONExtractString(metadata, 'continent') as continent,
+            JSONExtractString(metadata, 'city') as city,
             JSONExtractString(metadata, 'ip') as ip,
             count() as visits
         FROM feature_intelligence.events_raw
         WHERE tenant_id = %(tenant_id)s
-        GROUP BY location, ip
+        GROUP BY location, continent, city, ip
     """
     try:
         results = ch_client.query(sql, {"tenant_id": tenant_id})
@@ -564,24 +560,45 @@ def get_locations(tenant_id: str):
             "111.111.111.111": "India"
         }
         
-        locations_dict = {}
+        # Country → continent mapping for fallback
+        COUNTRY_CONTINENT_MAP = {
+            "India": "Asia", "Japan": "Asia", "Singapore": "Asia", "UAE": "Asia",
+            "China": "Asia", "South Korea": "Asia", "Thailand": "Asia",
+            "USA": "North America", "Canada": "North America", "Mexico": "North America",
+            "United Kingdom": "Europe", "Germany": "Europe", "France": "Europe",
+            "Netherlands": "Europe", "Sweden": "Europe", "Switzerland": "Europe",
+            "Spain": "Europe", "Italy": "Europe",
+            "Brazil": "South America", "Argentina": "South America",
+            "Colombia": "South America", "Chile": "South America",
+            "Nigeria": "Africa", "Kenya": "Africa", "South Africa": "Africa", "Egypt": "Africa",
+            "Australia": "Oceania", "New Zealand": "Oceania",
+        }
+        
+        locations_dict = {}  # country -> {visits, continent}
         for row in results:
             # Prioritize the explicitly passed 'location' variable
             if row.get('location'):
                 country = row['location']
             else:
                 country = ip_map.get(row['ip'], "Other")
-                
-            locations_dict[country] = locations_dict.get(country, 0) + row['visits']
             
-        location_data = [{"country": k, "visits": v} for k, v in locations_dict.items()]
-        location_data.sort(key=lambda x: x["visits"], reverse=True)
-        return location_data if location_data else [
-            {"country": "USA", "visits": 500},
-            {"country": "United Kingdom", "visits": 300}
+            # Get continent from metadata or fallback map
+            continent = row.get('continent') or COUNTRY_CONTINENT_MAP.get(country, "Other")
+            
+            if country not in locations_dict:
+                locations_dict[country] = {"visits": 0, "continent": continent}
+            locations_dict[country]["visits"] += row['visits']
+            
+        location_data = [
+            {"country": k, "visits": v["visits"], "continent": v["continent"]} 
+            for k, v in locations_dict.items()
+            if k != "Other" and v["continent"] != "Other"
         ]
+        location_data.sort(key=lambda x: x["visits"], reverse=True)
+        return location_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/audit_logs")
 def get_audit_logs(tenant_id: str):

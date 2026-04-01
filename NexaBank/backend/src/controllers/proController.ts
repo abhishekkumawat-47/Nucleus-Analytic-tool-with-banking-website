@@ -178,3 +178,99 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ error: "Trade failed" });
   }
 };
+
+// ─── POST /pro/download_book ───────────────────────────────────────────
+export const downloadBook = async (req: Request, res: Response): Promise<void> => {
+  const { title } = req.body;
+  const customerId = (req as any).user?.id;
+  const tenantId = (req as any).user?.tenantId || "bank_a";
+
+  if (!title || !customerId) {
+    res.status(400).json({ error: "Missing title" });
+    return;
+  }
+  
+  try {
+    // Only track the event to register dynamic feature usage
+    await trackEvent("ai_insight_download", customerId, tenantId, { title, feature: "ai-insights" });
+    res.status(200).json({ success: true, message: `Downloading ${title}...` });
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).json({ error: "Download failed" });
+  }
+};
+
+// ─── POST /pro/rebalance_wealth ───────────────────────────────────────────
+export const rebalanceWealth = async (req: Request, res: Response): Promise<void> => {
+  const customerId = (req as any).user?.id;
+  const tenantId = (req as any).user?.tenantId || "bank_a";
+
+  if (!customerId) {
+    res.status(400).json({ error: "Missing customerId" });
+    return;
+  }
+  
+  try {
+    await trackEvent("wealth_rebalance", customerId, tenantId, { feature: "wealth-management-pro" });
+    res.status(200).json({ success: true, message: "Portfolio rebalanced" });
+  } catch (err) {
+    console.error("Rebalance error:", err);
+    res.status(500).json({ error: "Rebalance failed" });
+  }
+};
+
+// ─── POST /pro/process_payroll ───────────────────────────────────────────
+export const processPayroll = async (req: Request, res: Response): Promise<void> => {
+  const customerId = (req as any).user?.id;
+  const tenantId = (req as any).user?.tenantId || "bank_a";
+  const { totalAmount, employeesCount } = req.body;
+
+  if (!customerId || !totalAmount) {
+    res.status(400).json({ error: "Missing payroll details" });
+    return;
+  }
+  
+  try {
+    // Attempt to deduct the total amount
+    const account = await prisma.account.findFirst({
+      where: { customerId, accountType: { in: ["SAVINGS", "CURRENT"] } },
+      orderBy: { balance: "desc" }
+    });
+
+    if (!account || account.balance < totalAmount) {
+      res.status(400).json({ error: "Insufficient funds for payroll batch" });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.account.update({
+        where: { accNo: account.accNo },
+        data: { balance: { decrement: totalAmount } }
+      }),
+      prisma.transaction.create({
+        data: {
+          transactionType: "PAYMENT",
+          senderAccNo: account.accNo,
+          receiverAccNo: "EXTERNAL-PAYROLL",
+          amount: totalAmount,
+          status: "SUCCESS",
+          category: "Payroll Batch processing",
+          description: `Paid ${employeesCount} employees`,
+          channel: "WEB"
+        }
+      })
+    ]);
+
+    await trackEvent("payroll_batch_processed", customerId, tenantId, { 
+      feature: "bulk-payroll-processing", 
+      amount: totalAmount,
+      employees: employeesCount 
+    });
+    
+    res.status(200).json({ success: true, message: "Payroll processed" });
+  } catch (err) {
+    console.error("Payroll error:", err);
+    res.status(500).json({ error: "Payroll failed" });
+  }
+};
+

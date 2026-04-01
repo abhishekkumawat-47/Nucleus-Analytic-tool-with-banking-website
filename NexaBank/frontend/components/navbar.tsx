@@ -54,8 +54,13 @@ export function Navbar() {
     { name: "Transactions", href: "/transactions" },
     { name: "Payees", href: "/payees" },
     { name: "Loans", href: "/loans" },
+  ]
+  
+  const proPages = [
     { name: "Finance Library", href: "/pro-feature?id=ai-insights", pro: true },
     { name: "Crypto Trading", href: "/pro-feature?id=crypto-trading", pro: true },
+    { name: "Wealth Mgmt", href: "/pro-feature?id=wealth-management-pro", pro: true },
+    { name: "Payroll Pro", href: "/pro-feature?id=bulk-payroll-processing", pro: true },
   ]
 
   return (
@@ -95,9 +100,22 @@ export function Navbar() {
                             }`}
                         >
                           {page.name}
-                          {page.pro && (
-                            <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0 h-4 uppercase tracking-widest border-0 ml-auto">Pro</Badge>
-                          )}
+                        </Link>
+                      ))}
+                      <div className="mt-4 mb-2 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                        ✨ Pro Features
+                      </div>
+                      {proPages.map((page) => (
+                        <Link
+                          key={page.name}
+                          href={page.href}
+                          className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${pathname === page.href
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            }`}
+                        >
+                          {page.name}
+                          <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0 h-4 uppercase tracking-widest border-0 ml-auto">Pro</Badge>
                         </Link>
                       ))}
                     </nav>
@@ -128,11 +146,23 @@ export function Navbar() {
                     }`}
                 >
                   {page.name}
-                  {page.pro && (
-                    <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[9px] px-1 py-0 h-4 uppercase tracking-widest border-0">Pro</Badge>
-                  )}
                 </Link>
               ))}
+              <DropdownMenu>
+                <DropdownMenuTrigger className={`text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1 text-muted-foreground outline-none`}>
+                  ✨ Pro Features
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {proPages.map((page) => (
+                    <DropdownMenuItem key={page.name} asChild>
+                      <Link href={page.href} className="w-full flex justify-between items-center cursor-pointer">
+                        {page.name}
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[9px] px-1 py-0 h-4 uppercase tracking-widest border-0 ml-2">Pro</Badge>
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
           )}
         </div>

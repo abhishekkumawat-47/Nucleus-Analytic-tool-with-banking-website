@@ -86,7 +86,7 @@ export const dashboardAPI = {
       return response.data;
     } catch (err) {
       console.error('Failed to fetch KPI metrics, using mock', err);
-      return mockData.kpiMetrics;
+      return [];
     }
   },
 
@@ -97,7 +97,7 @@ export const dashboardAPI = {
       return response.data;
     } catch (err) {
       console.error('Failed to fetch Secondary KPI metrics, using mock', err);
-      return mockData.secondaryKpiMetrics;
+      return [];
     }
   },
 
@@ -112,7 +112,7 @@ export const dashboardAPI = {
       }));
     } catch (err) {
       console.error('Failed to fetch traffic data, using mock', err);
-      return mockData.trafficData;
+      return [];
     }
   },
 
@@ -212,7 +212,7 @@ export const dashboardAPI = {
       return allTenants;
     } catch (err) {
       console.error('Failed to fetch tenants, using mock', err);
-      return mockData.tenants;
+      return [];
     }
   },
 
@@ -231,7 +231,7 @@ export const dashboardAPI = {
       }));
     } catch (err) {
       console.error('Failed to fetch AI Insights, using mock', err);
-      return mockData.aiInsights;
+      return [];
     }
   },
 
@@ -272,7 +272,7 @@ export const dashboardAPI = {
       const response = await apiClient.get(`/metrics/top_pages?tenant_id=${tenantId}`);
       return response.data;
     } catch {
-      return mockData.topPages;
+      return [];
     }
   },
 
@@ -304,7 +304,7 @@ export const dashboardAPI = {
       return response.data;
     } catch (err) {
       console.error('Failed to fetch Locations, using mock', err);
-      return mockData.locations;
+      return [];
     }
   },
 
@@ -315,7 +315,7 @@ export const dashboardAPI = {
       return response.data;
     } catch (err) {
       console.error('Failed to fetch AuditLogs, using mock', err);
-      return mockData.auditLogs;
+      return [];
     }
   },
 
@@ -334,7 +334,7 @@ export const dashboardAPI = {
         isActive: true,
       }));
     } catch {
-      return mockData.featureConfigs;
+      return [];
     }
   },
 
