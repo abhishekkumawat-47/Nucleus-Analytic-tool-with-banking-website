@@ -440,7 +440,7 @@ const Loans = () => {
 
       {/* Apply Loan Modal */}
       <Dialog open={showApplyModal} onOpenChange={setShowApplyModal}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-[2rem] p-6 md:p-8 border-none">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-tl-[2rem] rounded-bl-[2rem] p-6 md:p-8 border-none">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-black text-zinc-900 tracking-tight">Loan Application</DialogTitle>
           </DialogHeader>

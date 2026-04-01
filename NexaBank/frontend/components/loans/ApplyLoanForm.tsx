@@ -188,7 +188,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
                 {/* Term Selection Grid */}
                 <div className="space-y-3">
                   <Label className="uppercase text-[11px] tracking-widest text-zinc-400 font-bold">Tenure Mode</Label>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     {[12, 24, 36, 60].map((t) => (
                       <button
                         key={t}
@@ -220,10 +220,6 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
                   
                   <div className="relative z-10 flex flex-col h-full justify-between">
                     <div>
-                      <div className="inline-flex px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-xs font-semibold tracking-wide mb-10 items-center">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" /> Live Estimate
-                      </div>
-                      
                       <div className="space-y-1">
                         <p className="text-white/50 text-[10px] font-bold tracking-[0.2em] uppercase">Monthly EMI</p>
                         <h4 className="text-3xl lg:text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-white/70">
@@ -487,7 +483,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
            />
         </div>
         
-        <div className="relative z-10 flex justify-between">
+        <div className="relative mt-10 z-10 flex justify-between">
           {[
             { num: 1, label: "Configuration" },
             { num: 2, label: "Verification" },

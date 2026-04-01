@@ -8,5 +8,8 @@ const router = express.Router();
 router.post("/unlock", proController.unlockFeature as any);
 router.get("/status", proController.getProStatus as any);
 router.post("/trade", proController.executeTrade as any);
+router.post("/download_book", proController.downloadBook as any);
+router.post("/rebalance_wealth", proController.rebalanceWealth as any);
+router.post("/process_payroll", proController.processPayroll as any);
 
 export default router;

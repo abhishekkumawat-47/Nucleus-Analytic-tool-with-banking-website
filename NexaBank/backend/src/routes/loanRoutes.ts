@@ -160,7 +160,7 @@ router.post(
       }
 
       // Start transaction: update app status and create active loan
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const updatedApp = await tx.loanApplication.update({
           where: { id: applicationId },
           data: { status: "APPROVED" }
