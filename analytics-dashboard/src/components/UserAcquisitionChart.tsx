@@ -15,10 +15,20 @@ interface UserAcquisitionChartProps {
 }
 
 /** Color gradient for acquisition channels */
-const channelColors = ['#2563EB', '#3B82F6', '#60A5FA', '#93C5FD'];
+const channelColors = ['#0EA5A4', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6'];
 
 function UserAcquisitionChart({ data }: UserAcquisitionChartProps) {
-  const maxValue = Math.max(...data.map((d) => d.value));
+  if (!data || data.length === 0) {
+    return (
+      <ChartContainer title="User Acquisition" id="user-acquisition">
+        <div className="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+          No acquisition data available yet.
+        </div>
+      </ChartContainer>
+    );
+  }
+
+  const maxValue = Math.max(...data.map((d) => d.value), 1);
 
   return (
     <ChartContainer title="User Acquisition" id="user-acquisition">
@@ -26,7 +36,7 @@ function UserAcquisitionChart({ data }: UserAcquisitionChartProps) {
         {data.map((channel, index) => (
           <div key={channel.name} className="flex items-center gap-3 group cursor-pointer">
             {/* Channel name */}
-            <span className="text-sm text-gray-600 w-24 flex-shrink-0 font-medium group-hover:text-blue-600 transition-colors">
+            <span className="text-sm text-gray-600 w-28 flex-shrink-0 font-medium group-hover:text-slate-900 transition-colors">
               {channel.name}
             </span>
 
@@ -36,7 +46,7 @@ function UserAcquisitionChart({ data }: UserAcquisitionChartProps) {
                 className="h-7 rounded-md flex items-center justify-end px-2 transition-all duration-500 group-hover:opacity-90"
                 style={{
                   width: `${(channel.value / maxValue) * 100}%`,
-                  backgroundColor: channelColors[index] || '#2563EB',
+                  backgroundColor: channelColors[index] || '#3B82F6',
                   minWidth: '60px',
                 }}
               >

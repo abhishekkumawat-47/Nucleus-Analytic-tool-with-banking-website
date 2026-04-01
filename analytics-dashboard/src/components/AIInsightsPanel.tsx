@@ -49,6 +49,19 @@ const insightStyles: Record<string, {
 };
 
 function AIInsightsPanel({ insights }: AIInsightsPanelProps) {
+  if (!insights || insights.length === 0) {
+    return (
+      <ChartContainer title="AI Insights" id="ai-insights-panel">
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center">
+          <p className="text-sm font-medium text-gray-800">No stored AI insights yet.</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Generate the AI report to populate this section with reusable, cached insights.
+          </p>
+        </div>
+      </ChartContainer>
+    );
+  }
+
   return (
     <ChartContainer title="AI Insights" id="ai-insights-panel">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">

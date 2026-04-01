@@ -28,7 +28,7 @@ import UserAcquisitionChart from '@/components/UserAcquisitionChart';
 import TopLocations from '@/components/TopLocations';
 import FeatureUsageChart from '@/components/FeatureUsageChart';
 import TopFeaturesChart from '@/components/TopFeaturesChart';
-import FunnelChart from '@/components/FunnelChart';
+import JourneyFunnelInsights from '@/components/JourneyFunnelInsights';
 import FeatureHeatmap from '@/components/FeatureHeatmap';
 import {
   Cloud,
@@ -610,7 +610,7 @@ export default function TransparencyPage() {
                   {/* Funnel + Heatmap */}
                   <section>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <FunnelChart data={dashboardData.funnelData} />
+                      <JourneyFunnelInsights data={dashboardData.funnelData} />
                       <FeatureHeatmap />
                     </div>
                   </section>
@@ -629,8 +629,12 @@ export default function TransparencyPage() {
                   <section>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                       <TopPages data={dashboardData.topPages} />
-                      <DeviceBreakdownChart data={dashboardData.deviceBreakdown} />
-                      <UserAcquisitionChart data={dashboardData.acquisitionChannels} />
+                      <div className="rounded-2xl border border-teal-200 bg-gradient-to-b from-teal-50/60 to-white p-1.5">
+                        <DeviceBreakdownChart data={dashboardData.deviceBreakdown} />
+                      </div>
+                      <div className="rounded-2xl border border-indigo-200 bg-gradient-to-b from-indigo-50/60 to-white p-1.5">
+                        <UserAcquisitionChart data={dashboardData.acquisitionChannels} />
+                      </div>
                     </div>
                   </section>
 

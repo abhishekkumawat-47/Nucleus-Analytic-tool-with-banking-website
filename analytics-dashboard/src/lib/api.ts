@@ -99,6 +99,22 @@ interface BackendInsight {
   severity: 'high' | 'medium' | 'low';
 }
 
+interface BackendAIReportResponse {
+  tenant_id: string;
+  report: string;
+  cached?: boolean;
+  generated_at?: string | null;
+  insights?: BackendInsight[];
+}
+
+interface BackendAIReportResponse {
+  tenant_id: string;
+  report: string;
+  cached?: boolean;
+  generated_at?: string | null;
+  insights?: BackendInsight[];
+}
+
 interface BackendTrafficRow {
   date: string;
   visitors: number;
@@ -356,11 +372,32 @@ export const dashboardAPI = {
   /** Fetch AI Summarization Report */
   async getAIReport(tenantId: string = 'nexabank'): Promise<string> {
     try {
-      const response = await apiClient.get<{ report: string }>(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
+      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
       return response.data.report || '';
     } catch {
       console.error('Failed to fetch AI Report');
       return '# AI Report Unavailable\n\nThe summarization model is currently unavailable or generating the report failed.';
+    }
+  },
+
+  /** Fetch the latest stored AI report snapshot */
+  async getLatestAIReport(tenantId: string = 'nexabank'): Promise<BackendAIReportResponse> {
+    try {
+      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
+      return response.data;
+    } catch {
+      return { tenant_id: tenantId, report: '', cached: true, generated_at: null, insights: [] };
+    }
+  },
+
+  /** Generate a fresh AI report on demand */
+  async generateAIReport(tenantId: string = 'nexabank'): Promise<BackendAIReportResponse> {
+    try {
+      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenant_id=${tenantId}&force_refresh=true`, { timeout: 1200000 });
+      return response.data;
+    } catch {
+      console.error('Failed to generate AI Report');
+      return { tenant_id: tenantId, report: '', cached: false, generated_at: null, insights: [] };
     }
   },
 

@@ -20,18 +20,21 @@ export function useDashboardData() {
   const dispatch = useAppDispatch();
   const dashboardState = useAppSelector((state) => state.dashboard);
   const { data: session } = useSession();
-  const hasInitialized = useRef(false);
 
   useEffect(() => {
-    // On first mount, set the tenant to the user's first assigned app
-    if (session?.user?.adminApps && session.user.adminApps.length > 0 && !hasInitialized.current) {
-      hasInitialized.current = true;
-      dispatch(setSelectedTenant(session.user.adminApps[0]));
+    // Keep app admins pinned to one of their authorized apps.
+    if (session?.user?.role === 'app_admin') {
+      const adminApps = (session.user.adminApps || []).filter(Boolean);
+      if (adminApps.length > 0 && !adminApps.includes(dashboardState.selectedTenant)) {
+        dispatch(setSelectedTenant(adminApps[0]));
+      }
     }
-    
+  }, [dispatch, session, dashboardState.selectedTenant]);
+
+  useEffect(() => {
     dispatch(fetchDashboardData());
     dispatch(fetchAIInsightsData());
-  }, [dispatch, session]);
+  }, [dispatch, dashboardState.selectedTenant]);
 
   // Real-time WebSocket Connection
   useEffect(() => {

@@ -1,9 +1,12 @@
-"use client";
+'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
-import { Printer, Loader2 } from 'lucide-react';
+import { AIInsight } from '@/types';
+import { Printer, Loader2, Sparkles, Clock3, TrendingUp, ShieldCheck, Timer, Lightbulb } from 'lucide-react';
+import AIInsightsPanel from '@/components/AIInsightsPanel';
+import { ChartSkeleton } from '@/components/Skeletons';
 
 function simpleMarkdownToHtml(md: string) {
   let html = md
@@ -20,147 +23,343 @@ function simpleMarkdownToHtml(md: string) {
   return `<p class="mt-5 mb-5 leading-relaxed text-lg text-slate-700 print:text-black">${html}</p>`;
 }
 
+function buildHybridReportHtml(raw: string) {
+  const dividerMatch = raw.match(/<hr[^>]*>/i);
+  if (!dividerMatch || dividerMatch.index === undefined) {
+    return simpleMarkdownToHtml(raw);
+  }
+
+  const splitAt = dividerMatch.index + dividerMatch[0].length;
+  const visualHtml = raw.slice(0, splitAt);
+  const markdownPart = raw.slice(splitAt).trim();
+
+  return `${visualHtml}${simpleMarkdownToHtml(markdownPart)}`;
+}
+
+type FocusArea = {
+  label: string;
+  colorClass: string;
+  keywords: string[];
+};
+
+const FOCUS_AREAS: FocusArea[] = [
+  { label: 'Onboarding', colorClass: 'bg-sky-500', keywords: ['onboarding', 'signup', 'first session', 'new user'] },
+  { label: 'Activation', colorClass: 'bg-indigo-500', keywords: ['activation', 'first value', 'adoption', 'discoverability'] },
+  { label: 'Engagement', colorClass: 'bg-emerald-500', keywords: ['engagement', 'session', 'feature usage', 'interaction'] },
+  { label: 'Conversion', colorClass: 'bg-amber-500', keywords: ['conversion', 'drop-off', 'funnel', 'completion'] },
+  { label: 'Retention', colorClass: 'bg-rose-500', keywords: ['retention', 'churn', 'stickiness', 'returning users'] },
+  { label: 'Trust', colorClass: 'bg-teal-500', keywords: ['trust', 'transparency', 'security', 'compliance'] },
+];
+
+function countMatches(text: string, keywords: string[]) {
+  const lower = text.toLowerCase();
+  return keywords.reduce((acc, keyword) => {
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const matches = lower.match(new RegExp(escaped, 'g'));
+    return acc + (matches?.length || 0);
+  }, 0);
+}
+
+function buildPotentialIdeas(topFocus: string[]) {
+  const ideas: Record<string, string> = {
+    Onboarding: 'Introduce a 2-step contextual onboarding checklist that adapts based on first-session behavior.',
+    Activation: 'Surface intent-based nudges after key user pauses to accelerate first-value discovery.',
+    Engagement: 'Launch a weekly value digest that highlights unused but high-impact features for each segment.',
+    Conversion: 'Instrument stage-specific friction prompts and A/B test shorter completion paths for high-exit steps.',
+    Retention: 'Create a proactive re-engagement journey triggered by early inactivity signals and feature gaps.',
+    Trust: 'Add visible privacy and control affordances at critical decision points to reduce hesitation.',
+  };
+
+  const selected = topFocus.slice(0, 3).map((focus) => ideas[focus]).filter(Boolean);
+  if (selected.length >= 3) return selected;
+
+  return [
+    ...selected,
+    'Build a journey health score by cohort and auto-alert product owners when stage drop-offs spike.',
+    'Prioritize microcopy and feedback improvements in high-friction flows to reduce cognitive load.',
+    'Add lifecycle messaging tied to milestone completion to improve habit formation and weekly retention.',
+  ].slice(0, 3);
+}
+
+function extractSectionTitles(md: string): string[] {
+  return (md.match(/^##\s+.+$/gm) || [])
+    .map((line) => line.replace(/^##\s+/, '').trim())
+    .slice(0, 6);
+}
+
+function extractStrategicBullets(md: string): string[] {
+  const lines = md.split('\n').map((line) => line.trim());
+  const bullets = lines
+    .filter((line) => /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line))
+    .map((line) => line.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '').replace(/\*\*/g, '').trim())
+    .filter(Boolean);
+
+  const unique: string[] = [];
+  for (const bullet of bullets) {
+    if (!unique.includes(bullet)) unique.push(bullet);
+    if (unique.length >= 5) break;
+  }
+
+  if (unique.length > 0) return unique;
+
+  return [
+    'Address the top funnel drop-off with simplified flow and sharper guidance.',
+    'Prioritize onboarding-to-activation improvements for faster first value.',
+    'Strengthen trust signals near decision points to improve conversion confidence.',
+  ];
+}
+
 export default function AIReportPage() {
   const { selectedTenant } = useDashboardData();
   const tenantId = selectedTenant || 'nexabank';
   const [report, setReport] = useState<string>('');
+  const [insights, setInsights] = useState<AIInsight[]>([]);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [cached, setCached] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
+  const [generating, setGenerating] = useState<boolean>(false);
+
+  const loadLatestReport = useCallback(async () => {
+    setLoading(true);
+    const snapshot = await dashboardAPI.getLatestAIReport(tenantId);
+    setReport(snapshot.report || '');
+    setInsights((snapshot.insights || []) as AIInsight[]);
+    setGeneratedAt(snapshot.generated_at || null);
+    setCached(Boolean(snapshot.cached));
+    setLoading(false);
+  }, [tenantId]);
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchReport = async () => {
-      setLoading(true);
-      while (isMounted) {
-        try {
-          const md = await dashboardAPI.getAIReport(tenantId);
-          if (isMounted) {
-            setReport(md);
-            setLoading(false);
-            break;
-          }
-        } catch (err) {
-          console.warn("Retrying AI report fetch in 5 seconds...", err);
-          // Wait 5 seconds before retrying
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        }
-      }
-    };
-    fetchReport();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [tenantId]);
+    loadLatestReport();
+  }, [loadLatestReport]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    const snapshot = await dashboardAPI.generateAIReport(tenantId);
+    setReport(snapshot.report || '');
+    setInsights((snapshot.insights || []) as AIInsight[]);
+    setGeneratedAt(snapshot.generated_at || null);
+    setCached(Boolean(snapshot.cached));
+    setGenerating(false);
+  };
 
   const handlePrint = () => {
     window.print();
   };
 
+  const reportText = report || '';
+  const focusData = useMemo(() => {
+    const raw = FOCUS_AREAS.map((area) => ({
+      label: area.label,
+      score: countMatches(reportText, area.keywords),
+      colorClass: area.colorClass,
+    }));
+    const max = Math.max(...raw.map((item) => item.score), 1);
+    return raw.map((item) => ({
+      ...item,
+      normalized: Math.max(8, Math.round((item.score / max) * 100)),
+    }));
+  }, [reportText]);
+
+  const topFocus = useMemo(
+    () => focusData.slice().sort((a, b) => b.score - a.score).map((x) => x.label),
+    [focusData]
+  );
+
+  const potentialIdeas = useMemo(() => buildPotentialIdeas(topFocus), [topFocus]);
+  const reportSections = useMemo(() => extractSectionTitles(reportText), [reportText]);
+  const strategicBullets = useMemo(() => extractStrategicBullets(reportText), [reportText]);
+  const sectionCount = (reportText.match(/##\s/g) || []).length;
+  const highlightCount = (reportText.match(/\*\*/g) || []).length / 2;
+  const reportRichnessScore = Math.min(100, Math.round((Math.min(reportText.length, 5000) / 5000) * 70 + Math.min(sectionCount, 8) * 3 + Math.min(highlightCount, 8) * 2));
+
   return (
     <div className="flex-1 space-y-6 lg:p-4 print:p-0">
-      <div className="flex items-center justify-between print:hidden">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between print:hidden">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">AI Summary Report</h1>
-          <p className="text-muted-foreground relative text-gray-500">
-            Dynamically generated deep-dive insights using your private LLM.
+          <p className="text-muted-foreground relative text-gray-500 max-w-3xl">
+            The report is reused from the latest stored snapshot until you explicitly generate a new one.
           </p>
         </div>
-        <button 
-          onClick={handlePrint} 
-          className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-        >
-          <Printer className="mr-2 h-5 w-5" />
-          Print / Save as PDF
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={loadLatestReport}
+            className="flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            <Clock3 className="mr-2 h-4 w-4" />
+            Load latest
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 disabled:opacity-60"
+          >
+            {generating ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Sparkles className="mr-2 h-5 w-5" />}
+            Generate report
+          </button>
+          <button
+            onClick={handlePrint}
+            className="flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black"
+          >
+            <Printer className="mr-2 h-5 w-5" />
+            Print / Save as PDF
+          </button>
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm print:border-0 print:shadow-none w-full max-w-[1000px] mx-auto min-h-[500px] p-10 print:p-0">
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm print:hidden">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Executive Snapshot</h3>
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs text-slate-500">Readiness Score</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">{reportRichnessScore}/100</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs text-slate-500">Sections Covered</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">{sectionCount}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs text-slate-500">Top Focus</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{topFocus[0] || 'N/A'}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs text-slate-500">Critical Callouts</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">{Math.round(highlightCount)}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                  Focus Distribution
+                </div>
+                <div className="space-y-3">
+                  {focusData.map((item) => (
+                    <div key={item.label}>
+                      <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                        <span>{item.label}</span>
+                        <span>{item.score}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100">
+                        <div className={`${item.colorClass} h-2 rounded-full transition-all duration-500`} style={{ width: `${item.normalized}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
+                  <Lightbulb className="h-4 w-4 text-amber-500" /> Potential Product Ideas
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {potentialIdeas.map((idea, index) => (
+                    <div key={idea} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Idea {index + 1}</p>
+                      <p className="mt-1 text-sm text-slate-700">{idea}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  Ideas are aligned to the report focus areas for stronger UX and retention outcomes.
+                </p>
+              </div>
+            </div>
+      </section>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:hidden">
+        <AIInsightsPanel insights={insights} />
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm print:border-0 print:shadow-none w-full min-h-[500px] p-10 print:p-0">
         <div className="mb-8 border-b border-slate-100 pb-5 print:hidden">
           <h2 className="text-2xl font-semibold leading-none tracking-tight">Detailed Analytics Summary</h2>
           <p className="text-sm text-gray-500 mt-2">Generated for {tenantId.toUpperCase()}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1">
+              {cached ? 'Last saved snapshot' : 'Freshly generated'}
+            </span>
+            {generatedAt && (
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1">
+                {new Date(generatedAt).toLocaleString()}
+              </span>
+            )}
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">
+              <ShieldCheck className="mr-1 inline h-3 w-3" /> Product-grade report view
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+              <Timer className="mr-1 inline h-3 w-3" /> Strategy-ready insights
+            </span>
+          </div>
         </div>
-        
+
         <div className="prose max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-p:text-gray-800 text-gray-800">
           {loading ? (
-            <div className="animate-pulse w-full">
-              {/* Fake KPI Cards */}
-              <div className="mb-8">
-                <div className="h-6 w-64 bg-slate-200 rounded mb-5"></div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                      <div className="h-3 w-24 bg-slate-200 rounded mb-4"></div>
-                      <div className="h-8 w-16 bg-slate-300 rounded"></div>
-                    </div>
-                  ))}
+            <ChartSkeleton height="h-[520px]" />
+          ) : report ? (
+            <div className="space-y-6">
+              <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 not-prose">
+                <div className="flex flex-wrap items-center gap-2">
+                  {reportSections.length > 0 ? (
+                    reportSections.map((section) => (
+                      <span
+                        key={section}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                      >
+                        {section}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500">Report sections will appear after generation.</span>
+                  )}
                 </div>
-              </div>
-              
-              {/* Fake Heatmap */}
-              <div className="mb-10 p-8 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className="flex gap-2 items-center mb-6">
-                  <div className="w-1 h-5 bg-blue-500 rounded-sm"></div>
-                  <div className="h-5 w-48 bg-slate-200 rounded"></div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <div key={i} className="p-5 bg-white rounded-xl border border-slate-100">
-                      <div className="flex justify-between mb-3">
-                        <div className="h-3 w-32 bg-slate-200 rounded"></div>
-                        <div className="h-3 w-10 bg-slate-200 rounded"></div>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 rounded overflow-hidden">
-                         <div className={`h-full bg-slate-300 rounded`} style={{ width: `${Math.random() * 40 + 30}%`}}></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </section>
 
-              {/* Fake Geographical Data */}
-              <div className="mb-10 p-8 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className="flex gap-2 items-center mb-6">
-                  <div className="w-1 h-5 bg-emerald-500 rounded-sm"></div>
-                  <div className="h-5 w-64 bg-slate-200 rounded"></div>
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 not-prose">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Key Takeaways</h4>
+                  <ul className="mt-3 space-y-2 text-sm text-emerald-900">
+                    {strategicBullets.slice(0, 3).map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div className="flex flex-col gap-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center gap-4">
-                      <div className="h-3 w-24 bg-slate-200 rounded"></div>
-                      <div className="flex-1 h-2 bg-slate-200 rounded"></div>
-                      <div className="h-3 w-10 bg-slate-300 rounded"></div>
-                      <div className="h-3 w-16 bg-slate-200 rounded"></div>
-                    </div>
-                  ))}
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-indigo-700">Next 7-Day Action Plan</h4>
+                  <ul className="mt-3 space-y-2 text-sm text-indigo-900">
+                    <li className="flex items-start gap-2"><span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-indigo-600" />Prioritize the single highest-friction funnel stage.</li>
+                    <li className="flex items-start gap-2"><span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-indigo-600" />Ship one onboarding clarity improvement for first-session users.</li>
+                    <li className="flex items-start gap-2"><span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-indigo-600" />Track cohort retention impact and compare week-over-week.</li>
+                  </ul>
                 </div>
-              </div>
-              
-              <div className="my-10 border-t border-slate-100"></div>
-              
-              {/* Fake Markdown text */}
-              <div className="space-y-6">
-                 <div className="flex items-center gap-3 text-blue-600 mb-8 p-4 bg-blue-50 bg-opacity-50 rounded-lg">
-                   <Loader2 className="h-6 w-6 animate-spin" />
-                   <span className="font-semibold">AI is analyzing drop-offs and structural interaction data...</span>
-                 </div>
-                 <div className="h-8 w-1/3 bg-slate-300 rounded mb-4"></div>
-                 <div className="h-4 w-full bg-slate-200 rounded"></div>
-                 <div className="h-4 w-5/6 bg-slate-200 rounded"></div>
-                 <div className="h-4 w-4/6 bg-slate-200 rounded"></div>
-                 
-                 <div className="h-6 w-1/4 bg-slate-300 rounded mt-10 mb-4"></div>
-                 <div className="h-4 w-full bg-slate-200 rounded"></div>
-                 <div className="h-4 w-full bg-slate-200 rounded"></div>
-                 <div className="h-4 w-3/4 bg-slate-200 rounded"></div>
-              </div>
+              </section>
+
+              <div className="space-y-2" dangerouslySetInnerHTML={{ __html: buildHybridReportHtml(report) }} />
             </div>
           ) : (
-            <div className="space-y-2" dangerouslySetInnerHTML={{ __html: simpleMarkdownToHtml(report) }} />
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
+              <h3 className="text-lg font-semibold text-gray-900">No report snapshot found</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Generate a report to store the current snapshot and reuse it across the dashboard.
+              </p>
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="mt-4 inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 disabled:opacity-60"
+              >
+                {generating ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Sparkles className="mr-2 h-5 w-5" />}
+                Generate report
+              </button>
+            </div>
           )}
         </div>
       </div>
-      
-      {/* Hidden element for print header to look professional */}
+
       <div className="hidden print:block mb-10 border-b-2 border-slate-900 pb-6">
         <h1 className="text-5xl font-black text-black tracking-tight">NexaBank Analytics</h1>
         <h2 className="text-2xl mt-4 font-semibold text-slate-700">Strategic Critical Analysis & Insights</h2>

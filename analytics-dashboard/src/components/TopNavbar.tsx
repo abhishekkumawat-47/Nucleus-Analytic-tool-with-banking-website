@@ -39,14 +39,16 @@ function TopNavbar() {
   const { data: session } = useSession();
 
   const tenantOptions = useMemo(() => {
-    if (!session?.user) return ['twitter'];
+    if (!session?.user) {
+      return selectedTenant ? [selectedTenant] : ['nexabank'];
+    }
     if (session.user.role === 'super_admin') {
       return ['twitter', 'nexabank', 'Beta Industries', 'Gamma Ltd'];
     }
     return session.user.adminApps && session.user.adminApps.length > 0
       ? session.user.adminApps
-      : ['twitter'];
-  }, [session]);
+      : ['nexabank'];
+  }, [session, selectedTenant]);
 
   const [showTenantDropdown, setShowTenantDropdown] = useState(false);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
@@ -92,7 +94,7 @@ function TopNavbar() {
     setShowTransparency(!showTransparency);
     if (!showTransparency && !transparencyData) {
       setTransparencyLoading(true);
-      const data = await dashboardAPI.getTransparencyInfo(selectedTenant || 'twitter');
+      const data = await dashboardAPI.getTransparencyInfo(selectedTenant || tenantOptions[0] || 'nexabank');
       setTransparencyData(data);
       setTransparencyLoading(false);
     }
