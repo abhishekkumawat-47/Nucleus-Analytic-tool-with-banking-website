@@ -138,7 +138,7 @@ function TopNavbar() {
             </button>
 
             {showTenantDropdown && (
-              <div className="absolute cursor-pointer top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="absolute cursor-pointer top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150 max-h-[60vh] overflow-y-auto custom-scrollbar">
                 {tenantOptions.map((tenant) => (
                   <button
                     key={tenant}

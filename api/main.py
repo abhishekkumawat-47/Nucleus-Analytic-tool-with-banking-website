@@ -738,6 +738,112 @@ def get_feature_activity(tenant_id: str):
     except Exception as e:
         return [{"feature": str(e), "segments": [], "level": "Error"}]
 
+@app.get("/features/heatmap")
+def get_feature_heatmap(tenant_id: str = Query(..., description="Comma-separated list of tenants for comparison, or single tenant id.")):
+    """
+    Returns grid-based heatmap matrix for features.
+    If multiple tenants provided, matrix is Feature x Tenant.
+    If single tenant provided, matrix is Feature x Date.
+    """
+    tenant_ids = [t.strip() for t in tenant_id.split(',')]
+    for t in tenant_ids:
+        require_tenant_access(t)
+        
+    is_compare = len(tenant_ids) > 1
+
+    if is_compare:
+        sql = """
+            SELECT event_name as feature, tenant_id as group_key, count() as total
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - 14
+            GROUP BY feature, group_key
+        """
+    else:
+        sql = """
+            SELECT event_name as feature, toString(toDate(timestamp)) as group_key, count() as total
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - 7
+            GROUP BY feature, group_key
+        """
+        
+    try:
+        results = ch_client.query(sql, {"tenant_ids": tenant_ids})
+        
+        # Organize data
+        features = {}
+        all_groups = set()
+        max_total = 0
+        
+        for r in results:
+            f = r["feature"]
+            g = r["group_key"]
+            t = r["total"]
+            
+            if f not in features:
+                features[f] = {}
+            features[f][g] = t
+            all_groups.add(g)
+            
+            if t > max_total:
+                max_total = t
+                
+        # Fill missing groups with 0 and calculate percentages
+        sorted_groups = sorted(list(all_groups))
+        activities = []
+        
+        for f, groups in features.items():
+            segments = []
+            f_total = sum(groups.values())
+            
+            for g in sorted_groups:
+                count = groups.get(g, 0)
+                # Percentile globally (against max block) OR relative to feature?
+                # Usually heatmap is relative to global max or feature max. Global max is better for absolute intensity.
+                percentile = (count / max_total) if max_total > 0 else 0
+                pct = round(percentile * 100, 1)
+                
+                # Assign level
+                if pct > 75:
+                    lvl = "High"
+                    color = "#1e3a8a" # text-blue-900 equivalent / deep blue
+                elif pct > 40:
+                    lvl = "Med"
+                    color = "#3b82f6" # text-blue-500
+                elif pct > 0:
+                    lvl = "Low"
+                    color = "#bfdbfe" # text-blue-200
+                else:
+                    lvl = "None"
+                    color = "#f1f5f9" # slate-100
+                    
+                segments.append({
+                    "group_key": g,
+                    "count": count,
+                    "percentile": pct,
+                    "level": lvl,
+                    "color": color
+                })
+                
+            activities.append({
+                "feature": f.capitalize().replace("_", " "),
+                "raw_feature": f,
+                "total_usage": f_total,
+                "segments": segments,
+                "level": "High" if f_total > 50 else ("Med" if f_total > 10 else "Low")
+            })
+            
+        # Sort features by total usage
+        activities.sort(key=lambda x: x["total_usage"], reverse=True)
+        
+        return {
+            "is_compare": is_compare,
+            "groups": sorted_groups,
+            "activities": activities
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/features/configs")
 def get_feature_configs(tenant_id: str):
     require_tenant_access(tenant_id)

@@ -10,7 +10,11 @@ import {
   User,
   Users,
   Wallet,
-  History,
+  Landmark,
+  Bitcoin,
+  Gem,
+  Receipt,
+  Library
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -27,6 +31,12 @@ export function BankSidebar() {
       active: pathname === "/dashboard",
     },
     {
+      label: "Accounts",
+      icon: Wallet,
+      href: "/accounts",
+      active: pathname === "/accounts",
+    },
+    {
       label: "Transactions",
       icon: CreditCard,
       href: "/transactions",
@@ -39,10 +49,10 @@ export function BankSidebar() {
       active: pathname === "/payees",
     },
     {
-      label: "Transactions",
-      icon: History,
-      href: "/transactions",
-      active: pathname === "/transactions",
+      label: "Loans",
+      icon: Landmark,
+      href: "/loans",
+      active: pathname === "/loans",
     },
     {
       label: "Profile",
@@ -51,10 +61,32 @@ export function BankSidebar() {
       active: pathname === "/profile",
     },
     {
-      label: "Settings",
-      icon: Settings,
-      href: "/settings",
-      active: pathname === "/settings",
+      label: "Finance Library",
+      icon: Library,
+      href: "/pro-feature?id=ai-insights",
+      active: pathname?.startsWith("/pro-feature") && pathname?.includes("ai-insights"),
+      pro: true,
+    },
+    {
+      label: "Crypto Trading",
+      icon: Bitcoin,
+      href: "/pro-feature?id=crypto-trading",
+      active: pathname?.startsWith("/pro-feature") && pathname?.includes("crypto-trading"),
+      pro: true,
+    },
+    {
+      label: "Wealth Management",
+      icon: Gem,
+      href: "/pro-feature?id=wealth-management-pro",
+      active: pathname?.startsWith("/pro-feature") && pathname?.includes("wealth-management-pro"),
+      pro: true,
+    },
+    {
+      label: "Payroll Pro",
+      icon: Receipt,
+      href: "/pro-feature?id=bulk-payroll-processing",
+      active: pathname?.startsWith("/pro-feature") && pathname?.includes("bulk-payroll-processing"),
+      pro: true,
     },
   ]
 
@@ -92,6 +124,9 @@ export function BankSidebar() {
                   >
                     <route.icon className="h-4 w-4" />
                     {route.label}
+                    {(route as any).pro && (
+                      <span className="ml-auto inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 uppercase tracking-widest">Pro</span>
+                    )}
                   </Link>
                 ))}
               </nav>

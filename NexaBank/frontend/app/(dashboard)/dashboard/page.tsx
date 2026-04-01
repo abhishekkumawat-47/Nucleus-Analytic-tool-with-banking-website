@@ -60,7 +60,9 @@ export default function DashboardPage() {
        const isSender = userAccNos.has(tx.senderAccNo);
        const isReceiver = userAccNos.has(tx.receiverAccNo);
 
-       if (isReceiver && !isSender) {
+       if (isReceiver && isSender) {
+          // Internal transfer, ignore from income/expense
+       } else if (isReceiver) {
           inc += amount;
        } else if (isSender) {
           exp += amount;
@@ -208,12 +210,12 @@ export default function DashboardPage() {
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
             {/* Recent Transactions */}
-            <Card className="col-span-4 border border-violet-100 shadow-sm">
-              <CardHeader className="border-b border-gray-50 pb-4">
+            <Card className="col-span-4 border border-violet-100 shadow-sm flex flex-col h-full">
+              <CardHeader className="border-b border-gray-50 pb-4 shrink-0">
                 <CardTitle className="text-lg text-zinc-900">Recent Transactions</CardTitle>
                 <CardDescription>Your latest financial activity.</CardDescription>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 flex-1 flex flex-col justify-start">
                 {transactions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-10 text-center">
                     <div className="h-16 w-16 bg-violet-50 rounded-full flex items-center justify-center mb-4">
@@ -240,35 +242,50 @@ export default function DashboardPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 bg-white">
-                          {(transactions || []).slice(0, 10).map((transaction, index) => (
-                            <tr key={transaction.id || index} className="hover:bg-violet-50/30 transition-colors group cursor-pointer">
-                              <td className="px-4 py-3 text-center text-muted-foreground font-medium border-r border-gray-100/50 group-hover:bg-violet-50/50">
-                                {index + 1}
-                              </td>
-                              <td className="px-4 py-3 font-medium text-zinc-900 group-hover:text-violet-700 transition-colors">
-                                {transaction.receiverAccount?.accNo || transaction.receiverAccNo || "Transfer"}
-                              </td>
-                              <td className="px-4 py-3 text-muted-foreground">
-                                {new Date(transaction.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                              </td>
-                              <td className="px-4 py-3 text-right font-semibold text-rose-600">
-                                -₹{transaction.amount.toLocaleString('en-IN')}
-                              </td>
-                            </tr>
-                          ))}
+                          {(transactions || []).slice(0, 10).map((transaction, index) => {
+                            const isSender = globalAccounts.some(a => a.accNo === transaction.senderAccNo);
+                            const isReceiver = globalAccounts.some(a => a.accNo === transaction.receiverAccNo);
+                            
+                            const isInternal = isSender && isReceiver;
+                            const isIncome = !isSender || (isInternal && false); // For internal, we can display as expense or gray out
+                            const displayAccount = isInternal 
+                              ? `Internal: ${transaction.senderAccNo.slice(-4)} -> ${transaction.receiverAccNo.slice(-4)}`
+                              : isSender 
+                                ? (transaction.receiverAccount?.accNo || transaction.receiverAccNo || "External")
+                                : (transaction.senderAccount?.accNo || transaction.senderAccNo || "External");
+
+                            return (
+                              <tr key={transaction.id || index} className="hover:bg-violet-50/30 transition-colors group cursor-pointer">
+                                <td className="px-4 py-3 text-center text-muted-foreground font-medium border-r border-gray-100/50 group-hover:bg-violet-50/50">
+                                  {index + 1}
+                                </td>
+                                <td className="px-4 py-3 font-medium text-zinc-900 group-hover:text-violet-700 transition-colors">
+                                  {displayAccount}
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {new Date(transaction.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </td>
+                                <td className={`px-4 py-3 text-right font-semibold ${isInternal ? 'text-gray-500' : isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {isInternal ? '' : isIncome ? '+' : '-'}₹{transaction.amount.toLocaleString('en-IN')}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
-                    <Button asChild variant="ghost" className="w-full text-violet-600 hover:text-violet-700 hover:bg-violet-50 cursor-pointer">
-                      <Link href="/transactions">View all transactions &rarr;</Link>
-                    </Button>
+                    <div className="mt-auto pt-4 shrink-0">
+                      <Button asChild variant="ghost" className="w-full text-violet-600 hover:text-violet-700 hover:bg-violet-50 cursor-pointer text-xs font-bold uppercase tracking-widest">
+                        <Link href="/transactions">View all transactions &rarr;</Link>
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
             
             {/* Accounts Summary Panel */}
-            <Card className="col-span-3 border border-violet-100 shadow-sm bg-gray-50/50">
+            <Card className="col-span-3 border border-violet-100 shadow-sm bg-gray-50/50 flex flex-col h-full">
               <CardHeader className="border-b border-gray-50 pb-4 bg-white/50 backdrop-blur-sm rounded-t-xl">
                 <CardTitle className="text-lg text-zinc-900">Your Accounts</CardTitle>
                 <CardDescription>Active bank accounts and balances</CardDescription>

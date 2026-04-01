@@ -194,8 +194,14 @@ const createTransactionSchema = z.object({
   senderAccNo: z.string().min(1, "Sender account number is required"),
   receiverAccNo: z.string().min(1, "Receiver account number is required"),
   amount: z.number().positive("Amount must be positive"),
-  transactionType: z.enum(["PAYMENT", "TRANSFER"]),
-  status: z.boolean(),
+  transactionType: z.enum([
+    "PAYMENT",
+    "TRANSFER",
+    "PRO_LICENSE_FEE",
+    "DEPOSIT",
+    "WITHDRAWAL",
+  ]),
+  status: z.union([z.boolean(), z.enum(["SUCCESS", "FAILED", "PENDING"])]),
   category: z.string().min(1, "Category is required"),
   description: z.string().optional(),
 });
@@ -264,15 +270,15 @@ router.post(
               receiverAccNo,
               amount,
               transactionType,
-              status,
+              status: typeof status === "boolean" ? (status ? "SUCCESS" : "FAILED") : status,
               category: isCrossBank ? "CROSS_TRANSFER" : category,
               description: description ?? null,
               loanId: null,
             },
           });
 
-          // Update balances if it's a transfer
-          if (transactionType === "TRANSFER") {
+          // Update balances if it's a transfer or payment
+          if (transactionType === "TRANSFER" || transactionType === "PAYMENT") {
             await tx.account.update({
               where: { accNo: senderAccNo },
               data: { balance: { decrement: amount } },

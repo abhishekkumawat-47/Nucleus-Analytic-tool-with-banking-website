@@ -5,6 +5,7 @@ import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { Search, User, Clock, ArrowDown, AlertCircle, Loader2 } from 'lucide-react';
 import ChartContainer from '@/components/ChartContainer';
+import { TableSkeleton, ChartSkeleton } from '@/components/Skeletons';
 
 export default function UserJourneyPage() {
   const { selectedTenant } = useDashboardData();
@@ -53,7 +54,7 @@ export default function UserJourneyPage() {
           <ChartContainer title="Select User" id="user-list">
             <div className="mt-2 space-y-2 max-h-[600px] overflow-y-auto">
               {loadingUsers ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+                <TableSkeleton rows={8} />
               ) : users.length === 0 ? (
                 <p className="text-center text-gray-400 py-8">No users found.</p>
               ) : (
@@ -91,7 +92,7 @@ export default function UserJourneyPage() {
                 <p className="text-sm">Select a user from the left to view their journey.</p>
               </div>
             ) : loadingJourney ? (
-              <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
+              <ChartSkeleton height="h-[500px]" />
             ) : (
               <div className="mt-4">
                 {/* Stats */}
