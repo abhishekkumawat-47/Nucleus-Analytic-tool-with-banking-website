@@ -7,34 +7,32 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from storage.client import ch_client
 
-# Features to license for NexaBank (some used, some unused)
+# Only REAL Pro features are enterprise-licensed.
+# Basic banking features (login, transfer, dashboard) are FREE — NOT licensed.
+# Licensed = features the bank PAYS for under an enterprise plan.
 features = [
-    # Used features (assumed to be used based on typical banking app)
-    {"feature_name": "login", "is_licensed": True, "plan_tier": "basic"},
-    {"feature_name": "transfer_funds", "is_licensed": True, "plan_tier": "basic"},
-    {"feature_name": "view_dashboard", "is_licensed": True, "plan_tier": "basic"},
-    {"feature_name": "apply_loan", "is_licensed": True, "plan_tier": "premium"},
-    {"feature_name": "add_payee", "is_licensed": True, "plan_tier": "basic"},
-    
-    # Unused / New premium features
-    {"feature_name": "ai_insights", "is_licensed": True, "plan_tier": "enterprise"},
-    {"feature_name": "wealth_management_pro", "is_licensed": True, "plan_tier": "enterprise"},
-    {"feature_name": "crypto_trading", "is_licensed": True, "plan_tier": "premium"},
-    {"feature_name": "bulk_payroll_processing", "is_licensed": True, "plan_tier": "enterprise"},
+    # The 4 actual Pro features that require an enterprise license
+    {"feature_name": "crypto_trade_execution", "is_licensed": True, "plan_tier": "enterprise"},
+    {"feature_name": "wealth_rebalance", "is_licensed": True, "plan_tier": "enterprise"},
+    {"feature_name": "payroll_batch_processed", "is_licensed": True, "plan_tier": "enterprise"},
+    {"feature_name": "pro_book_download", "is_licensed": True, "plan_tier": "enterprise"},
 ]
 
+# Seed for both tenant IDs (bank_a is legacy, nexabank is current)
+tenant_ids = ["nexabank", "bank_a"]
 client = ch_client._get_client()
 
-rows = []
-for f in features:
-    rows.append(["bank_a", f["feature_name"], 1 if f["is_licensed"] else 0, f["plan_tier"], datetime.utcnow()])
+for tid in tenant_ids:
+    rows = []
+    for f in features:
+        rows.append([tid, f["feature_name"], 1 if f["is_licensed"] else 0, f["plan_tier"], datetime.utcnow()])
 
-try:
-    client.insert(
-        'feature_intelligence.tenant_licenses',
-        rows,
-        column_names=['tenant_id', 'feature_name', 'is_licensed', 'plan_tier', 'updated_at']
-    )
-    print(f"Success: Synced {len(rows)} licenses for bank_a.")
-except Exception as e:
-    print("Error:", e)
+    try:
+        client.insert(
+            'feature_intelligence.tenant_licenses',
+            rows,
+            column_names=['tenant_id', 'feature_name', 'is_licensed', 'plan_tier', 'updated_at']
+        )
+        print(f"Success: Synced {len(rows)} enterprise licenses for {tid}.")
+    except Exception as e:
+        print(f"Error for {tid}:", e)

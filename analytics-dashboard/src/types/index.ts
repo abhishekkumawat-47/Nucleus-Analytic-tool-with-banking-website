@@ -166,7 +166,7 @@ export interface RetentionData {
 /* ─────────────── Dashboard State ─────────────── */
 
 /** Time range filter options */
-export type TimeRange = 'Last 7 Days' | 'Last 30 Days' | 'Last 90 Days' | 'Custom';
+export type TimeRange = 'Last 7 Days' | 'Last 30 Days' | 'Last 90 Days';
 
 /** Deployment mode toggle */
 export type DeploymentMode = 'cloud' | 'on-prem';

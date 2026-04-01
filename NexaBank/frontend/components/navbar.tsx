@@ -55,7 +55,7 @@ export function Navbar() {
     { name: "Payees", href: "/payees" },
     { name: "Loans", href: "/loans" },
   ]
-  
+
   const proPages = [
     { name: "Finance Library", href: "/pro-feature?id=ai-insights", pro: true },
     { name: "Crypto Trading", href: "/pro-feature?id=crypto-trading", pro: true },
@@ -181,15 +181,15 @@ export function Navbar() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <div className="flex items-center justify-center">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  
-                  {role === "ADMIN" && (
-                    <Link href="/admin/loans">
-                      <Badge className="bg-zinc-900 text-white cursor-pointer text-[10px] uppercase font-semibold px-2 py-0.5 rounded-md tracking-wider transition-colors">
-                        Admin
-                      </Badge>
-                    </Link>
-                  )}
+                    <DropdownMenuLabel>My Account</DropdownMenuLabel>
+
+                    {role === "ADMIN" && (
+                      <Link href="/admin/loans">
+                        <Badge className="bg-zinc-900 text-white cursor-pointer text-[10px] uppercase font-semibold px-2 py-0.5 rounded-md tracking-wider transition-colors">
+                          Admin
+                        </Badge>
+                      </Link>
+                    )}
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -218,7 +218,7 @@ export function Navbar() {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 py-1">Nucleus Platform</DropdownMenuLabel>
+                      <DropdownMenuLabel className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 py-1">FinInsightsPlatform</DropdownMenuLabel>
                       <DropdownMenuItem asChild>
                         <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001"} target="_blank" rel="noopener noreferrer" className="cursor-pointer">
                           <BarChart3 className="mr-2 h-4 w-4" />

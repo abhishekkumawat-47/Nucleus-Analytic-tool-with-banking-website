@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import StoreProvider from "@/lib/StoreProvider";
 import AuthProvider from "@/components/AuthProvider";
+import { Toaster } from "sonner";
 
 /**
  * Root layout with Inter font, Redux provider, and global metadata.
@@ -16,7 +17,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "FinInsight | Enterprise Analytics Dashboard",
+  title: "Nucleus | Feature Intelligence & Analytics",
   description:
     "Production-grade SaaS analytics dashboard for tracking feature usage, user behavior, funnel analysis, and tenant comparison with AI-powered insights.",
   keywords: [
@@ -39,6 +40,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans bg-gray-50/50">
         <AuthProvider>
           <StoreProvider>{children}</StoreProvider>
+          <Toaster position="bottom-right" richColors closeButton />
         </AuthProvider>
       </body>
     </html>

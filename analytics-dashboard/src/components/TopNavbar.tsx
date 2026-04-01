@@ -27,9 +27,9 @@ import {
   toggleSidebar,
   fetchDashboardData,
 } from '@/lib/dashboardSlice';
-import { TimeRange, DeploymentMode } from '@/types';
+import { TimeRange } from '@/types';
 
-const timeRanges: TimeRange[] = ['Last 7 Days', 'Last 30 Days', 'Last 90 Days', 'Custom'];
+const timeRanges: TimeRange[] = ['Last 7 Days', 'Last 30 Days', 'Last 90 Days'];
 
 function TopNavbar() {
   const dispatch = useAppDispatch();
@@ -277,10 +277,6 @@ function TopNavbar() {
                   <span className="inline-block mt-1 px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded uppercase tracking-wide">
                     {session?.user?.role?.replace('_', ' ')}
                   </span>
-                </div>
-                <div className="py-1">
-                  <button className="w-full cursor-pointer text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Account Settings</button>
-                  <button className="w-full cursor-pointer text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Preferences</button>
                 </div>
                 <div className="border-t cursor-pointer border-gray-100 py-1">
                   <button onClick={() => signOut()} className="w-full cursor-pointer text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50">Sign Out</button>

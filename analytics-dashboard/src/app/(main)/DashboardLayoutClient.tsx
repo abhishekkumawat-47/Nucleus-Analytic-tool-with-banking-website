@@ -54,15 +54,6 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
 
       {/* Realtime Event Feed Overlay */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none items-end print:hidden">
-        {isConnected && (
-          <div className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full text-xs font-bold border border-emerald-100 shadow-sm flex items-center gap-2 self-end">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <Wifi className="h-3 w-3" /> Live Connection
-          </div>
-        )}
         {lastEvent && (
           <div key={lastEvent.timestamp} className="animate-in slide-in-from-bottom-5 fade-in duration-500 bg-white p-3 rounded-xl shadow-2xl border border-zinc-100 flex items-center gap-4 self-end pointer-events-auto min-w-[250px]">
             <div className="bg-blue-100 text-blue-600 p-2 rounded-lg flex-shrink-0">

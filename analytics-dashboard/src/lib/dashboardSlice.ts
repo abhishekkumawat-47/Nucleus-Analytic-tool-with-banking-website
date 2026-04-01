@@ -5,8 +5,55 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { DashboardState, TimeRange, DeploymentMode } from '@/types';
+import {
+  DashboardState,
+  TimeRange,
+  DeploymentMode,
+  KPIMetric,
+  TimeSeriesDataPoint,
+  FeatureUsageDataPoint,
+  BarDataPoint,
+  FunnelStep,
+  FeatureActivityRow,
+  Tenant,
+  PagesPerMinuteDataPoint,
+  TopPage,
+  DeviceBreakdown,
+  AcquisitionChannel,
+  LocationData,
+  AuditLog,
+  FeatureConfig,
+  RetentionData,
+} from '@/types';
 import { dashboardAPI } from './api';
+
+/** Explicitly typed payload from the fetchDashboardData thunk */
+interface DashboardDataPayload {
+  kpiMetrics: KPIMetric[];
+  secondaryKpiMetrics: KPIMetric[];
+  trafficData: TimeSeriesDataPoint[];
+  featureUsageData: FeatureUsageDataPoint[];
+  topFeatures: BarDataPoint[];
+  funnelData: FunnelStep[];
+  featureActivity: FeatureActivityRow[];
+  tenants: Tenant[];
+  realTimeUsers: number;
+  pagesPerMinute: PagesPerMinuteDataPoint[];
+  topPages: TopPage[];
+  deviceBreakdown: DeviceBreakdown[];
+  acquisitionChannels: AcquisitionChannel[];
+  locations: LocationData[];
+  auditLogs: AuditLog[];
+  featureConfigs: FeatureConfig[];
+  retentionData: RetentionData[];
+}
+
+interface DeploymentInfoPayload {
+  mode: string;
+  is_cloud: boolean;
+  is_on_prem: boolean;
+  local_tenant: string | null;
+}
 
 /** Initial state with empty arrays - data loads via async thunks */
 const initialState: DashboardState = {
@@ -38,7 +85,7 @@ const initialState: DashboardState = {
 
 /* ─────────────── Async Thunks ─────────────── */
 
-export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
+export const fetchDashboardData = createAsyncThunk<DashboardDataPayload, void, { state: { dashboard: DashboardState } }>(
   'dashboard/fetchAll',
   async (_, { getState }) => {
     const state = getState();
@@ -104,7 +151,7 @@ export const fetchDashboardData = createAsyncThunk<any, void, { state: any }>(
   }
 );
 
-export const fetchAIInsightsData = createAsyncThunk<any, void, { state: any }>(
+export const fetchAIInsightsData = createAsyncThunk<ReturnType<typeof dashboardAPI.getAIInsights> extends Promise<infer T> ? T : never, void, { state: { dashboard: DashboardState } }>(
   'dashboard/fetchAIInsights',
   async (_, { getState }) => {
     const state = getState();
@@ -113,7 +160,7 @@ export const fetchAIInsightsData = createAsyncThunk<any, void, { state: any }>(
   }
 );
 
-export const fetchDeploymentInfo = createAsyncThunk(
+export const fetchDeploymentInfo = createAsyncThunk<DeploymentInfoPayload>(
   'dashboard/fetchDeploymentInfo',
   async () => {
     return await dashboardAPI.getDeploymentInfo();
@@ -147,14 +194,13 @@ const dashboardSlice = createSlice({
       state.realTimeUsers = action.payload;
     },
     /** Updates KPI metrics dynamically from WebSockets */
-    updateKPIMetrics(state, action: PayloadAction<any[]>) {
+    updateKPIMetrics(state, action: PayloadAction<KPIMetric[]>) {
       state.kpiMetrics = action.payload;
     },
   },
   extraReducers: (builder) => {
     builder
       .addCase(fetchDashboardData.pending, (state) => {
-        // Only trigger full page loading if we don't have existing data
         if (state.kpiMetrics.length === 0) {
           state.isLoading = true;
         }

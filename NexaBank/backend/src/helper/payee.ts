@@ -303,7 +303,7 @@ export const SearchPayees = async (
       where: { name: { contains: query, mode: "insensitive" } },
       select: { id: true }
     });
-    const customerIds = matchingCustomers.map(c => c.id);
+    const customerIds = matchingCustomers.map((c: any) => c.id);
 
     const accounts = await prisma.account.findMany({
       where: {
@@ -322,7 +322,7 @@ export const SearchPayees = async (
       take: 10,
     });
 
-    const results = accounts.map((acc) => ({
+    const results = accounts.map((acc: any) => ({
       name: acc.customer?.name || "Unknown",
       accNo: acc.accNo,
       ifsc: acc.ifsc,
