@@ -58,7 +58,7 @@ interface DeploymentInfoPayload {
 /** Initial state with empty arrays - data loads via async thunks */
 const initialState: DashboardState = {
   timeRange: 'Last 7 Days',
-  selectedTenant: 'twitter',
+  selectedTenant: 'nexabank',
   deploymentMode: 'cloud',
   isLoading: true,
   isFetching: false,

@@ -42,8 +42,7 @@ def generate_insights(tenant_id: str) -> List[Dict[str, str]]:
     """
     insights = []
     raw_data_context = []
-    
-    # 1. Low Adoption Data
+
     sql_low_adoption = """
         SELECT event_name, sum(total_events) as count
         FROM feature_intelligence.daily_feature_usage
@@ -58,7 +57,6 @@ def generate_insights(tenant_id: str) -> List[Dict[str, str]]:
     except Exception as e:
         print(f"Insight Sql Error (Low Adoption): {e}")
 
-    # 2. Trending Data
     sql_trending = """
         SELECT event_name, 
                sumIf(total_events, date = today()) as today_count,
@@ -74,10 +72,6 @@ def generate_insights(tenant_id: str) -> List[Dict[str, str]]:
             raw_data_context.append(f"Trending: '{row['event_name']}' grew from {row['yesterday_count']} to {row['today_count']} interactions today.")
     except Exception as e:
         print(f"Insight Sql Error (Trending): {e}")
-
-    # Fallback context if no anomalies
-    if not raw_data_context:
-        raw_data_context.append("Usage is stable across all features. No actionable anomalies detected today.")
 
     context_str = "\n".join(raw_data_context)
     

@@ -1,22 +1,22 @@
 import sys
 import os
 from typing import List, Optional
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from storage.client import ch_client
-from api.insights import generate_insights
+from api.insights import generate_insights, query_ollama
 from core.config import settings
 from core.middleware import require_cloud_mode, require_tenant_access
 import time
+from datetime import datetime
 
 # In-memory dictionary to cache AI reports: { tenant_id: { "timestamp": float, "report": str } }
 AI_REPORT_CACHE = {}
 AI_CACHE_TTL = 3600  # 1 hour cache duration
-
 app = FastAPI(
     title="Feature Analytics API",
     description="APIs for feature adoption, funnel analysis, and rule-based insights."
@@ -29,8 +29,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -271,8 +269,20 @@ def get_insights(tenant_id: str):
     Detects features that are not being used or sudden spikes.
     """
     require_tenant_access(tenant_id)
+
+    cached_data = AI_REPORT_CACHE.get(tenant_id)
+    if cached_data and cached_data.get("insights"):
+        return {"tenant_id": tenant_id, "insights": cached_data["insights"], "cached": True}
+
     insights_data = generate_insights(tenant_id)
-    return {"tenant_id": tenant_id, "insights": insights_data}
+    existing = AI_REPORT_CACHE.get(tenant_id, {})
+    AI_REPORT_CACHE[tenant_id] = {
+        **existing,
+        "timestamp": existing.get("timestamp", time.time()),
+        "insights": insights_data,
+        "generated_at": existing.get("generated_at", datetime.utcnow().isoformat()),
+    }
+    return {"tenant_id": tenant_id, "insights": insights_data, "cached": False}
 
 @app.get("/metrics/kpi")
 def get_kpi_metrics(tenant_id: str):
@@ -609,7 +619,7 @@ def get_device_breakdown(tenant_id: str):
     try:
         device_res = ch_client.query(sql, {"tenant_id": tenant_id})
         breakdown = []
-        colors = {"desktop": "#1a73e8", "mobile": "#4285F4", "tablet": "#8AB4F8"}
+        colors = {"desktop": "#0EA5A4", "mobile": "#3B82F6", "tablet": "#F59E0B"}
         
         for row in device_res:
             dev = row['device'].lower()
@@ -623,15 +633,15 @@ def get_device_breakdown(tenant_id: str):
         
         if not breakdown:
             breakdown = [
-                {"name": 'Desktop', "value": 62, "color": '#1a73e8'},
-                {"name": 'Mobile', "value": 28, "color": '#4285F4'}
+                {"name": 'Desktop', "value": 62, "color": '#0EA5A4'},
+                {"name": 'Mobile', "value": 28, "color": '#3B82F6'}
             ]
             
         return breakdown
     except Exception:
         return [
-            {"name": 'Desktop', "value": 50, "color": '#1a73e8'},
-            {"name": 'Mobile', "value": 50, "color": '#4285F4'}
+            {"name": 'Desktop', "value": 50, "color": '#0EA5A4'},
+            {"name": 'Mobile', "value": 50, "color": '#3B82F6'}
         ]
 
 @app.get("/locations")
@@ -801,19 +811,56 @@ def get_top_pages(tenant_id: str):
 def get_channels(tenant_id: str):
     require_tenant_access(tenant_id)
     sql = """
-        SELECT channel as name, count() as value 
-        FROM feature_intelligence.events_raw 
-        WHERE tenant_id = %(tenant_id)s GROUP BY name
+        SELECT
+            multiIf(
+                lower(channel) NOT IN ('', 'web', 'unknown'),
+                    concat(upper(substring(lower(channel), 1, 1)), substring(lower(channel), 2)),
+                positionCaseInsensitive(lower(metadata), 'google.') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'bing.') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'yahoo.') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'duckduckgo.') > 0,
+                    'Organic Search',
+                positionCaseInsensitive(lower(metadata), 'facebook.') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'instagram.') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'linkedin.') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'x.com') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'twitter.com') > 0,
+                    'Social',
+                positionCaseInsensitive(lower(metadata), 'mail') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'newsletter') > 0,
+                    'Email',
+                positionCaseInsensitive(lower(metadata), 'localhost') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'nexabank') > 0 OR
+                positionCaseInsensitive(lower(metadata), 'twitter') > 0,
+                    'Internal',
+                positionCaseInsensitive(lower(event_name), 'register') > 0 OR
+                positionCaseInsensitive(lower(event_name), 'signup') > 0,
+                    'New Users',
+                positionCaseInsensitive(lower(event_name), 'login') > 0,
+                    'Returning Users',
+                'Direct'
+            ) as source,
+            count() as value
+        FROM feature_intelligence.events_raw
+        WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 30
+        GROUP BY source
+        ORDER BY value DESC
     """
     try:
         results = ch_client.query(sql, {"tenant_id": tenant_id})
+        total = sum(int(r.get("value", 0)) for r in results) or 1
         formatted = []
         for r in results:
+            value = int(r["value"])
             formatted.append({
-                "name": str(r["name"]).capitalize(),
-                "value": int(r["value"]),
-                "formattedValue": str(r["value"])
+                "name": str(r["source"]),
+                "value": value,
+                "formattedValue": f"{round((value / total) * 100)}%"
             })
+
+        if not formatted:
+            return [{"name": "Direct", "value": 0, "formattedValue": "0%"}]
+
         return formatted
     except Exception:
         return []
@@ -1074,7 +1121,7 @@ from core.models import LicenseSyncRequest, TrackingToggleRequest
 
 @app.get("/license/usage")
 def get_license_usage(tenant_id: str):
-    """Compare licensed features vs actual usage for a tenant."""
+    """Compare licensed features vs actual usage for a tenant — enriched with trends, pro users, and revenue."""
     require_tenant_access(tenant_id)
     try:
         # Get licensed features
@@ -1098,25 +1145,95 @@ def get_license_usage(tenant_id: str):
         used_set = {r["feature_name"] for r in used}
         used_map = {r["feature_name"]: r for r in used}
         
+        # --- NEW: Get daily usage trends for licensed features (last 7 days) ---
+        sql_trends = """
+            SELECT event_name as feature_name, toDate(timestamp) as date, count() as count
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 7
+            GROUP BY event_name, date
+            ORDER BY date ASC
+        """
+        trend_rows = ch_client.query(sql_trends, {"tenant_id": tenant_id})
+        # Build trends map: feature -> [{date, count}, ...]
+        trends_map = {}
+        for r in trend_rows:
+            fname = r["feature_name"]
+            if fname not in trends_map:
+                trends_map[fname] = []
+            date_str = r["date"].strftime("%Y-%m-%d") if hasattr(r["date"], "strftime") else str(r["date"])
+            trends_map[fname].append({"date": date_str, "count": int(r["count"])})
+
+        # --- NEW: Get distinct pro users (users who used any licensed pro feature) ---
+        if licensed_set:
+            feature_list_str = ", ".join([f"'{f}'" for f in licensed_set])
+            sql_pro_users = f"""
+                SELECT uniqExact(user_id) as pro_users
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tenant_id)s AND event_name IN ({feature_list_str}) AND timestamp >= today() - 30
+            """
+            pro_res = ch_client.query(sql_pro_users, {"tenant_id": tenant_id})
+            pro_user_count = int(pro_res[0]["pro_users"]) if pro_res else 0
+
+            # --- NEW: Get total unique users for usage % ---
+            sql_total_users = """
+                SELECT uniqExact(user_id) as total_users
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 30
+            """
+            total_res = ch_client.query(sql_total_users, {"tenant_id": tenant_id})
+            total_user_count = int(total_res[0]["total_users"]) if total_res else 0
+
+            # --- NEW: Week-over-week trend for pro usage ---
+            sql_wow = f"""
+                SELECT
+                    sumIf(1, timestamp >= today() - 7) as current_week,
+                    sumIf(1, timestamp >= today() - 14 AND timestamp < today() - 7) as prev_week
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tenant_id)s AND event_name IN ({feature_list_str})
+            """
+            wow_res = ch_client.query(sql_wow, {"tenant_id": tenant_id})
+            current_week = int(wow_res[0]["current_week"]) if wow_res else 0
+            prev_week = int(wow_res[0]["prev_week"]) if wow_res else 0
+            wow_change = round(((current_week - prev_week) / max(prev_week, 1)) * 100, 1)
+        else:
+            pro_user_count = 0
+            total_user_count = 0
+            wow_change = 0.0
+        
         # Build comparison
+        total_usage_count = sum(int(r.get("usage_count", 0)) for r in used)
         licensed_list = []
         for r in licensed:
             usage = used_map.get(r["feature_name"], {})
+            uc = int(usage.get("usage_count", 0))
             licensed_list.append({
                 "feature_name": r["feature_name"],
                 "plan_tier": r["plan_tier"],
                 "is_used": r["feature_name"] in used_set,
-                "usage_count": int(usage.get("usage_count", 0)),
+                "usage_count": uc,
                 "unique_users": int(usage.get("unique_users", 0)),
+                "usage_pct": round((uc / max(total_usage_count, 1)) * 100, 1),
+                "trend": trends_map.get(r["feature_name"], []),
             })
         
         unused_licensed = [f for f in licensed_list if not f["is_used"]]
-        unlicensed_used = [{"feature_name": f, "usage_count": int(used_map[f]["usage_count"])} 
-                          for f in used_set - licensed_set]
+        unlicensed_used = []
+        for f in used_set - licensed_set:
+            uc = int(used_map[f]["usage_count"])
+            unlicensed_used.append({
+                "feature_name": f,
+                "usage_count": uc,
+                "unique_users": int(used_map[f].get("unique_users", 0)),
+                "usage_pct": round((uc / max(total_usage_count, 1)) * 100, 1),
+            })
+        unlicensed_used.sort(key=lambda x: x["usage_count"], reverse=True)
         
         total_licensed = len(licensed_set)
         total_used_licensed = len([f for f in licensed_list if f["is_used"]])
         waste_pct = round(((total_licensed - total_used_licensed) / max(total_licensed, 1)) * 100, 1)
+        
+        # Estimated revenue from 4 enterprise licenses at ₹2000/user/month
+        estimated_revenue = pro_user_count * 2000
         
         return {
             "tenant_id": tenant_id,
@@ -1125,6 +1242,11 @@ def get_license_usage(tenant_id: str):
                 "total_used": len(used_set),
                 "total_used_licensed": total_used_licensed,
                 "waste_pct": waste_pct,
+                "pro_users": pro_user_count,
+                "total_users": total_user_count,
+                "pro_adoption_pct": round((pro_user_count / max(total_user_count, 1)) * 100, 1),
+                "estimated_revenue": estimated_revenue,
+                "wow_change": wow_change,
             },
             "licensed": licensed_list,
             "unused_licensed": unused_licensed,
@@ -1495,69 +1617,72 @@ def get_predictive_adoption(tenant_id: str):
 def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")):
     """Generates a comprehensive AI-powered summarization report for the dashboard."""
     require_tenant_access(tenant_id)
-    
-    # Check cache first
-    now = time.time()
-    if not force_refresh and tenant_id in AI_REPORT_CACHE:
-        cached_data = AI_REPORT_CACHE[tenant_id]
-        if now - cached_data["timestamp"] < AI_CACHE_TTL:
-            return {"tenant_id": tenant_id, "report": cached_data["report"], "cached": True}
-            
     try:
+        # Check cache first
+        now = time.time()
+        if not force_refresh and tenant_id in AI_REPORT_CACHE:
+            cached_data = AI_REPORT_CACHE[tenant_id]
+            if now - cached_data["timestamp"] < AI_CACHE_TTL:
+                return {
+                    "tenant_id": tenant_id,
+                    "report": cached_data.get("report", ""),
+                    "cached": True,
+                    "generated_at": cached_data.get("generated_at"),
+                    "insights": cached_data.get("insights", []),
+                }
+
         # Fetch basic context
         kpi = get_kpi_metrics(tenant_id)
         secondary = get_secondary_kpi(tenant_id)
         locations = get_locations(tenant_id)[:5] # Top 5
         activities = get_feature_activity(tenant_id)
-        
+
         # Build beautiful HTML visualization payload for the report
         kpi_cards_html = f'''
-        <div style="margin-bottom: 32px; font-family: inherit;">
-            <h3 style="font-size: 20px; font-weight: 700; color: #1e293b; margin-bottom: 20px;">Platform Health & Activity Metrics</h3>
-            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+        <section style="margin-bottom: 20px; font-family: inherit; line-height: 1.35;">
+            <h3 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0 0 14px;">Platform Health & Activity Metrics</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px;">
         '''
-        
+
         for k in kpi:
             val = k.get('value', '0')
             label = k.get('label', '')
             kpi_cards_html += f'''
-                <div style="flex: 1; min-width: 180px; padding: 24px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);">
-                    <p style="margin: 0; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">{label}</p>
-                    <p style="margin: 12px 0 0; font-size: 32px; font-weight: 800; color: #0f172a;">{val}</p>
+                <div style="padding: 16px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); border: 1px solid #dbe5f1; border-radius: 12px; box-shadow: 0 2px 10px rgba(2, 6, 23, 0.05);">
+                    <p style="margin: 0; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em;">{label}</p>
+                    <p style="margin: 10px 0 0; font-size: 34px; font-weight: 800; color: #0b1f44;">{val}</p>
                 </div>
             '''
-            
-        kpi_cards_html += '</div></div>'
-        
-        # Build feature activity layout
+
+        kpi_cards_html += '</div></section>'
+
         activity_html = f'''
-        <div style="margin-bottom: 24px; padding: 32px; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <h4 style="margin-top: 0; font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 24px; display: flex; align-items: center; gap: 8px;">
-                <span style="display: inline-block; width: 4px; height: 18px; background: #3b82f6; border-radius: 2px;"></span>
+        <section style="margin-bottom: 20px; padding: 18px; background: #ffffff; border-radius: 12px; border: 1px solid #dbe5f1; box-shadow: 0 2px 10px rgba(2, 6, 23, 0.05); line-height: 1.3;">
+            <h4 style="margin: 0 0 12px; font-size: 19px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                <span style="display: inline-block; width: 4px; height: 16px; background: #3b82f6; border-radius: 2px;"></span>
                 Feature Adoption Matrix
             </h4>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px;">
         '''
-        
+
         for act in activities[:6]:
             feat_name = act.get('feature', 'Unknown')
             # Generate deterministic engagement volume
             hash_val = sum(ord(c) for c in feat_name) % 60 + 20 
             color = act.get('segments', [{'color': '#3b82f6'}])[0].get('color', '#3b82f6')
             activity_html += f'''
-                <div style="padding: 20px; background: #f8fafc; border-radius: 12px; border: 1px solid #f1f5f9;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; color: #334155; font-weight: 600;">
+                <div style="padding: 12px; background: #f8fafc; border-radius: 10px; border: 1px solid #e6edf5;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: #1f2937; font-weight: 700;">
                         <span>{feat_name}</span>
-                        <span style="color: {color};">{hash_val}%</span>
+                        <span style="color: {color}; font-weight: 800;">{hash_val}%</span>
                     </div>
-                    <div style="height: 8px; width: 100%; background: #e2e8f0; border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="height: 100%; width: {hash_val}%; background: linear-gradient(90deg, {color}88, {color}); border-radius: 4px;"></div>
+                    <div style="height: 8px; width: 100%; background: #dbe4ef; border-radius: 99px; overflow: hidden;">
+                        <div style="height: 100%; width: {hash_val}%; background: linear-gradient(90deg, {color}99, {color}); border-radius: 99px;"></div>
                     </div>
                 </div>
             '''
-        activity_html += '</div></div>'
-        
-        # Geographic processing
+        activity_html += '</div></section>'
+
         continent_map = {
             "USA": "North America",
             "Canada": "North America",
@@ -1569,7 +1694,7 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
             "Australia": "Oceania",
             "Brazil": "South America"
         }
-        
+
         continent_data = {}
         total_visits = 0
         for loc in locations:
@@ -1578,40 +1703,39 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
             cont = continent_map.get(c, "Other Regions")
             continent_data[cont] = continent_data.get(cont, 0) + v
             total_visits += v
-            
+
         if total_visits == 0: total_visits = 1
-        
+
         geo_html = f'''
-        <div style="margin-bottom: 40px; padding: 32px; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <h4 style="margin-top: 0; font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 24px; display: flex; align-items: center; gap: 8px;">
-                <span style="display: inline-block; width: 4px; height: 18px; background: #10b981; border-radius: 2px;"></span>
+        <section style="margin-bottom: 24px; padding: 18px; background: #ffffff; border-radius: 12px; border: 1px solid #dbe5f1; box-shadow: 0 2px 10px rgba(2, 6, 23, 0.05); line-height: 1.3;">
+            <h4 style="margin: 0 0 12px; font-size: 19px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                <span style="display: inline-block; width: 4px; height: 16px; background: #10b981; border-radius: 2px;"></span>
                 Global Footprint (Continent-wise Traffic)
             </h4>
-            <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
         '''
-        
+
         colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444']
         for i, (cont, visits) in enumerate(sorted(continent_data.items(), key=lambda x: x[1], reverse=True)):
             pct = int((visits / total_visits) * 100)
             c_color = colors[i % len(colors)]
             geo_html += f'''
-                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-                    <div style="min-width: 140px; font-size: 14px; font-weight: 600; color: #475569;">{cont}</div>
-                    <div style="flex: 1; min-width: 200px; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
-                        <div style="height: 100%; width: {pct}%; background: linear-gradient(90deg, {c_color}88, {c_color}); border-radius: 5px;"></div>
+                <div style="display: grid; grid-template-columns: minmax(120px, 160px) 1fr 60px 80px; gap: 10px; align-items: center;">
+                    <div style="font-size: 13px; font-weight: 700; color: #334155;">{cont}</div>
+                    <div style="height: 8px; background: #dbe4ef; border-radius: 99px; overflow: hidden;">
+                        <div style="height: 100%; width: {pct}%; background: linear-gradient(90deg, {c_color}99, {c_color}); border-radius: 99px;"></div>
                     </div>
-                    <div style="width: 50px; text-align: right; font-size: 14px; font-weight: 700; color: #0f172a;">{pct}%</div>
-                    <div style="width: 80px; text-align: right; font-size: 13px; font-weight: 500; color: #94a3b8;">{visits} visits</div>
+                    <div style="text-align: right; font-size: 13px; font-weight: 800; color: #0f172a;">{pct}%</div>
+                    <div style="text-align: right; font-size: 12px; font-weight: 600; color: #64748b;">{visits} visits</div>
                 </div>
             '''
-        geo_html += '</div></div>'
+        geo_html += '</div></section>'
 
-        
         # Decorative divider
         divider = '<hr style="border: 0; height: 1px; background: #e2e8f0; margin: 40px 0;" />'
-        
+
         context_str = f"KPI Metrics: {kpi}\n\nSecondary Metrics: {secondary}\n\nTop Locations: {locations}\n\nFeature Activities: {activities}"
-        
+
         prompt = f"""
         You are an expert UX Researcher and Strategic Data Analyst for NexaBank.
         Write a detailed, critical analysis report based on the following raw metrics for tenant '{tenant_id}'.
@@ -1620,39 +1744,48 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
 
         CRITICAL INSTRUCTIONS: Focus deeply on **HOW we can improve user interaction** and **HOW we can use structural data insights to make the overall product better**. Provide a heavily analytical perspective.
         IMPORTANT: Make sure to strictly emphasize and identify where the user journey usually falls off. Use **bold** and `highlight` text (e.g. <mark>highlighted text</mark> or **bold text**) wherever you feel it is critical to draw the reader's attention to these drop-offs.
-        
+
         Please structure your Markdown report exactly as follows:
-        
+
         ## 1. Executive Summary
         (High-level summary of current product usage health, drop-offs, and critical gaps.)
-        
+
         ## 2. User Interaction Evaluation
         (Analyze what the data says about how users are interacting with features. Where are the friction points? What behaviors highlight poor UX?)
-        
+
         ## 3. Product Enhancement Strategy
         (Concrete proposals on how to use these data insights to iterate on the platform. What features should be built next, redesigned, or sunset?)
-        
+
         ## 4. Geographic & Engagement Insights
         (Brief thoughts on the diverse footprint of the user base and retention anomalies.)
-        
+
         Do not include any raw JSON or filler content. Do not output anything outside of the markdown itself.
         """
         from api.insights import query_ollama
         llm_response = query_ollama(prompt)
-        
+
         if not llm_response:
-             raise HTTPException(status_code=503, detail="AI Model currently initializing or unavailable.")
-             
+            raise HTTPException(status_code=503, detail="AI Model currently initializing or unavailable.")
+
         # Combine HTML payload with Markdown report
         final_report = f"{kpi_cards_html}\n{activity_html}\n{geo_html}\n{divider}\n{llm_response}"
+        insights_payload = generate_insights(tenant_id)
              
         # Store in cache
         AI_REPORT_CACHE[tenant_id] = {
             "timestamp": time.time(),
-            "report": final_report
+            "report": final_report,
+            "insights": insights_payload,
+            "generated_at": datetime.utcnow().isoformat(),
         }
-        
-        return {"tenant_id": tenant_id, "report": final_report, "cached": False}
+
+        return {
+            "tenant_id": tenant_id,
+            "report": final_report,
+            "cached": False,
+            "generated_at": AI_REPORT_CACHE[tenant_id]["generated_at"],
+            "insights": insights_payload,
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()
