@@ -17,5 +17,5 @@ COPY . .
 # Expose port
 EXPOSE 5000
 
-# Run with ts-node in dev mode
-CMD ["npx", "nodemon", "--ext", "ts", "--exec", "npx ts-node src/server.ts"]
+# Run migration, seed, then start dev server
+CMD sh -c "npx prisma db push --skip-generate && npx ts-node src/seedTenants.ts && npx nodemon --ext ts --exec 'npx ts-node src/server.ts'"

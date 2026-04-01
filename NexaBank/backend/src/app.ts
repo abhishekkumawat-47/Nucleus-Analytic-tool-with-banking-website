@@ -9,6 +9,7 @@ import transactionRoutes from "./routes/transactionRoutes";
 import loanRoutes from "./routes/loanRoutes";
 import eventRoutes from "./routes/eventRoutes";
 import tenantRoutes from "./routes/tenantRoutes";
+import proRoutes from "./routes/proRoutes";
 import { isLoggedIn } from "./middleware/IsLoggedIn";
 import { apiTrackingMiddleware } from "./middleware/eventTracker";
 
@@ -45,6 +46,7 @@ app.use(apiTrackingMiddleware);
 // Routes
 app.use("/api", userRoutes);
 app.use("/api", eventRoutes);
+app.use("/api/pro", isLoggedIn, proRoutes);
 app.use("/api", isLoggedIn, accountRoutes);
 app.use("/api", isLoggedIn, transactionRoutes);
 app.use("/api", isLoggedIn, loanRoutes);

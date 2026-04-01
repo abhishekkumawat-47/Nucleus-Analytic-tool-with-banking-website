@@ -5,6 +5,7 @@ import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { TrendingUp, TrendingDown, Activity, Users, Loader2 } from 'lucide-react';
 import ChartContainer from '@/components/ChartContainer';
+import { TableSkeleton } from '@/components/Skeletons';
 
 export default function PredictivePage() {
   const { selectedTenant } = useDashboardData();
@@ -46,9 +47,7 @@ export default function PredictivePage() {
     return (
       <div className="animate-in fade-in duration-500 space-y-6">
         <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">Predictive Adoption Insights</h1>
-        <div className="flex items-center justify-center p-20">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        </div>
+        <TableSkeleton rows={6} />
       </div>
     );
   }

@@ -611,7 +611,7 @@ export default function TransparencyPage() {
                   <section>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <FunnelChart data={dashboardData.funnelData} />
-                      <FeatureHeatmap data={dashboardData.featureActivity} />
+                      <FeatureHeatmap />
                     </div>
                   </section>
 

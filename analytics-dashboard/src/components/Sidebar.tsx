@@ -119,16 +119,16 @@ function Sidebar(_props: SidebarProps) {
               : 'bg-blue-50 text-blue-700 border border-blue-200'
           }`}>
             {role === 'app_admin' ? (
-              <><Shield className="w-3 h-3" /> App Admin</>
+              <>App Admin</>
             ) : (
-              <><Cloud className="w-3 h-3" /> Super Admin</>
+              <>Super Admin</>
             )}
           </div>
         </div>
       )}
 
       {/* Navigation Items */}
-      <nav className="flex-1 py-4 space-y-1">
+      <nav className="flex-1 py-4 space-y-1 overflow-y-auto custom-scrollbar">
         {navItems.map((item) => {
           const IconComponent = iconMap[item.icon] || LayoutDashboard;
           const isActive = pathname === item.href || (item.id === 'dashboard' && pathname === '/');
@@ -140,7 +140,7 @@ function Sidebar(_props: SidebarProps) {
               className={`flex items-center gap-3 px-3 py-2.5 mx-3 rounded-lg text-[13px] font-medium transition-all duration-200 group ${
                 isActive
                   ? 'bg-[#f1f3f4] text-[#1a73e8]'
-                  : 'text-gray-600 hover:bg-gray-50'
+                  : 'text-gray-600 px-2 hover:bg-gray-50'
               }`}
               title={sidebarCollapsed ? item.label : undefined}
             >

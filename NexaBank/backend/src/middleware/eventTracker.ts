@@ -21,14 +21,15 @@ async function forwardToIngestionAPI(
   eventName: string,
   userId: string,
   tenantId: string,
-  metadata: Record<string, any>
+  metadata: Record<string, any>,
+  timestampOverride?: number
 ): Promise<void> {
   try {
     await axios.post(INGESTION_API_URL, {
       event_name: eventName,
       tenant_id: "nexabank",
       user_id: userId,
-      timestamp: Date.now() / 1000,
+      timestamp: timestampOverride || Date.now() / 1000,
       channel: "web",
       metadata: {
         ...metadata,
@@ -50,7 +51,8 @@ export async function trackEvent(
   eventName: string,
   customerId: string | null,
   tenantId: string,
-  metadata: Record<string, any>
+  metadata: Record<string, any>,
+  timestampOverride?: number
 ): Promise<void> {
   try {
     const hashedUserId = customerId ? hashUserId(customerId) : "anonymous";
@@ -61,11 +63,12 @@ export async function trackEvent(
         userId: hashedUserId,
         customerId: customerId || null,
         metadata,
+        timestamp: timestampOverride ? new Date(timestampOverride * 1000) : undefined,
       },
     });
 
     // Also forward to the Pathway analytics pipeline (fire-and-forget)
-    forwardToIngestionAPI(eventName, hashedUserId, tenantId, metadata).catch(() => {});
+    forwardToIngestionAPI(eventName, hashedUserId, tenantId, metadata, timestampOverride).catch(() => {});
   } catch (err) {
     console.error("[EVENT_TRACKER] Failed to store event:", err);
   }

@@ -183,6 +183,20 @@ export const dashboardAPI = {
     }
   },
 
+  /** Fetch grid-based heatmap matrix for multi-tenant or time-based single tenant */
+  async getFeatureHeatmap(tenantIds: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/features/heatmap?tenant_id=${tenantIds}`);
+      return response.data;
+    } catch {
+      return {
+        is_compare: false,
+        groups: ['Error'],
+        activities: []
+      };
+    }
+  },
+
   /** Fetch tenant comparison data — scoped to the selected tenant for app_admins */
   async getTenants(tenantId?: string): Promise<Tenant[]> {
     try {
