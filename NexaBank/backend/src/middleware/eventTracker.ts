@@ -36,16 +36,20 @@ async function forwardToIngestionAPI(
         source_tenant: tenantId,
         role: metadata.role || "user",
         device_type: metadata.device_type || "desktop",
+        // Location metadata for continent-level analytics
+        location: metadata.country || metadata.location || undefined,
+        continent: metadata.continent || undefined,
+        city: metadata.city || undefined,
       },
     }, { timeout: 3000 });
-    console.log(`[EVENT_TRACKER] Forwarded to ingestion: ${eventName}`);
   } catch (err: any) {
-    console.warn("[EVENT_TRACKER] Ingestion API forwarding failed:", err.message || err);
+    // Silent fail — analytics should never break the primary app
   }
 }
 
 /**
  * Tracks an analytics event to the DB and forwards to Pathway ingestion API.
+ * Also broadcasts via WebSocket for real-time dashboard updates.
  */
 export async function trackEvent(
   eventName: string,
@@ -67,8 +71,28 @@ export async function trackEvent(
       },
     });
 
-    // Also forward to the Pathway analytics pipeline (fire-and-forget)
+    // Forward to the Pathway analytics pipeline (fire-and-forget)
     forwardToIngestionAPI(eventName, hashedUserId, tenantId, metadata, timestampOverride).catch(() => {});
+
+    // Broadcast via WebSocket for real-time updates (lazy import to avoid circular deps)
+    try {
+      const { broadcastEvent } = require("../server");
+      if (broadcastEvent) {
+        broadcastEvent("event", {
+          eventName,
+          tenantId,
+          userId: hashedUserId,
+          metadata: {
+            country: metadata.country,
+            city: metadata.city,
+            continent: metadata.continent,
+            device_type: metadata.device_type,
+          },
+        });
+      }
+    } catch {
+      // broadcastEvent not available yet during startup — safe to ignore
+    }
   } catch (err) {
     console.error("[EVENT_TRACKER] Failed to store event:", err);
   }

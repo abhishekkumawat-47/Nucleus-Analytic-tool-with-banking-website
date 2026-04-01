@@ -2,12 +2,28 @@ import { Request, Response } from "express";
 import { prisma } from "../prisma";
 import { trackEvent } from "../middleware/eventTracker";
 
+/** Typed request with authenticated user */
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    tenantId?: string;
+  };
+}
+
+/** Typed investment entry stored in account.investment JSON */
+interface Investment {
+  type: string;
+  asset: string;
+  amount: number;
+  avgPrice: number;
+}
+
 // ─── POST /pro/unlock ──────────────────────────────────────────
 // Deducts ₹2,000 and issues a 1-month license
 export const unlockFeature = async (req: Request, res: Response): Promise<void> => {
   const { featureId } = req.body;
-  const customerId = (req as any).user?.id;
-  const tenantId = (req as any).user?.tenantId || "bank_a";
+  const customerId = (req as AuthenticatedRequest).user?.id;
+  const tenantId = (req as AuthenticatedRequest).user?.tenantId || "bank_a";
 
   if (!featureId || !customerId) {
     res.status(400).json({ error: "Missing featureId or customerId" });
@@ -29,7 +45,7 @@ export const unlockFeature = async (req: Request, res: Response): Promise<void> 
     const primaryAccount = accounts[0];
 
     // 2. Perform atomic transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // Deduct fee
       await tx.account.update({
         where: { accNo: primaryAccount.accNo },
@@ -78,7 +94,7 @@ export const unlockFeature = async (req: Request, res: Response): Promise<void> 
 // ─── GET /pro/status ───────────────────────────────────────────
 // Returns unlocked features for the user
 export const getProStatus = async (req: Request, res: Response): Promise<void> => {
-  const customerId = (req as any).user?.id;
+  const customerId = (req as AuthenticatedRequest).user?.id;
   if (!customerId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -98,8 +114,8 @@ export const getProStatus = async (req: Request, res: Response): Promise<void> =
 // Simulates buying/selling crypto and updates investment JSON
 export const executeTrade = async (req: Request, res: Response): Promise<void> => {
   const { asset, amount, price, type } = req.body; // type: 'BUY' | 'SELL'
-  const customerId = (req as any).user?.id;
-  const tenantId = (req as any).user?.tenantId || "bank_a";
+  const customerId = (req as AuthenticatedRequest).user?.id;
+  const tenantId = (req as AuthenticatedRequest).user?.tenantId || "bank_a";
 
   if (!asset || !amount || !price || !customerId) {
     res.status(400).json({ error: "Missing trade details" });
@@ -124,10 +140,10 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
     }
 
     // Update investment JSON and balance
-    const currentInvestments = (account.investment as any) || [];
-    let updatedInvestments = [...currentInvestments];
+    const currentInvestments = (account.investment as unknown as Investment[]) || [];
+    let updatedInvestments: Investment[] = [...currentInvestments];
 
-    const assetIndex = updatedInvestments.findIndex((i: any) => i.asset === asset);
+    const assetIndex = updatedInvestments.findIndex((i: Investment) => i.asset === asset);
 
     if (type === "BUY") {
       if (assetIndex > -1) {
@@ -153,7 +169,7 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
         where: { accNo: account.accNo },
         data: { 
           balance: type === "BUY" ? { decrement: totalCost } : { increment: totalCost },
-          investment: updatedInvestments
+          investment: updatedInvestments as any
         },
       }),
       prisma.transaction.create({
@@ -178,3 +194,183 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ error: "Trade failed" });
   }
 };
+
+// ─── POST /pro/download_book ───────────────────────────────────────────
+export const downloadBook = async (req: Request, res: Response): Promise<void> => {
+  const { title } = req.body;
+  const customerId = (req as AuthenticatedRequest).user?.id;
+  const tenantId = (req as AuthenticatedRequest).user?.tenantId || "bank_a";
+
+  if (!title || !customerId) {
+    res.status(400).json({ error: "Missing title" });
+    return;
+  }
+  
+  try {
+    // Only track the event to register dynamic feature usage
+    await trackEvent("ai_insight_download", customerId, tenantId, { title, feature: "ai-insights" });
+    res.status(200).json({ success: true, message: `Downloading ${title}...` });
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).json({ error: "Download failed" });
+  }
+};
+
+// ─── POST /pro/rebalance_wealth ───────────────────────────────────────────
+export const rebalanceWealth = async (req: Request, res: Response): Promise<void> => {
+  const customerId = (req as AuthenticatedRequest).user?.id;
+  const tenantId = (req as AuthenticatedRequest).user?.tenantId || "bank_a";
+
+  if (!customerId) {
+    res.status(400).json({ error: "Missing customerId" });
+    return;
+  }
+  
+  try {
+    // 1. Verify license
+    const license = await prisma.userLicense.findFirst({
+      where: { customerId, featureId: "wealth-management-pro", active: true, expiryDate: { gt: new Date() } }
+    });
+    if (!license) {
+      res.status(403).json({ error: "Active wealth-management-pro license required." });
+      return;
+    }
+
+    // 2. Get accounts and compute total portfolio value
+    const accounts = await prisma.account.findMany({
+      where: { customerId, accountType: { in: ["SAVINGS", "CURRENT", "INVESTMENT"] } },
+    });
+
+    if (accounts.length === 0) {
+      res.status(404).json({ error: "No accounts found" });
+      return;
+    }
+
+    const primaryAccount = accounts[0];
+    const currentInvestments = (primaryAccount.investment as unknown as Investment[]) || [];
+    const cashBalance = primaryAccount.balance;
+    
+    // Calculate total value of existing investments
+    const investmentValue = currentInvestments.reduce((sum: number, inv: Investment) => {
+      return sum + (inv.amount * inv.avgPrice);
+    }, 0);
+    
+    const totalPortfolioValue = cashBalance + investmentValue;
+
+    // 3. Define target allocation weights
+    const TARGET_WEIGHTS = {
+      STOCKS: 0.40,
+      BONDS: 0.25,
+      CRYPTO: 0.20,
+      CASH_RESERVE: 0.15,
+    };
+
+    // 4. Compute rebalanced portfolio
+    const rebalancedInvestments = [
+      { type: "STOCKS", asset: "INDEX_FUND", amount: 1, avgPrice: Math.round(totalPortfolioValue * TARGET_WEIGHTS.STOCKS) },
+      { type: "BONDS", asset: "GOVT_BONDS", amount: 1, avgPrice: Math.round(totalPortfolioValue * TARGET_WEIGHTS.BONDS) },
+      { type: "CRYPTO", asset: "BTC", amount: parseFloat(((totalPortfolioValue * TARGET_WEIGHTS.CRYPTO) / 5412042.45).toFixed(4)), avgPrice: 5412042.45 },
+    ];
+
+    const newCashBalance = Math.round(totalPortfolioValue * TARGET_WEIGHTS.CASH_RESERVE);
+
+    // 5. Update database
+    await prisma.$transaction([
+      prisma.account.update({
+        where: { accNo: primaryAccount.accNo },
+        data: {
+          balance: newCashBalance,
+          investment: rebalancedInvestments as any,
+        },
+      }),
+      prisma.transaction.create({
+        data: {
+          transactionType: "PAYMENT",
+          senderAccNo: primaryAccount.accNo,
+          receiverAccNo: "WEALTH-REBALANCE-SYS",
+          amount: Math.abs(cashBalance - newCashBalance),
+          status: "SUCCESS",
+          category: "Portfolio Rebalance",
+          description: `Rebalanced ₹${totalPortfolioValue.toLocaleString("en-IN")} across 4 asset classes`,
+          channel: "WEB",
+        },
+      }),
+    ]);
+
+    await trackEvent("wealth_rebalance", customerId, tenantId, {
+      feature: "wealth-management-pro",
+      totalValue: totalPortfolioValue,
+      allocations: TARGET_WEIGHTS,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Portfolio rebalanced successfully",
+      portfolio: {
+        total: totalPortfolioValue,
+        cash: newCashBalance,
+        investments: rebalancedInvestments,
+        weights: TARGET_WEIGHTS,
+      },
+    });
+  } catch (err) {
+    console.error("Rebalance error:", err);
+    res.status(500).json({ error: "Rebalance failed" });
+  }
+};
+
+// ─── POST /pro/process_payroll ───────────────────────────────────────────
+export const processPayroll = async (req: Request, res: Response): Promise<void> => {
+  const customerId = (req as AuthenticatedRequest).user?.id;
+  const tenantId = (req as AuthenticatedRequest).user?.tenantId || "bank_a";
+  const { totalAmount, employeesCount } = req.body;
+
+  if (!customerId || !totalAmount) {
+    res.status(400).json({ error: "Missing payroll details" });
+    return;
+  }
+  
+  try {
+    // Attempt to deduct the total amount
+    const account = await prisma.account.findFirst({
+      where: { customerId, accountType: { in: ["SAVINGS", "CURRENT"] } },
+      orderBy: { balance: "desc" }
+    });
+
+    if (!account || account.balance < totalAmount) {
+      res.status(400).json({ error: "Insufficient funds for payroll batch" });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.account.update({
+        where: { accNo: account.accNo },
+        data: { balance: { decrement: totalAmount } }
+      }),
+      prisma.transaction.create({
+        data: {
+          transactionType: "PAYMENT",
+          senderAccNo: account.accNo,
+          receiverAccNo: "EXTERNAL-PAYROLL",
+          amount: totalAmount,
+          status: "SUCCESS",
+          category: "Payroll Batch processing",
+          description: `Paid ${employeesCount} employees`,
+          channel: "WEB"
+        }
+      })
+    ]);
+
+    await trackEvent("payroll_batch_processed", customerId, tenantId, { 
+      feature: "bulk-payroll-processing", 
+      amount: totalAmount,
+      employees: employeesCount 
+    });
+    
+    res.status(200).json({ success: true, message: "Payroll processed" });
+  } catch (err) {
+    console.error("Payroll error:", err);
+    res.status(500).json({ error: "Payroll failed" });
+  }
+};
+

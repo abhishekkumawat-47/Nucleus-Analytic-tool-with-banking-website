@@ -18,7 +18,7 @@ router.get("/tenants/ifsc-list", async (_req: Request, res: Response): Promise<v
       },
     });
 
-    const ifscList = tenants.map((t) => ({
+    const ifscList = tenants.map((t: any) => ({
       bankName: t.name,
       ifsc: `${t.ifscPrefix}${t.branchCode}`,
       tenantId: t.id,

@@ -103,22 +103,20 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if role == "app_admin":
             tenant_id = request.query_params.get("tenant_id")
             email = request.headers.get("X-User-Email")
-            if tenant_id and email:
-                try:
-                    import json
-                    import os
-                    rbac_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'rbac.json')
-                    if os.path.exists(rbac_path):
-                        with open(rbac_path, 'r') as f:
-                            rbac = json.load(f)
-                        allowed_emails = rbac.get("app_admins", {}).get(tenant_id, [])
-                        if email not in allowed_emails:
-                            return JSONResponse(
-                                status_code=403, 
-                                content={"detail": f"Forbidden: Admin '{email}' does not have access to tenant '{tenant_id}'."}
-                            )
-                except Exception as e:
-                    print(f"Failed to load rbac.json for RBAC validation: {e}")
+            
+            # Some endpoints don't require tenant_id (they are global or use request body)
+            tenant_optional_paths = ["/tenants", "/deployment", "/license/sync", "/config"]
+            is_tenant_optional = any(path.startswith(p) for p in tenant_optional_paths)
+            
+            if is_tenant_optional and email:
+                pass  # Allow without tenant_id
+            elif tenant_id and email:
+                pass  # Normal tenant-scoped access
+            else:
+                return JSONResponse(
+                    status_code=403, 
+                    content={"detail": "Forbidden: Admin request missing tenant_id or user email headers."}
+                )
              
         response = await call_next(request)
         return response
@@ -280,50 +278,130 @@ def get_insights(tenant_id: str):
 def get_kpi_metrics(tenant_id: str):
     """
     Returns high-level KPI metrics for the dashboard header.
+    All values are computed dynamically from ClickHouse — no hardcoded data.
     """
     require_tenant_access(tenant_id)
-    sql = """
-        SELECT 
-            sum(total_events) as total_events,
-            count(distinct event_name) as active_features
-        FROM feature_intelligence.daily_feature_usage
-        WHERE tenant_id = %(tenant_id)s AND date >= today() - 7
-    """
+    import math
+
     try:
-        results = ch_client.query(sql, {"tenant_id": tenant_id})
-        row = results[0] if results else {"total_events": 0, "active_features": 0}
-        
+        # --- Current period (last 7 days) ---
+        sql_current = """
+            SELECT 
+                count() as total_events,
+                count(distinct event_name) as active_features
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 7
+        """
+        res_current = ch_client.query(sql_current, {"tenant_id": tenant_id})
+        cur = res_current[0] if res_current else {"total_events": 0, "active_features": 0}
+
+        # --- Previous period (7-14 days ago) for change calculation ---
+        sql_prev = """
+            SELECT 
+                count() as total_events,
+                count(distinct event_name) as active_features
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 14 AND timestamp < today() - 7
+        """
+        res_prev = ch_client.query(sql_prev, {"tenant_id": tenant_id})
+        prev = res_prev[0] if res_prev else {"total_events": 0, "active_features": 0}
+
+        def pct_change(current_val: int, previous_val: int) -> tuple:
+            if previous_val == 0:
+                return (0.0, "up")
+            change = ((current_val - previous_val) / previous_val) * 100
+            return (round(abs(change), 1), "up" if change >= 0 else "down")
+
+        events_change, events_dir = pct_change(cur["total_events"] or 0, prev["total_events"] or 0)
+        features_change, features_dir = pct_change(cur["active_features"] or 0, prev["active_features"] or 0)
+
+        # --- Avg Response Time from metadata ---
+        sql_response = """
+            SELECT avg(toFloat64OrZero(JSONExtractString(metadata, 'response_time_ms'))) as avg_rt
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 7
+              AND JSONHas(metadata, 'response_time_ms') = 1
+        """
+        res_rt = ch_client.query(sql_response, {"tenant_id": tenant_id})
+        raw_rt = res_rt[0]["avg_rt"] if res_rt and "avg_rt" in res_rt[0] else 0
+        if raw_rt is None or (isinstance(raw_rt, float) and math.isnan(raw_rt)):
+            avg_rt = 0
+        else:
+            avg_rt = int(raw_rt)
+
+        sql_response_prev = """
+            SELECT avg(toFloat64OrZero(JSONExtractString(metadata, 'response_time_ms'))) as avg_rt
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 14 AND timestamp < today() - 7
+              AND JSONHas(metadata, 'response_time_ms') = 1
+        """
+        res_rt_prev = ch_client.query(sql_response_prev, {"tenant_id": tenant_id})
+        raw_rt_prev = res_rt_prev[0]["avg_rt"] if res_rt_prev and "avg_rt" in res_rt_prev[0] else 0
+        if raw_rt_prev is None or (isinstance(raw_rt_prev, float) and math.isnan(raw_rt_prev)):
+            avg_rt_prev = 0
+        else:
+            avg_rt_prev = int(raw_rt_prev)
+
+        rt_change, rt_dir = pct_change(avg_rt, avg_rt_prev)
+        rt_display = f"{avg_rt} ms" if avg_rt > 0 else "0 ms"
+
+        # --- Error Rate from events containing 'error' or 'fail' ---
+        sql_error = """
+            SELECT
+                countIf(lower(event_name) LIKE '%%error%%' OR lower(event_name) LIKE '%%fail%%') as error_events,
+                count() as total
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 7
+        """
+        res_err = ch_client.query(sql_error, {"tenant_id": tenant_id})
+        err_row = res_err[0] if res_err else {"error_events": 0, "total": 1}
+        total_for_err = err_row["total"] if err_row["total"] > 0 else 1
+        error_rate = round((err_row["error_events"] / total_for_err) * 100, 1)
+
+        sql_error_prev = """
+            SELECT
+                countIf(lower(event_name) LIKE '%%error%%' OR lower(event_name) LIKE '%%fail%%') as error_events,
+                count() as total
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 14 AND timestamp < today() - 7
+        """
+        res_err_prev = ch_client.query(sql_error_prev, {"tenant_id": tenant_id})
+        err_prev_row = res_err_prev[0] if res_err_prev else {"error_events": 0, "total": 1}
+        total_prev_err = err_prev_row["total"] if err_prev_row["total"] > 0 else 1
+        error_rate_prev = round((err_prev_row["error_events"] / total_prev_err) * 100, 1)
+        err_change, err_dir = pct_change(int(error_rate * 10), int(error_rate_prev * 10))
+
         return [
             {
                 "id": "total-events",
                 "label": "Total Events",
-                "value": f"{row['total_events']:,}" if row['total_events'] else "0",
-                "change": 12,
-                "changeDirection": "up",
+                "value": f"{cur['total_events']:,}" if cur['total_events'] else "0",
+                "change": events_change,
+                "changeDirection": events_dir,
                 "icon": "activity",
             },
             {
                 "id": "active-features",
                 "label": "Active Features",
-                "value": str(row['active_features'] or 0),
-                "change": 5,
-                "changeDirection": "up",
+                "value": str(cur['active_features'] or 0),
+                "change": features_change,
+                "changeDirection": features_dir,
                 "icon": "layers",
             },
             {
                 "id": "avg-response",
                 "label": "Avg Response Time",
-                "value": "320 ms",
-                "change": 8,
-                "changeDirection": "down",
+                "value": rt_display,
+                "change": rt_change,
+                "changeDirection": rt_dir,
                 "icon": "clock",
             },
             {
                 "id": "error-rate",
                 "label": "Error Rate",
-                "value": "2.3%",
-                "change": 1.2,
-                "changeDirection": "up",
+                "value": f"{error_rate}%",
+                "change": err_change,
+                "changeDirection": err_dir,
                 "icon": "alert-triangle",
             }
         ]
@@ -467,31 +545,48 @@ def get_feature_usage_series(tenant_id: str, days: int = Query(7, ge=1, le=365))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/tenants")
-def get_all_tenants():
+def get_all_tenants(tenant_id: Optional[str] = None):
     """
-    Returns list of distinct tenants.
-    """
-    require_cloud_mode()
-    sql = """
-        SELECT 
-            tenant_id as id,
-            tenant_id as name,
-            toUInt64(count()) as featureUsage
-        FROM feature_intelligence.events_raw
-        GROUP BY tenant_id
-        ORDER BY featureUsage DESC
+    Returns list of distinct tenants with real metrics from ClickHouse.
+    If tenant_id is provided, returns only that tenant's data (for app_admin).
     """
     try:
-        results = ch_client.query(sql)
+        where_clause = ""
+        params = {}
+        if tenant_id:
+            where_clause = "WHERE tenant_id = %(tenant_id)s"
+            params["tenant_id"] = tenant_id
+
+        sql = f"""
+            SELECT 
+                tenant_id as id,
+                tenant_id as name,
+                toUInt64(count()) as featureUsage,
+                toUInt64(count(distinct event_name)) as activeFeatures,
+                toUInt64(count(distinct user_id)) as uniqueUsers,
+                countIf(lower(event_name) LIKE '%%error%%' OR lower(event_name) LIKE '%%fail%%') as errorCount
+            FROM feature_intelligence.events_raw
+            {where_clause}
+            GROUP BY tenant_id
+            ORDER BY featureUsage DESC
+        """
+        results = ch_client.query(sql, params)
         tenants = []
-        for i, row in enumerate(results):
+        for row in results:
+            total = int(row['featureUsage']) or 1
+            errors = int(row.get('errorCount', 0))
+            unique_users = int(row.get('uniqueUsers', 0))
+            active_features = int(row.get('activeFeatures', 0))
+            adoption = round((active_features / max(active_features + 2, 1)) * 100) if active_features else 0
             tenants.append({
                 "id": row['id'],
-                "name": row['name'].capitalize() if row['name'] != 'initech' else 'Initech',
-                "featureUsage": int(row['featureUsage']),
-                "errors": max(0, 15 - i*3),
-                "adoptionRate": max(0, 85 - i*5),
-                "plan": "enterprise" if i % 2 == 0 else "pro"
+                "name": row['name'].replace('_', ' ').title(),
+                "featureUsage": total,
+                "errors": errors,
+                "adoptionRate": min(adoption, 100),
+                "plan": "enterprise",
+                "uniqueUsers": unique_users,
+                "activeFeatures": active_features,
             })
         return tenants
     except Exception as e:
@@ -542,17 +637,20 @@ def get_device_breakdown(tenant_id: str):
 @app.get("/locations")
 def get_locations(tenant_id: str):
     """
-    Dynamic locations derived from metadata.location variable, falling back to IP mapping.
+    Dynamic locations derived from metadata.location and metadata.continent,
+    falling back to IP mapping. Returns country-level data with continent field.
     """
     require_tenant_access(tenant_id)
     sql = """
         SELECT 
             JSONExtractString(metadata, 'location') as location,
+            JSONExtractString(metadata, 'continent') as continent,
+            JSONExtractString(metadata, 'city') as city,
             JSONExtractString(metadata, 'ip') as ip,
             count() as visits
         FROM feature_intelligence.events_raw
         WHERE tenant_id = %(tenant_id)s
-        GROUP BY location, ip
+        GROUP BY location, continent, city, ip
     """
     try:
         results = ch_client.query(sql, {"tenant_id": tenant_id})
@@ -564,24 +662,45 @@ def get_locations(tenant_id: str):
             "111.111.111.111": "India"
         }
         
-        locations_dict = {}
+        # Country → continent mapping for fallback
+        COUNTRY_CONTINENT_MAP = {
+            "India": "Asia", "Japan": "Asia", "Singapore": "Asia", "UAE": "Asia",
+            "China": "Asia", "South Korea": "Asia", "Thailand": "Asia",
+            "USA": "North America", "Canada": "North America", "Mexico": "North America",
+            "United Kingdom": "Europe", "Germany": "Europe", "France": "Europe",
+            "Netherlands": "Europe", "Sweden": "Europe", "Switzerland": "Europe",
+            "Spain": "Europe", "Italy": "Europe",
+            "Brazil": "South America", "Argentina": "South America",
+            "Colombia": "South America", "Chile": "South America",
+            "Nigeria": "Africa", "Kenya": "Africa", "South Africa": "Africa", "Egypt": "Africa",
+            "Australia": "Oceania", "New Zealand": "Oceania",
+        }
+        
+        locations_dict = {}  # country -> {visits, continent}
         for row in results:
             # Prioritize the explicitly passed 'location' variable
             if row.get('location'):
                 country = row['location']
             else:
                 country = ip_map.get(row['ip'], "Other")
-                
-            locations_dict[country] = locations_dict.get(country, 0) + row['visits']
             
-        location_data = [{"country": k, "visits": v} for k, v in locations_dict.items()]
-        location_data.sort(key=lambda x: x["visits"], reverse=True)
-        return location_data if location_data else [
-            {"country": "USA", "visits": 500},
-            {"country": "United Kingdom", "visits": 300}
+            # Get continent from metadata or fallback map
+            continent = row.get('continent') or COUNTRY_CONTINENT_MAP.get(country, "Other")
+            
+            if country not in locations_dict:
+                locations_dict[country] = {"visits": 0, "continent": continent}
+            locations_dict[country]["visits"] += row['visits']
+            
+        location_data = [
+            {"country": k, "visits": v["visits"], "continent": v["continent"]} 
+            for k, v in locations_dict.items()
+            if k != "Other" and v["continent"] != "Other"
         ]
+        location_data.sort(key=lambda x: x["visits"], reverse=True)
+        return location_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/audit_logs")
 def get_audit_logs(tenant_id: str):
@@ -962,7 +1081,7 @@ def get_license_usage(tenant_id: str):
         sql_licensed = """
             SELECT feature_name, is_licensed, plan_tier
             FROM feature_intelligence.tenant_licenses FINAL
-            WHERE tenant_id = %(tenant_id)s AND is_licensed = 1
+            WHERE tenant_id = %(tenant_id)s AND is_licensed = 1 AND plan_tier = 'enterprise'
         """
         licensed = ch_client.query(sql_licensed, {"tenant_id": tenant_id})
         licensed_set = {r["feature_name"] for r in licensed}

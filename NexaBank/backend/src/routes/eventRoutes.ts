@@ -237,30 +237,134 @@ function weightedPick<T>(items: T[], weights: number[]): T {
   return items[items.length - 1];
 }
 
-// Data pools
-const FIRST_NAMES = ["Aarav", "Priya", "Rahul", "Neha", "Amit", "Sneha", "Vikas", "Pooja", "Rajan", "Divya", "Karan", "Anita", "Suresh", "Meera", "Arjun", "Kavya", "Rohit", "Simran", "Deepak", "Nisha", "Vivek", "Sanya", "Harsh", "Ritika", "Manish", "Tanvi", "Akash", "Komal", "Nikhil", "Aditi"];
-const LAST_NAMES = ["Sharma", "Patel", "Kumar", "Singh", "Verma", "Gupta", "Joshi", "Mehta", "Shah", "Agarwal", "Rao", "Nair", "Iyer", "Pillai", "Reddy", "Deshmukh", "Yadav", "Chauhan", "Saxena", "Malhotra"];
-const INDIAN_CITIES = [
-  { city: "Mumbai", state: "Maharashtra", lat: 19.076, lon: 72.877 },
-  { city: "Delhi", state: "Delhi", lat: 28.613, lon: 77.209 },
-  { city: "Bangalore", state: "Karnataka", lat: 12.971, lon: 77.594 },
-  { city: "Hyderabad", state: "Telangana", lat: 17.385, lon: 78.486 },
-  { city: "Chennai", state: "Tamil Nadu", lat: 13.082, lon: 80.270 },
-  { city: "Kolkata", state: "West Bengal", lat: 22.572, lon: 88.363 },
-  { city: "Pune", state: "Maharashtra", lat: 18.520, lon: 73.856 },
-  { city: "Jaipur", state: "Rajasthan", lat: 26.912, lon: 75.787 },
-  { city: "Ahmedabad", state: "Gujarat", lat: 23.022, lon: 72.571 },
-  { city: "Lucknow", state: "Uttar Pradesh", lat: 26.846, lon: 80.946 },
-  { city: "Bhopal", state: "Madhya Pradesh", lat: 23.259, lon: 77.412 },
-  { city: "Chandigarh", state: "Punjab", lat: 30.733, lon: 76.779 },
+// ═══════════════════════════════════════════════════════════════
+// ─── WORLDWIDE CITIES (6 continents, 40+ cities) ─────────────
+// ═══════════════════════════════════════════════════════════════
+
+interface WorldCity {
+  city: string;
+  country: string;
+  continent: string;
+  lat: number;
+  lon: number;
+}
+
+const WORLDWIDE_CITIES: WorldCity[] = [
+  // ── Asia (30% weight) ─────────────────────────
+  { city: "Mumbai", country: "India", continent: "Asia", lat: 19.076, lon: 72.877 },
+  { city: "Delhi", country: "India", continent: "Asia", lat: 28.613, lon: 77.209 },
+  { city: "Bangalore", country: "India", continent: "Asia", lat: 12.971, lon: 77.594 },
+  { city: "Hyderabad", country: "India", continent: "Asia", lat: 17.385, lon: 78.486 },
+  { city: "Chennai", country: "India", continent: "Asia", lat: 13.082, lon: 80.270 },
+  { city: "Kolkata", country: "India", continent: "Asia", lat: 22.572, lon: 88.363 },
+  { city: "Pune", country: "India", continent: "Asia", lat: 18.520, lon: 73.856 },
+  { city: "Jaipur", country: "India", continent: "Asia", lat: 26.912, lon: 75.787 },
+  { city: "Tokyo", country: "Japan", continent: "Asia", lat: 35.682, lon: 139.692 },
+  { city: "Singapore", country: "Singapore", continent: "Asia", lat: 1.352, lon: 103.820 },
+  { city: "Dubai", country: "UAE", continent: "Asia", lat: 25.276, lon: 55.296 },
+  { city: "Shanghai", country: "China", continent: "Asia", lat: 31.230, lon: 121.474 },
+  { city: "Seoul", country: "South Korea", continent: "Asia", lat: 37.566, lon: 126.978 },
+  { city: "Bangkok", country: "Thailand", continent: "Asia", lat: 13.756, lon: 100.502 },
+
+  // ── North America (25% weight) ────────────────
+  { city: "New York", country: "USA", continent: "North America", lat: 40.713, lon: -74.006 },
+  { city: "San Francisco", country: "USA", continent: "North America", lat: 37.774, lon: -122.419 },
+  { city: "Los Angeles", country: "USA", continent: "North America", lat: 34.052, lon: -118.244 },
+  { city: "Chicago", country: "USA", continent: "North America", lat: 41.878, lon: -87.630 },
+  { city: "Toronto", country: "Canada", continent: "North America", lat: 43.653, lon: -79.384 },
+  { city: "Vancouver", country: "Canada", continent: "North America", lat: 49.283, lon: -123.121 },
+  { city: "Mexico City", country: "Mexico", continent: "North America", lat: 19.433, lon: -99.133 },
+  { city: "Austin", country: "USA", continent: "North America", lat: 30.267, lon: -97.743 },
+
+  // ── Europe (25% weight) ───────────────────────
+  { city: "London", country: "United Kingdom", continent: "Europe", lat: 51.507, lon: -0.128 },
+  { city: "Berlin", country: "Germany", continent: "Europe", lat: 52.520, lon: 13.405 },
+  { city: "Paris", country: "France", continent: "Europe", lat: 48.857, lon: 2.352 },
+  { city: "Amsterdam", country: "Netherlands", continent: "Europe", lat: 52.370, lon: 4.895 },
+  { city: "Stockholm", country: "Sweden", continent: "Europe", lat: 59.329, lon: 18.069 },
+  { city: "Zurich", country: "Switzerland", continent: "Europe", lat: 47.376, lon: 8.542 },
+  { city: "Madrid", country: "Spain", continent: "Europe", lat: 40.417, lon: -3.704 },
+  { city: "Milan", country: "Italy", continent: "Europe", lat: 45.464, lon: 9.190 },
+
+  // ── South America (10% weight) ────────────────
+  { city: "São Paulo", country: "Brazil", continent: "South America", lat: -23.551, lon: -46.633 },
+  { city: "Buenos Aires", country: "Argentina", continent: "South America", lat: -34.604, lon: -58.382 },
+  { city: "Bogotá", country: "Colombia", continent: "South America", lat: 4.711, lon: -74.072 },
+  { city: "Santiago", country: "Chile", continent: "South America", lat: -33.449, lon: -70.669 },
+
+  // ── Africa (5% weight) ────────────────────────
+  { city: "Lagos", country: "Nigeria", continent: "Africa", lat: 6.524, lon: 3.379 },
+  { city: "Nairobi", country: "Kenya", continent: "Africa", lat: -1.286, lon: 36.817 },
+  { city: "Cape Town", country: "South Africa", continent: "Africa", lat: -33.919, lon: 18.424 },
+  { city: "Cairo", country: "Egypt", continent: "Africa", lat: 30.044, lon: 31.236 },
+
+  // ── Oceania (5% weight) ───────────────────────
+  { city: "Sydney", country: "Australia", continent: "Oceania", lat: -33.868, lon: 151.209 },
+  { city: "Melbourne", country: "Australia", continent: "Oceania", lat: -37.814, lon: 144.963 },
+  { city: "Auckland", country: "New Zealand", continent: "Oceania", lat: -36.849, lon: 174.763 },
 ];
+
+// Continent distribution weights for proportional simulation
+const CONTINENT_WEIGHTS: Record<string, number> = {
+  "Asia": 30,
+  "North America": 25,
+  "Europe": 25,
+  "South America": 10,
+  "Africa": 5,
+  "Oceania": 5,
+};
+
+function pickWorldwideCity(): WorldCity {
+  // First pick continent based on weights
+  const continents = Object.keys(CONTINENT_WEIGHTS);
+  const weights = Object.values(CONTINENT_WEIGHTS);
+  const continent = weightedPick(continents, weights);
+  // Then pick random city within that continent
+  const citiesInContinent = WORLDWIDE_CITIES.filter(c => c.continent === continent);
+  return pick(citiesInContinent);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ─── DATA POOLS ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+
+// Worldwide name pools for realistic diversity
+const FIRST_NAMES_POOL: Record<string, string[]> = {
+  "Asia": ["Aarav", "Priya", "Rahul", "Neha", "Amit", "Sneha", "Vikas", "Pooja", "Rajan", "Divya", "Karan", "Anita", "Yuki", "Hiro", "Min-Jun", "Wei", "Siti", "Arjun"],
+  "North America": ["James", "Emily", "Michael", "Sarah", "David", "Jessica", "Robert", "Ashley", "Carlos", "Maria", "Tyler", "Brittany", "Brandon", "Madison", "Justin", "Megan"],
+  "Europe": ["Oliver", "Emma", "Lucas", "Sophie", "Hans", "Amelie", "Pierre", "Isabella", "Lars", "Elena", "Sebastian", "Anna", "Marco", "Claire", "Erik", "Marta"],
+  "South America": ["Mateo", "Valentina", "Santiago", "Camila", "Diego", "Luciana", "Gabriel", "Antonella", "Pablo", "Isabela", "Thiago", "Carolina"],
+  "Africa": ["Kwame", "Amina", "Chidi", "Fatima", "Tendai", "Zara", "Emeka", "Aisha", "Sipho", "Nala", "Oluwaseun", "Khadija"],
+  "Oceania": ["Liam", "Charlotte", "Jack", "Olivia", "Mason", "Chloe", "Ethan", "Mia", "Noah", "Isla"],
+};
+
+const LAST_NAMES_POOL: Record<string, string[]> = {
+  "Asia": ["Sharma", "Patel", "Kumar", "Singh", "Verma", "Gupta", "Tanaka", "Suzuki", "Kim", "Li", "Chen", "Rao", "Nair", "Iyer"],
+  "North America": ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Wilson", "Anderson"],
+  "Europe": ["Müller", "Schmidt", "Martin", "Dupont", "Rossi", "Ferrari", "Andersson", "De Vries", "Garcia", "Williams", "Taylor", "Wilson"],
+  "South America": ["Silva", "Santos", "Oliveira", "Souza", "Pereira", "González", "Rodríguez", "López", "Hernández", "Morales"],
+  "Africa": ["Okafor", "Kamau", "Van der Merwe", "Hassan", "Ibrahim", "Mwangi", "Osei", "Dlamini", "El-Masry", "Adeyemi"],
+  "Oceania": ["Smith", "Williams", "Brown", "Wilson", "Taylor", "Anderson", "Thomas", "O'Brien", "Campbell", "Kelly"],
+};
+
 const SPEND_CATEGORIES = ["FOOD", "SHOPPING", "ENTERTAINMENT", "HOUSING", "OTHERS", "TRANSPORT", "UTILITIES", "HEALTHCARE"];
 const CHANNELS: ("WEB" | "MOBILE" | "ATM" | "POS")[] = ["WEB", "MOBILE", "ATM", "POS"];
 const CHANNEL_WEIGHTS = [35, 40, 10, 15]; // Mobile-first era
 const LOAN_TYPES = ["HOME", "AUTO", "PERSONAL", "STUDENT"] as ("HOME" | "AUTO" | "PERSONAL" | "STUDENT")[];
 const PRO_FEATURES = ["crypto-trading", "wealth-management-pro", "bulk-payroll-processing", "ai-insights"];
 const DEVICE_TYPES = ["desktop", "mobile", "tablet"];
+const DEVICE_WEIGHTS = [35, 50, 15];
+const BROWSERS = ["Chrome", "Safari", "Firefox", "Edge", "Samsung Internet"];
+const BROWSER_WEIGHTS = [55, 25, 10, 7, 3];
 const PLATFORMS = ["Android / Chrome", "iOS / Safari", "Windows / Chrome", "macOS / Safari", "Windows / Edge", "Linux / Firefox"];
+const STREET_NAMES: Record<string, string[]> = {
+  "Asia": ["MG Road", "Park Street", "Anna Nagar", "Salt Lake", "Banjara Hills", "Connaught Place", "Marine Drive", "Brigade Road"],
+  "North America": ["Broadway", "Main Street", "Oak Avenue", "Maple Drive", "Sunset Blvd", "5th Avenue", "Market Street", "Lake Shore Dr"],
+  "Europe": ["High Street", "Königstraße", "Rue de Rivoli", "Via Roma", "Gran Vía", "Keizersgracht", "Oxford Street", "Champs-Élysées"],
+  "South America": ["Av. Paulista", "Av. 9 de Julio", "Carrera 7", "Av. Providencia"],
+  "Africa": ["Victoria Island", "Kenyatta Avenue", "Long Street", "Tahrir Square"],
+  "Oceania": ["George Street", "Collins Street", "Queen Street", "Pitt Street"],
+};
 
 interface UserPersona {
   loginProbability: number;     // 0.15–0.95 (daily chance of logging in)
@@ -269,9 +373,11 @@ interface UserPersona {
   proConversionChance: number;  // 0.02–0.4 (base, multiplied by whale factor)
   kycCompletionRate: number;    // 0.3–0.9 (chance of completing KYC)
   failureRate: number;          // 0.02–0.06 (chance of transaction failure)
-  loanInterest: number;         // 0.1–0.6 (chance of applying for loan)
+  loanInterest: number;        // 0.1–0.6 (chance of applying for loan)
   salaryRange: [number, number]; // [min, max]
   preferredChannel: "WEB" | "MOBILE" | "ATM" | "POS";
+  deviceType: string;
+  browser: string;
 }
 
 function generatePersona(): UserPersona {
@@ -288,6 +394,20 @@ function generatePersona(): UserPersona {
     loanInterest: isCasual ? 0.05 + Math.random() * 0.1 : 0.15 + Math.random() * 0.45,
     salaryRange: isWhale ? [80000, 200000] : [25000, 70000],
     preferredChannel: weightedPick(CHANNELS, CHANNEL_WEIGHTS),
+    deviceType: weightedPick(DEVICE_TYPES, DEVICE_WEIGHTS),
+    browser: weightedPick(BROWSERS, BROWSER_WEIGHTS),
+  };
+}
+
+// Helper: Generate location metadata for analytics pipeline
+function locationMeta(loc: WorldCity, persona: UserPersona) {
+  return {
+    continent: loc.continent,
+    country: loc.country,
+    city: loc.city,
+    location: loc.country, // backwards compat with analytics /locations endpoint
+    device_type: persona.deviceType,
+    browser: persona.browser,
   };
 }
 
@@ -321,19 +441,20 @@ router.post(
       const userCount = Math.min(count, 100);
 
       for (let i = 0; i < userCount; i++) {
-        // ─── 1. Generate User Identity ──────────────────────
-        const firstName = pick(FIRST_NAMES);
-        const lastName = pick(LAST_NAMES);
+        // ─── 1. Generate WORLDWIDE User Identity ────────────
+        const location = pickWorldwideCity();
+        const firstName = pick(FIRST_NAMES_POOL[location.continent] || FIRST_NAMES_POOL["Asia"]);
+        const lastName = pick(LAST_NAMES_POOL[location.continent] || LAST_NAMES_POOL["Asia"]);
         const name = `${firstName} ${lastName}`;
         const seed = Date.now() + i + Math.floor(Math.random() * 10000);
         const email = `${firstName.toLowerCase()}.${seed}@nexabank.demo`;
         const phone = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
         const pan = `${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${Math.floor(1000 + Math.random() * 9000)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`;
         const hashedPw = await bcrypt.hash("Password@123", 10);
-        const location = pick(INDIAN_CITIES);
 
         // ─── 2. Generate Persona (behavioral traits) ────────
         const persona = generatePersona();
+        const lMeta = locationMeta(location, persona);
 
         // ─── 3. Compute join date ───────────────────────────
         const joinDaysAgo = Math.floor(Math.random() * simDays);
@@ -342,6 +463,7 @@ router.post(
         const baseTs = Math.floor(joinDate.getTime() / 1000);
 
         // ─── 4. Create customer ─────────────────────────────
+        const streets = STREET_NAMES[location.continent] || STREET_NAMES["Asia"];
         let customer;
         try {
           customer = await prisma.customer.create({
@@ -349,7 +471,7 @@ router.post(
               name, email, phone, password: hashedPw, pan, tenantId,
               dateOfBirth: new Date(1975 + Math.floor(Math.random() * 30), Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28)),
               settingConfig: {},
-              address: { street: `${Math.floor(1 + Math.random() * 500)}, ${pick(["MG Road", "Park Street", "DJ Halli", "Anna Nagar", "Salt Lake", "Banjara Hills"])}`, city: location.city, state: location.state, zip: `${400000 + Math.floor(Math.random() * 200000)}` },
+              address: { street: `${Math.floor(1 + Math.random() * 500)}, ${pick(streets)}`, city: location.city, state: location.country, zip: `${400000 + Math.floor(Math.random() * 200000)}` },
               kycStatus: "NOT_STARTED",
             },
           });
@@ -376,9 +498,9 @@ router.post(
           continue;
         }
 
-        // Track registration
-        await trackEvent("register", customer.id, tenantId, { channel: persona.preferredChannel, city: location.city }, baseTs);
-        await trackEvent("login", customer.id, tenantId, { channel: persona.preferredChannel, device: pick(DEVICE_TYPES) }, baseTs + 60);
+        // Track registration with worldwide location
+        await trackEvent("register", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs);
+        await trackEvent("login", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs + 60);
         eventsCreated += 2;
 
         // ─── 6. Initial salary deposit ──────────────────────
@@ -397,16 +519,16 @@ router.post(
         let currentBalance = salary;
         await prisma.account.update({ where: { accNo }, data: { balance: currentBalance } });
 
-        // Store initial location
+        // Store initial location with worldwide data
         await prisma.userLocation.create({
           data: {
             customerId: customer.id,
             latitude: location.lat + (Math.random() - 0.5) * 0.1,
             longitude: location.lon + (Math.random() - 0.5) * 0.1,
-            country: "India",
+            country: location.country,
             city: location.city,
             ip: `${100 + Math.floor(Math.random() * 50)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-            deviceType: pick(DEVICE_TYPES),
+            deviceType: persona.deviceType,
             platform: pick(PLATFORMS),
           },
         });
@@ -415,7 +537,7 @@ router.post(
         let kycState: "NOT_STARTED" | "PENDING" | "VERIFIED" | "REJECTED" = "NOT_STARTED";
         let isPro = false;
         let hasAppliedLoan = false;
-        let lastLoginDay = 0;
+        let unlockedFeature = "";
 
         for (let day = 0; day <= joinDaysAgo; day++) {
           const dayTs = baseTs + (day * 86400) + Math.floor(Math.random() * 43200); // random hour within the day
@@ -442,9 +564,8 @@ router.post(
           if (Math.random() > persona.loginProbability) continue;
 
           // User logged in today
-          lastLoginDay = day;
           const channel = Math.random() < 0.6 ? persona.preferredChannel : pick(CHANNELS);
-          await trackEvent("login", customer.id, tenantId, { channel, device: pick(DEVICE_TYPES), day }, dayTs);
+          await trackEvent("login", customer.id, tenantId, { channel, ...lMeta, day }, dayTs);
           eventsCreated++;
 
           // Update lastLogin
@@ -453,11 +574,40 @@ router.post(
             data: { lastLogin: new Date(dayTs * 1000) },
           });
 
+          // ════════════════════════════════════════════════════
+          // ─── REALISTIC USER JOURNEY FLOWS ───────────────────
+          // Each login triggers a realistic sequence of actions
+          // ════════════════════════════════════════════════════
+
+          // Flow 1: Dashboard → View Accounts → View Transactions
+          if (Math.random() < 0.7) {
+            await trackEvent("dashboard_view", customer.id, tenantId, { channel, ...lMeta }, dayTs + 200);
+            eventsCreated++;
+          }
+          if (Math.random() < 0.4) {
+            await trackEvent("accounts_view", customer.id, tenantId, { ...lMeta }, dayTs + 400);
+            eventsCreated++;
+          }
+          if (Math.random() < 0.3) {
+            await trackEvent("transactions_view", customer.id, tenantId, { ...lMeta }, dayTs + 800);
+            eventsCreated++;
+          }
+
+          // Flow 2: Payee Management → Transfer
+          if (Math.random() < 0.15) {
+            await trackEvent("payees_view", customer.id, tenantId, { ...lMeta }, dayTs + 1000);
+            eventsCreated++;
+            if (Math.random() < 0.3) {
+              await trackEvent("payee_added", customer.id, tenantId, { ...lMeta }, dayTs + 1100);
+              eventsCreated++;
+            }
+          }
+
           // ── KYC State Machine ─────────────────────────────
           if (kycState === "NOT_STARTED" && day > 2 && Math.random() < 0.25) {
             kycState = "PENDING";
             await prisma.customer.update({ where: { id: customer.id }, data: { kycStatus: "PENDING" } });
-            await trackEvent("kyc_started", customer.id, tenantId, {}, dayTs + 200);
+            await trackEvent("kyc_started", customer.id, tenantId, { ...lMeta }, dayTs + 200);
             eventsCreated++;
           }
           if (kycState === "PENDING" && Math.random() < persona.kycCompletionRate * 0.3) {
@@ -467,11 +617,11 @@ router.post(
                 where: { id: customer.id },
                 data: { kycStatus: "VERIFIED", kycCompletedAt: new Date((dayTs + 500) * 1000) }
               });
-              await trackEvent("kyc_completed", customer.id, tenantId, {}, dayTs + 500);
+              await trackEvent("kyc_completed", customer.id, tenantId, { ...lMeta }, dayTs + 500);
             } else {
               kycState = "REJECTED";
               await prisma.customer.update({ where: { id: customer.id }, data: { kycStatus: "REJECTED" } });
-              await trackEvent("kyc_failed", customer.id, tenantId, { reason: pick(["Document Mismatch", "Expired ID", "Blurry Photo", "Name Mismatch"]) }, dayTs + 500);
+              await trackEvent("kyc_failed", customer.id, tenantId, { reason: pick(["Document Mismatch", "Expired ID", "Blurry Photo", "Name Mismatch"]), ...lMeta }, dayTs + 500);
             }
             eventsCreated++;
           }
@@ -501,9 +651,9 @@ router.post(
               if (success) {
                 currentBalance -= clampedAmount;
                 await prisma.account.update({ where: { accNo }, data: { balance: currentBalance } });
-                await trackEvent("payment_completed", customer.id, tenantId, { amount: clampedAmount, category, channel: txChannel }, dayTs + 1205);
+                await trackEvent("payment_completed", customer.id, tenantId, { amount: clampedAmount, category, channel: txChannel, ...lMeta }, dayTs + 1205);
               } else {
-                await trackEvent("payment_failed", customer.id, tenantId, { amount: clampedAmount, reason: "Transaction Error" }, dayTs + 1205);
+                await trackEvent("payment_failed", customer.id, tenantId, { amount: clampedAmount, reason: "Transaction Error", ...lMeta }, dayTs + 1205);
               }
               eventsCreated++;
             }
@@ -565,6 +715,11 @@ router.post(
             const interestRate = 7 + Math.random() * 7;
 
             const kycComplete = Math.random() < persona.kycCompletionRate;
+
+            // Track full loan journey flow
+            await trackEvent("loans_page_view", customer.id, tenantId, { ...lMeta }, dayTs + 2800);
+            eventsCreated++;
+
             await prisma.loanApplication.create({
               data: {
                 customerId: customer.id,
@@ -579,11 +734,11 @@ router.post(
             });
             hasAppliedLoan = true;
 
-            await trackEvent("loan_applied", customer.id, tenantId, { loanType, amount: principalAmount, term }, dayTs + 3000);
+            await trackEvent("loan_applied", customer.id, tenantId, { loanType, amount: principalAmount, term, ...lMeta }, dayTs + 3000);
             if (kycComplete) {
-              await trackEvent("kyc_completed", customer.id, tenantId, { context: "loan" }, dayTs + 3500);
+              await trackEvent("kyc_completed", customer.id, tenantId, { context: "loan", ...lMeta }, dayTs + 3500);
             } else {
-              await trackEvent("kyc_abandoned", customer.id, tenantId, { step: 1, context: "loan" }, dayTs + 3500);
+              await trackEvent("kyc_abandoned", customer.id, tenantId, { step: 1, context: "loan", ...lMeta }, dayTs + 3500);
             }
             eventsCreated += 2;
           }
@@ -591,7 +746,7 @@ router.post(
           // ── Pro Feature Exploration & Conversion ──────────
           if (!isPro && Math.random() < 0.12) {
             const featureId = pick(PRO_FEATURES);
-            await trackEvent("feature_view", customer.id, tenantId, { featureId }, dayTs + 4000);
+            await trackEvent("feature_view", customer.id, tenantId, { featureId, ...lMeta }, dayTs + 4000);
             eventsCreated++;
 
             // Whale users (high balance) are 5x more likely to convert
@@ -615,8 +770,9 @@ router.post(
                 });
                 currentBalance -= 2000;
                 await prisma.account.update({ where: { accNo }, data: { balance: currentBalance } });
-                await trackEvent("pro_unlocked", customer.id, tenantId, { featureId }, dayTs + 4505);
+                await trackEvent("pro_unlocked", customer.id, tenantId, { featureId, ...lMeta }, dayTs + 4505);
                 isPro = true;
+                unlockedFeature = featureId;
                 transactionsCreated++;
                 eventsCreated++;
               } catch (e) {
@@ -626,18 +782,19 @@ router.post(
           }
 
           // ── Pro Feature Usage (already pro users) ─────────
+          // Track the ACTUAL pro feature name as the event type for analytics
           if (isPro && Math.random() < 0.5) {
-            await trackEvent("pro_feature_usage", customer.id, tenantId, { day, action: pick(["dashboard_view", "trade_view", "report_view"]) }, dayTs + 6000);
-            eventsCreated++;
+            const proAction = pick(["dashboard_view", "trade_view", "report_view", "data_export", "analysis_run"]);
+            // Track both the generic pro usage AND the specific feature event
+            await trackEvent("pro_feature_usage", customer.id, tenantId, { day, action: proAction, featureId: unlockedFeature, ...lMeta }, dayTs + 6000);
+            // Track the specific pro feature as its own event type for analytics dashboard
+            await trackEvent(unlockedFeature || pick(PRO_FEATURES), customer.id, tenantId, { action: proAction, ...lMeta }, dayTs + 6005);
+            eventsCreated += 2;
           }
 
-          // ── Dashboard & page views ────────────────────────
-          if (Math.random() < 0.7) {
-            await trackEvent("dashboard_view", customer.id, tenantId, { channel }, dayTs + 200);
-            eventsCreated++;
-          }
-          if (Math.random() < 0.3) {
-            await trackEvent("transactions_view", customer.id, tenantId, {}, dayTs + 800);
+          // ── Profile View (occasional) ─────────────────────
+          if (Math.random() < 0.08) {
+            await trackEvent("profile_view", customer.id, tenantId, { ...lMeta }, dayTs + 7000);
             eventsCreated++;
           }
         }
@@ -706,12 +863,16 @@ router.post(
       }
 
       res.status(200).json({
-        message: "Stochastic simulation complete",
+        message: "Stochastic worldwide simulation complete",
         usersCreated,
         transactionsCreated,
         eventsCreated,
         payeesCreated,
         simulatedDays: simDays,
+        continentDistribution: Object.keys(CONTINENT_WEIGHTS).reduce((acc, c) => {
+          acc[c] = `${CONTINENT_WEIGHTS[c]}%`;
+          return acc;
+        }, {} as Record<string, string>),
       });
     } catch (err) {
       console.error("Simulation error:", err);

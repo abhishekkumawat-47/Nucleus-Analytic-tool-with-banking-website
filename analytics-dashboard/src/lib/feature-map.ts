@@ -51,20 +51,30 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
   nexabank: {
     appId: 'nexabank',
     displayName: 'NexaBank',
-    description: 'Modern digital banking platform',
+    description: 'Modern digital banking platform with pro features',
     tenantId: 'nexabank',
     icon: 'wallet',
     color: '#7C3AED',
     appUrl: process.env.NEXT_PUBLIC_NEXABANK_URL || 'http://localhost:3002/nexabank',
-    funnelSteps: ['login', 'loan_applied', 'kyc_started', 'kyc_completed'],
+    funnelSteps: ['login', 'dashboard_view', 'loan_applied', 'kyc_started', 'kyc_completed'],
     routes: [
-      { pattern: '/nexabank/login',        featureName: 'login',              category: 'navigation',   funnel: 1 },
-      { pattern: '/nexabank/dashboard',    featureName: 'view_dashboard',     category: 'navigation' },
-      { pattern: '/nexabank/transactions', featureName: 'view_transactions',  category: 'navigation' },
-      { pattern: '/nexabank/loans',        featureName: 'loan_applied',       category: 'transaction',  funnel: 2 },
-      { pattern: '/nexabank/accounts',     featureName: 'view_accounts',      category: 'navigation' },
-      { pattern: '/nexabank/payees',       featureName: 'view_payees',        category: 'navigation' },
-      { pattern: '/nexabank/profile',      featureName: 'view_profile',       category: 'navigation' },
+      // Core Banking
+      { pattern: '/nexabank/login',            featureName: 'login',              category: 'navigation',    funnel: 1 },
+      { pattern: '/nexabank/register',         featureName: 'register',           category: 'navigation' },
+      { pattern: '/nexabank/dashboard',        featureName: 'dashboard_view',     category: 'navigation',    funnel: 2 },
+      { pattern: '/nexabank/accounts',         featureName: 'accounts_view',      category: 'navigation' },
+      { pattern: '/nexabank/transactions',     featureName: 'transactions_view',  category: 'navigation' },
+      { pattern: '/nexabank/payees',           featureName: 'payees_view',        category: 'navigation' },
+      { pattern: '/nexabank/profile',          featureName: 'profile_view',       category: 'navigation' },
+
+      // Loans
+      { pattern: '/nexabank/loans',            featureName: 'loans_page_view',    category: 'navigation',    funnel: 3 },
+
+      // Pro Features
+      { pattern: '/nexabank/pro-feature',      featureName: 'pro_features_view',  category: 'navigation',    funnel: 4 },
+
+      // Admin
+      { pattern: '/nexabank/admin*',           featureName: 'admin_action',       category: 'system' },
     ],
   },
 };

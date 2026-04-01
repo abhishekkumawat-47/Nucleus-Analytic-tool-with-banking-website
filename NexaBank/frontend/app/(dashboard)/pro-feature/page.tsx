@@ -219,6 +219,20 @@ function ProFeatureContent() {
 }
 
 function FinanceLibraryModule() {
+  const [downloading, setDownloading] = useState<string | null>(null)
+  
+  const handleDownload = async (title: string) => {
+    setDownloading(title)
+    try {
+      await axios.post(`${API_BASE_URL}/pro/download_book`, { title }, { withCredentials: true })
+      toast.success(`${title} downloaded successfully!`)
+    } catch (err) {
+      toast.error("Failed to download book.")
+    } finally {
+      setDownloading(null)
+    }
+  }
+
   const books = [
     { title: "Risk & Return: Modern Banking", author: "Dr. Elena Vance", color: "bg-blue-100" },
     { title: "The Sovereign Individual", author: "James Dale Davidson", color: "bg-violet-100" },
@@ -236,8 +250,14 @@ function FinanceLibraryModule() {
             <div className="flex-1">
               <h3 className="font-bold text-lg group-hover:text-blue-600 transition-colors">{b.title}</h3>
               <p className="text-sm text-zinc-500 mb-4">{b.author}</p>
-              <Button variant="outline" size="sm" className="rounded-full gap-2">
-                Download PDF <ArrowUpRight className="h-3 w-3" />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="rounded-full gap-2"
+                onClick={() => handleDownload(b.title)}
+                disabled={downloading === b.title}
+              >
+                {downloading === b.title ? "Downloading..." : "Download PDF"} <ArrowUpRight className="h-3 w-3" />
               </Button>
             </div>
           </CardContent>
@@ -302,12 +322,26 @@ function CryptoTradingModule() {
 }
 
 function WealthManagementModule() {
+  const [rebalancing, setRebalancing] = useState(false)
   const data = [
     { name: "Stocks", value: 400, color: "#4f46e5" },
     { name: "Crypto", value: 300, color: "#f59e0b" },
     { name: "Real Estate", value: 300, color: "#10b981" },
     { name: "Cash", value: 200, color: "#6366f1" },
   ]
+  
+  const handleRebalance = async () => {
+    setRebalancing(true)
+    try {
+      await axios.post(`${API_BASE_URL}/pro/rebalance_wealth`, {}, { withCredentials: true })
+      toast.success("Portfolio successfully rebalanced according to target weights.")
+    } catch (err) {
+      toast.error("Failed to rebalance portfolio.")
+    } finally {
+      setRebalancing(false)
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
       <Card>
@@ -325,7 +359,13 @@ function WealthManagementModule() {
       </Card>
       <div className="space-y-4">
         <Card><CardContent className="p-6 flex items-center justify-between"><div><p className="text-xs font-bold text-zinc-400 uppercase">Portfolio Balance</p><p className="text-3xl font-black">₹12,450,000</p></div><TrendingUp className="text-emerald-500 h-8 w-8" /></CardContent></Card>
-        <Button className="w-full h-16 bg-zinc-900 text-white hover:bg-zinc-800 text-lg font-bold rounded-2xl gap-2 shadow-xl shadow-zinc-200">Rebalance Portfolio <RefreshCcw className="h-5 w-5" /></Button>
+        <Button 
+          onClick={handleRebalance}
+          disabled={rebalancing}
+          className="w-full h-16 bg-zinc-900 text-white hover:bg-zinc-800 text-lg font-bold rounded-2xl gap-2 shadow-xl shadow-zinc-200"
+        >
+          {rebalancing ? "Analyzing assets..." : "Rebalance Portfolio"} <RefreshCcw className={`h-5 w-5 ${rebalancing ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
     </div>
   )
@@ -338,12 +378,20 @@ function PayrollModule() {
     { name: "Priya K.", role: "Product Manager", salary: "105,000" },
     { name: "Amit V.", role: "UI Designer", salary: "90,000" },
   ]
-  const handleBulkPay = () => {
+  const handleBulkPay = async () => {
     setProcessing(true)
-    setTimeout(() => {
+    try {
+      await axios.post(`${API_BASE_URL}/pro/process_payroll`, { totalAmount: 315000, employeesCount: 3 }, { withCredentials: true })
       toast.success("Bulk Payroll Batch Sent to 3 Nodes!")
+    } catch (err: any) {
+      if (err.response?.data?.error?.includes("Insufficient funds")) {
+        toast.error("Insufficient Funds in your account to process payroll batch (Requires ₹315,000).")
+      } else {
+        toast.error("Failed to process payroll batch.")
+      }
+    } finally {
       setProcessing(false)
-    }, 2000)
+    }
   }
   return (
     <Card className="shadow-xl">

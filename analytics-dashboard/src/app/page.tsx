@@ -3,19 +3,29 @@
 /**
  * App Selector Landing Page
  * Role-based content:
- *   super_admin  → Links to detailed dashboard + app interaction
- *   company_admin → Links to cloud summaries + global admin
+ *   app_admin    → Links to detailed dashboard + app interaction
+ *   super_admin  → Links to cloud summaries + global admin
  *   user         → Redirected away by AuthGuard (never reaches here)
  */
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { BarChart3, ArrowRight, Zap, Shield, Cloud, LayoutDashboard, Eye, Wallet } from 'lucide-react';
+import {
+  ArrowRight,
+  Shield,
+  Cloud,
+  LayoutDashboard,
+  Eye,
+  Wallet,
+  ExternalLink,
+  Layers,
+  BarChart3,
+} from 'lucide-react';
 import { APP_REGISTRY } from '@/lib/feature-map';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { fetchDeploymentInfo, setSelectedTenant } from '@/lib/dashboardSlice';
-
 import { useSession } from 'next-auth/react';
 import AuthGuard from '@/components/AuthGuard';
 
@@ -38,146 +48,173 @@ export default function AppSelectorPage() {
   const userRole = session?.user?.role || 'user';
   const adminApps: string[] = session?.user?.adminApps || [];
 
-  // Filter apps based on role:
-  // - super_admin sees all apps
-  // - app_admin sees only their assigned apps
-  const apps = userRole === 'super_admin'
-    ? allApps
-    : allApps.filter(app => adminApps.includes(app.appId));
+  const apps =
+    userRole === 'super_admin'
+      ? allApps
+      : allApps.filter((app) => adminApps.includes(app.appId));
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center justify-center p-6">
-      
-      {/* Role Badge */}
-      <div className="absolute top-6 right-6 flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
-        {userRole === 'super_admin' ? (
-          <><Cloud className="w-4 h-4 text-blue-400" /><span className="text-sm font-medium text-blue-100">Super Admin</span></>
-        ) : (
-          <><Shield className="w-4 h-4 text-orange-400" /><span className="text-sm font-medium text-orange-100">App Admin</span></>
-        )}
-      </div>
-
-      <div className="text-center mb-12">
-        <div className="flex items-center justify-center space-x-2 mb-4">
-          <Zap className="w-8 h-8 text-blue-400" />
-          <h1 className="text-4xl font-bold text-white tracking-tight">Nucleus</h1>
-        </div>
-        <p className="text-gray-400 text-lg max-w-md mx-auto">
-          Feature Intelligence &amp; Usage Analytics Platform
-        </p>
-        <p className="text-gray-500 text-sm mt-2">
-          {userRole === 'super_admin' 
-            ? 'View aggregated cloud summaries for all connected apps'
-            : 'Select an app to view detailed analytics or interact with it'
-          }
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl w-full">
-        {apps.map((app) => (
-          <div
-            key={app.appId}
-            className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 group"
-          >
-            <div className="flex items-center space-x-3 mb-4">
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: app.color + '20' }}
-              >
-                {app.icon === 'wallet' ? (
-                  <Wallet className="w-6 h-6" style={{ color: app.color }} />
-                ) : (
-                  <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" style={{ color: app.color }}>
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                )}
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">{app.displayName}</h2>
-                <p className="text-gray-400 text-sm">{app.description}</p>
-              </div>
+      <div className="min-h-screen bg-white flex flex-col">
+        {/* Top Bar */}
+        <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-gray-100">
+          <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Image src="/logo1.png" alt="Nucleus Logo" width={32} height={32} className="object-contain" />
+              <span className="text-lg font-bold text-gray-900 tracking-tight">
+                <span className="text-[#1a73e8]">Nuc</span>leus
+              </span>
             </div>
-
-            <div className="space-y-2">
-              {/* Super Admin: Detailed Dashboard + Open App */}
-              {userRole === 'app_admin' && (
-                <>
-                  <button
-                    onClick={() => handleViewDashboard(app.appId)}
-                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-white transition-all duration-200 group/btn cursor-pointer"
-                    style={{ backgroundColor: app.color }}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <LayoutDashboard size={16} />
-                      <span>View Detailed Dashboard</span>
-                    </div>
-                    <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
-                  </button>
-
-                  <Link
-                    href={app.appUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-medium text-gray-300 transition-all duration-200 cursor-pointer"
-                  >
-                    <span>Open App</span>
-                    <ArrowRight size={16} />
-                  </Link>
-                </>
+            <div className="flex items-center gap-3">
+              {userRole === 'super_admin' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">
+                  <Cloud className="w-3 h-3" />
+                  Super Admin
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-gray-50 text-gray-700 border border-gray-200">
+                  <Shield className="w-3 h-3" />
+                  App Admin
+                </span>
               )}
-
-              {/* Company Admin: Cloud Summary Only */}
-              {userRole === 'super_admin' && (
-                <Link
-                  href={`/apps/${app.appId}`}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-white transition-all duration-200 group/btn"
-                  style={{ backgroundColor: app.color }}
-                >
-                  <div className="flex items-center space-x-2">
-                    <Eye size={16} />
-                    <span>View Cloud Summary</span>
-                  </div>
-                  <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
-                </Link>
+              {session?.user?.name && (
+                <span className="text-sm text-gray-500 hidden md:inline">
+                  {session.user.name}
+                </span>
               )}
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-white/10">
-              <p className="text-xs text-gray-500">
-                Tracking: {app.routes.length} routes • Funnel: {app.funnelSteps.length} steps
-              </p>
             </div>
           </div>
-        ))}
+        </header>
 
-        {/* Placeholder for future apps */}
-        <div className="bg-white/5 backdrop-blur-sm border border-dashed border-white/20 rounded-2xl p-6 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mx-auto mb-3">
-              <span className="text-2xl text-gray-500">+</span>
-            </div>
-            <p className="text-gray-400 font-medium">Add New App</p>
-            <p className="text-gray-500 text-xs mt-1">
-              Add entries to feature-map.ts to connect more apps
+        {/* Main Content */}
+        <main className="flex-1 max-w-5xl mx-auto px-6 py-12 w-full">
+          <div className="mb-10">
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight mb-2">
+              Your Applications
+            </h1>
+            <p className="text-gray-500 text-sm max-w-lg">
+              {userRole === 'super_admin'
+                ? 'View aggregated cloud summaries for all connected applications.'
+                : 'Select an application to view detailed analytics or interact with it.'}
             </p>
           </div>
-        </div>
-      </div>
 
-      {/* Super Admin: Global Admin link */}
-      {userRole === 'super_admin' && (
-        <div className="mt-8">
-          <Link
-            href="/admin"
-            className="flex items-center space-x-2 px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium text-white transition-all duration-300"
-          >
-            <Cloud size={16} className="text-blue-400" />
-            <span>Global Admin Overview →</span>
-          </Link>
-        </div>
-      )}
-    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {apps.map((app) => (
+              <div
+                key={app.appId}
+                className="bg-white border border-gray-200 rounded-2xl p-6 hover:border-[#1a73e8]/30 hover:shadow-lg hover:shadow-blue-50 transition-all duration-300 group"
+              >
+                {/* App Header */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div
+                    className="w-11 h-11 rounded-xl flex items-center justify-center"
+                    style={{ backgroundColor: app.color + '15' }}
+                  >
+                    {app.icon === 'wallet' ? (
+                      <Wallet className="w-5 h-5" style={{ color: app.color }} />
+                    ) : (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-5 h-5 fill-current"
+                        style={{ color: app.color }}
+                      >
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#1a73e8] transition-colors">
+                      {app.displayName}
+                    </h2>
+                    <p className="text-gray-400 text-xs">{app.description}</p>
+                  </div>
+                </div>
+
+                {/* Stats Row */}
+                <div className="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Layers className="w-3.5 h-3.5 text-gray-400" />
+                    <span>{app.routes.length} routes tracked</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <BarChart3 className="w-3.5 h-3.5 text-gray-400" />
+                    <span>{app.funnelSteps.length}-step funnel</span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-2">
+                  {userRole === 'app_admin' && (
+                    <>
+                      <button
+                        onClick={() => handleViewDashboard(app.appId)}
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 cursor-pointer"
+                        style={{ backgroundColor: app.color }}
+                      >
+                        <span className="flex items-center gap-2">
+                          <LayoutDashboard className="w-4 h-4" />
+                          View Dashboard
+                        </span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                      <Link
+                        href={app.appUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl text-sm font-medium text-gray-700 transition-all duration-200 cursor-pointer"
+                      >
+                        <span>Open App</span>
+                        <ExternalLink className="w-4 h-4 text-gray-400" />
+                      </Link>
+                    </>
+                  )}
+                  {userRole === 'super_admin' && (
+                    <Link
+                      href={`/apps/${app.appId}`}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90"
+                      style={{ backgroundColor: app.color }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Eye className="w-4 h-4" />
+                        View Cloud Summary
+                      </span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Add New App Card */}
+            <div className="border-2 border-dashed border-gray-200 rounded-2xl p-6 flex items-center justify-center hover:border-[#1a73e8]/30 transition-colors">
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                  <span className="text-2xl text-gray-400 font-light">+</span>
+                </div>
+                <p className="text-gray-500 font-semibold text-sm">Add New App</p>
+                <p className="text-gray-400 text-xs mt-1">
+                  Configure in feature-map.ts to connect more apps
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Super Admin: Global Admin Link */}
+          {userRole === 'super_admin' && (
+            <div className="mt-8 flex justify-center">
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-colors"
+              >
+                <Cloud className="w-4 h-4 text-blue-400" />
+                Global Admin Overview
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
+        </main>
+      </div>
     </AuthGuard>
   );
 }

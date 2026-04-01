@@ -1,0 +1,12 @@
+src/controllers/proController.ts(48,53): error TS7006: Parameter 'tx' implicitly has an 'any' type.
+src/controllers/UserControllers.ts(270,36): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
+src/controllers/UserControllers.ts(274,48): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
+src/controllers/UserControllers.ts(317,63): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
+src/controllers/UserControllers.ts(318,51): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
+src/helper/payee.ts(3,10): error TS2305: Module '"@prisma/client"' has no exported member 'CustomerType'.
+src/helper/payee.ts(306,47): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/helper/payee.ts(325,35): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/routes/loanRoutes.ts(1,18): error TS2305: Module '"@prisma/client"' has no exported member 'LoanType'.
+src/routes/loanRoutes.ts(1,28): error TS2305: Module '"@prisma/client"' has no exported member 'ApplicationStatus'.
+src/routes/loanRoutes.ts(163,55): error TS7006: Parameter 'tx' implicitly has an 'any' type.
+src/routes/tenantRoutes.ts(21,35): error TS7006: Parameter 't' implicitly has an 'any' type.

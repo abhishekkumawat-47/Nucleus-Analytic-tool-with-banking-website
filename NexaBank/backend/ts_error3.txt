@@ -1,0 +1,11 @@
+src/controllers/proController.ts(143,33): error TS2352: Conversion of type 'JsonValue[]' to type 'Investment[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'JsonValue' is not comparable to type 'Investment'.
+    Type 'JsonValue[]' is missing the following properties from type 'Investment': type, asset, amount, avgPrice
+src/controllers/proController.ts(172,11): error TS2322: Type 'Investment[]' is not assignable to type 'InputJsonValue[] | AccountUpdateinvestmentInput | undefined'.
+  Type 'Investment[]' is not assignable to type 'InputJsonValue[]'.
+    Type 'Investment' is not assignable to type 'InputJsonValue'.
+      Type 'Investment' is not assignable to type 'InputJsonObject'.
+        Index signature for type 'string' is missing in type 'Investment'.
+src/controllers/proController.ts(250,33): error TS2352: Conversion of type 'JsonValue[]' to type 'Investment[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'JsonValue' is not comparable to type 'Investment'.
+    Type 'JsonValue[]' is missing the following properties from type 'Investment': type, asset, amount, avgPrice

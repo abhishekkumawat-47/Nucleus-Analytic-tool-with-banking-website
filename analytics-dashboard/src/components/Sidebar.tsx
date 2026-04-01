@@ -48,7 +48,7 @@ const iconMap: Record<string, React.ElementType> = {
   'trending-up': TrendingUp,
 };
 
-interface SidebarProps {}
+interface SidebarProps { }
 
 function Sidebar(_props: SidebarProps) {
   const dispatch = useAppDispatch();
@@ -87,16 +87,15 @@ function Sidebar(_props: SidebarProps) {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-100 z-30 flex flex-col transition-all duration-300 ${
-        sidebarCollapsed ? 'w-16' : 'w-56'
-      }`}
+      className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-100 z-30 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-56'
+        }`}
     >
       {/* Logo / Brand */}
       <div className={`flex items-center gap-2 border-b border-gray-100 h-16 ${sidebarCollapsed ? 'justify-center' : 'px-6'}`}>
         <Link href="/" className="relative w-10 h-10 flex-shrink-0 transition-transform duration-300">
           <Image
             src="/logo1.png"
-            alt="Nucleus Logo"
+            alt="FinInsightsLogo"
             fill
             className="object-contain"
             priority
@@ -113,11 +112,10 @@ function Sidebar(_props: SidebarProps) {
       {/* Role Badge */}
       {!sidebarCollapsed && (
         <div className="px-4 py-3 border-b border-gray-100">
-          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-            role === 'app_admin' 
-              ? 'bg-orange-50 text-orange-700 border border-orange-200' 
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${role === 'app_admin'
+              ? 'bg-orange-50 text-orange-700 border border-orange-200'
               : 'bg-blue-50 text-blue-700 border border-blue-200'
-          }`}>
+            }`}>
             {role === 'app_admin' ? (
               <>App Admin</>
             ) : (
@@ -137,17 +135,15 @@ function Sidebar(_props: SidebarProps) {
             <a
               key={item.id}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 mx-3 rounded-lg text-[13px] font-medium transition-all duration-200 group ${
-                isActive
+              className={`flex items-center gap-3 px-3 py-2.5 mx-3 rounded-lg text-[13px] font-medium transition-all duration-200 group ${isActive
                   ? 'bg-[#f1f3f4] text-[#1a73e8]'
                   : 'text-gray-600 px-2 hover:bg-gray-50'
-              }`}
+                }`}
               title={sidebarCollapsed ? item.label : undefined}
             >
               <IconComponent
-                className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${
-                  isActive ? 'text-[#1a73e8]' : 'text-gray-500 group-hover:text-gray-700'
-                }`}
+                className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isActive ? 'text-[#1a73e8]' : 'text-gray-500 group-hover:text-gray-700'
+                  }`}
               />
               {!sidebarCollapsed && <span>{item.label}</span>}
             </a>

@@ -1,10 +1,11 @@
 /**
  * Axios API client abstraction.
  * Provides a configured axios instance and typed API methods.
- * Currently uses mock data but structured for easy backend integration.
+ * All data is fetched from the backend — no mock fallbacks.
  */
 
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { toast } from 'sonner';
 import {
   KPIMetric,
   TimeSeriesDataPoint,
@@ -23,7 +24,6 @@ import {
   FeatureConfig,
   RetentionData,
 } from '@/types';
-import * as mockData from './mock-data';
 
 /** Base API configuration */
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
@@ -39,41 +39,166 @@ const apiClient: AxiosInstance = axios.create({
 
 // Request interceptor for auth tokens
 apiClient.interceptors.request.use(
-  async (config) => {
+  async (config: InternalAxiosRequestConfig) => {
     try {
-      // Safely import getSession
       const { getSession } = await import('next-auth/react');
       const session = await getSession();
       if (session?.user) {
-        config.headers['X-User-Email'] = session.user.email;
+        config.headers.set('X-User-Email', session.user.email);
         if (session.user.role) {
-          config.headers['X-User-Role'] = session.user.role;
+          config.headers.set('X-User-Role', session.user.role);
         }
       }
-    } catch (err) {
+    } catch {
       // Ignore if called in non-browser context
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error: Error) => Promise.reject(error)
 );
 
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
-  (error) => {
-    // Centralized error handling
-    console.error('API Error:', error.message);
+  (error: Error & { response?: { status: number; data?: { detail?: string } }; config?: { url?: string } }) => {
+    const status = error.response?.status;
+    const url = error.config?.url || 'unknown';
+    const detail = error.response?.data?.detail || error.message;
+    
+    // Only show toast for non-403 errors (403 = RBAC restriction, expected)
+    if (status === 403) {
+      console.warn(`[RBAC] Access denied for ${url}`);
+    } else if (status === 500) {
+      toast.error(`Server error`, { description: detail, duration: 4000 });
+    } else if (status && status >= 400) {
+      toast.error(`Request failed (${status})`, { description: detail, duration: 3000 });
+    }
+    
     return Promise.reject(error);
   }
 );
 
-/**
- * Simulates API delay to test loading states.
- * Replace with actual API calls when backend is ready.
- */
-function simulateDelay<T>(data: T, delayMs = 800): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(data), delayMs));
+/* ─────────────── Helper Types ─────────────── */
+
+interface BackendFeatureUsageItem {
+  event_name: string;
+  total_interactions: number;
+  unique_users: number;
+}
+
+interface BackendFunnelStep {
+  step: number;
+  event_name: string;
+  users_completed: number;
+  drop_off_pct: number;
+}
+
+interface BackendInsight {
+  type: string;
+  message: string;
+  severity: 'high' | 'medium' | 'low';
+}
+
+interface BackendTrafficRow {
+  date: string;
+  visitors: number;
+  pageViews: number;
+}
+
+interface BackendFeatureUsageRow {
+  date: string;
+  usage: number;
+}
+
+interface BackendDeviceRow {
+  device: string;
+  value: number;
+}
+
+interface BackendChannelRow {
+  name: string;
+  value: number;
+  formattedValue: string;
+}
+
+interface BackendTopPageRow {
+  url: string;
+  visits: string;
+}
+
+interface BackendPPMRow {
+  hour: string;
+  value: number;
+}
+
+interface BackendActivityRow {
+  feature: string;
+  segments: { color: string; width: number }[];
+  level: string;
+}
+
+interface DeploymentInfoResponse {
+  mode: string;
+  is_cloud: boolean;
+  is_on_prem: boolean;
+  local_tenant: string | null;
+}
+
+interface AdminSummaryResponse {
+  total_tenants: number;
+  total_events: number;
+  top_tenants: Tenant[];
+}
+
+interface AdminAppSummaryResponse {
+  kpi: KPIMetric[];
+  insights: BackendInsight[];
+}
+
+interface TransparencyCategory {
+  category: string;
+  is_synced: boolean;
+  details: string;
+}
+
+interface TransparencyResponse {
+  message: string;
+  visible_categories: TransparencyCategory[];
+}
+
+interface LicenseUsageResponse {
+  summary: { total_licensed: number; total_used: number; waste_pct: number };
+  licensed: unknown[];
+  unused_licensed: unknown[];
+  unlicensed_used: unknown[];
+}
+
+interface TrackingToggleResponse {
+  toggles: unknown[];
+}
+
+interface ConfigAuditResponse {
+  logs: unknown[];
+}
+
+interface UserJourneyResponse {
+  events: unknown[];
+  sessions: unknown[];
+  total_events: number;
+  total_sessions: number;
+}
+
+interface JourneyUsersResponse {
+  users: unknown[];
+}
+
+interface SegmentationResponse {
+  segments: unknown[];
+}
+
+interface PredictiveResponse {
+  predictions: unknown[];
+  total_users: number;
 }
 
 /* ─────────────── API Methods ─────────────── */
@@ -82,109 +207,109 @@ export const dashboardAPI = {
   /** Fetch KPI metrics for the dashboard header */
   async getKPIMetrics(tenantId: string = 'twitter'): Promise<KPIMetric[]> {
     try {
-      const response = await apiClient.get(`/metrics/kpi?tenant_id=${tenantId}`);
+      const response = await apiClient.get<KPIMetric[]>(`/metrics/kpi?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch KPI metrics, using mock', err);
-      return mockData.kpiMetrics;
+    } catch {
+      console.error('Failed to fetch KPI metrics');
+      return [];
     }
   },
 
   /** Fetch Secondary KPI metrics */
   async getSecondaryKPIMetrics(tenantId: string = 'twitter'): Promise<KPIMetric[]> {
     try {
-      const response = await apiClient.get(`/metrics/secondary_kpi?tenant_id=${tenantId}`);
+      const response = await apiClient.get<KPIMetric[]>(`/metrics/secondary_kpi?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch Secondary KPI metrics, using mock', err);
-      return mockData.secondaryKpiMetrics;
+    } catch {
+      console.error('Failed to fetch Secondary KPI metrics');
+      return [];
     }
   },
 
   /** Fetch traffic overview time series data */
   async getTrafficData(tenantId: string = 'twitter'): Promise<TimeSeriesDataPoint[]> {
     try {
-      const response = await apiClient.get(`/metrics/traffic?tenant_id=${tenantId}&days=7`);
-      return response.data.map((r: any) => ({
+      const response = await apiClient.get<BackendTrafficRow[]>(`/metrics/traffic?tenant_id=${tenantId}&days=7`);
+      return response.data.map((r: BackendTrafficRow) => ({
         date: r.date,
         visitors: Number(r.visitors),
         pageViews: Number(r.pageViews)
       }));
-    } catch (err) {
-      console.error('Failed to fetch traffic data, using mock', err);
-      return mockData.trafficData;
+    } catch {
+      console.error('Failed to fetch traffic data');
+      return [];
     }
   },
 
   /** Fetch feature usage over time data */
   async getFeatureUsageData(tenantId: string = 'twitter'): Promise<FeatureUsageDataPoint[]> {
     try {
-      const response = await apiClient.get(`/metrics/feature_usage_series?tenant_id=${tenantId}&days=7`);
-      return response.data.map((r: any) => ({
+      const response = await apiClient.get<BackendFeatureUsageRow[]>(`/metrics/feature_usage_series?tenant_id=${tenantId}&days=7`);
+      return response.data.map((r: BackendFeatureUsageRow) => ({
         date: r.date,
         usage: Number(r.usage)
       }));
-    } catch (err) {
-      console.error('Failed to fetch feature usage, using mock', err);
-      return mockData.featureUsageData;
+    } catch {
+      console.error('Failed to fetch feature usage');
+      return [];
     }
   },
 
   /** Fetch top features ranking using backend /features/usage endpoint */
   async getTopFeatures(tenantId: string = 'twitter'): Promise<BarDataPoint[]> {
     try {
-      const response = await apiClient.get(`/features/usage?tenant_id=${tenantId}&days=7`);
+      const response = await apiClient.get<{ usage: BackendFeatureUsageItem[] }>(`/features/usage?tenant_id=${tenantId}&days=7`);
       const backendUsage = response.data.usage || [];
-      
-      // Map to frontend shape
-      return backendUsage.map((item: any) => ({
+      return backendUsage.map((item: BackendFeatureUsageItem) => ({
         name: item.event_name,
         value: item.total_interactions,
-        trend: 0, 
-        status: 'stable', 
       }));
-    } catch (err) {
-      console.error('Failed to fetch top features from backend, using mock', err);
-      return mockData.topFeatures;
+    } catch {
+      console.error('Failed to fetch top features from backend');
+      return [];
     }
   },
 
   /** Fetch user journey funnel data using backend /funnels endpoint */
   async getFunnelData(tenantId: string = 'twitter'): Promise<FunnelStep[]> {
     try {
-      // Dynamically resolve funnel steps from APP_REGISTRY
       const { APP_REGISTRY } = await import('./feature-map');
       const appConfig = APP_REGISTRY[tenantId];
       const steps = appConfig?.funnelSteps?.join(',') || 'login,view_feed,post_tweet,like_tweet';
       
-      const response = await apiClient.get(`/funnels?tenant_id=${tenantId}&steps=${steps}&window_minutes=60`);
+      const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenant_id=${tenantId}&steps=${steps}&window_minutes=60`);
       const funnel = response.data.funnel || [];
       
-      return funnel.map((step: any) => ({
+      return funnel.map((step: BackendFunnelStep) => ({
         step: step.step,
         label: step.event_name,
         value: step.users_completed,
         dropOff: step.drop_off_pct,
         timeToNextStep: '-',
+        color: '#1a73e8',
       }));
-    } catch (err) {
-      console.error('Failed to fetch funnel from backend, using mock', err);
-      return mockData.funnelData;
+    } catch {
+      console.error('Failed to fetch funnel from backend');
+      return [];
     }
   },
 
   /** Fetch feature activity heatmap data */
   async getFeatureActivity(tenantId: string = 'twitter'): Promise<FeatureActivityRow[]> {
     try {
-      const response = await apiClient.get(`/features/activity?tenant_id=${tenantId}`);
-      return response.data;
+      const response = await apiClient.get<BackendActivityRow[]>(`/features/activity?tenant_id=${tenantId}`);
+      return response.data.map((row: BackendActivityRow) => ({
+        feature: row.feature,
+        segments: row.segments,
+        level: row.level as 'High' | 'Med' | 'Low',
+      }));
     } catch {
-      return mockData.featureActivity;
+      return [];
     }
   },
 
   /** Fetch grid-based heatmap matrix for multi-tenant or time-based single tenant */
-  async getFeatureHeatmap(tenantIds: string): Promise<any> {
+  async getFeatureHeatmap(tenantIds: string): Promise<{ is_compare: boolean; groups: string[]; activities: unknown[] }> {
     try {
       const response = await apiClient.get(`/features/heatmap?tenant_id=${tenantIds}`);
       return response.data;
@@ -197,51 +322,44 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch tenant comparison data — scoped to the selected tenant for app_admins */
+  /** Fetch tenant comparison data — passes tenant_id for RBAC */
   async getTenants(tenantId?: string): Promise<Tenant[]> {
     try {
-      const response = await apiClient.get('/tenants');
-      const allTenants: Tenant[] = response.data;
-      
-      // If a specific tenantId is selected, filter to only show that tenant
-      if (tenantId) {
-        return allTenants.filter(
-          (t: Tenant) => t.id === tenantId || t.name?.toLowerCase() === tenantId.toLowerCase()
-        );
-      }
-      return allTenants;
-    } catch (err) {
-      console.error('Failed to fetch tenants, using mock', err);
-      return mockData.tenants;
+      const params = tenantId ? `?tenant_id=${tenantId}` : '';
+      const response = await apiClient.get<Tenant[]>(`/tenants${params}`);
+      return response.data;
+    } catch {
+      return [];
     }
   },
 
   /** Fetch AI-generated insights using backend /insights endpoint */
   async getAIInsights(tenantId: string = 'twitter'): Promise<AIInsight[]> {
     try {
-      const response = await apiClient.get(`/insights?tenant_id=${tenantId}`, { timeout: 1200000 });
+      const response = await apiClient.get<{ insights: BackendInsight[] }>(`/insights?tenant_id=${tenantId}`, { timeout: 1200000 });
       const insights = response.data.insights || [];
-      return insights.map((insight: any, ix: number) => ({
+      return insights.map((insight: BackendInsight, ix: number) => ({
         id: `ai-${ix}`,
-        type: insight.severity === 'high' ? 'warning' : insight.severity === 'medium' ? 'info' : 'success',
+        type: insight.severity === 'high' ? 'warning' as const : insight.severity === 'medium' ? 'info' as const : 'success' as const,
         title: insight.type || 'Backend Insight',
-        message: insight.message || insight,
+        message: insight.message || String(insight),
         impact: insight.severity === 'high' ? 'High' : 'Medium',
+        priority: insight.severity,
         actionRequired: insight.severity === 'high',
       }));
-    } catch (err) {
-      console.error('Failed to fetch AI Insights, using mock', err);
-      return mockData.aiInsights;
+    } catch {
+      console.error('Failed to fetch AI Insights');
+      return [];
     }
   },
 
   /** Fetch AI Summarization Report */
   async getAIReport(tenantId: string = 'nexabank'): Promise<string> {
     try {
-      const response = await apiClient.get(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
+      const response = await apiClient.get<{ report: string }>(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
       return response.data.report || '';
-    } catch (err) {
-      console.error('Failed to fetch AI Report', err);
+    } catch {
+      console.error('Failed to fetch AI Report');
       return '# AI Report Unavailable\n\nThe summarization model is currently unavailable or generating the report failed.';
     }
   },
@@ -249,7 +367,7 @@ export const dashboardAPI = {
   /** Fetch real-time active user count */
   async getRealTimeUsers(tenantId: string = 'twitter'): Promise<number> {
     try {
-      const response = await apiClient.get(`/metrics/realtime_users?tenant_id=${tenantId}`);
+      const response = await apiClient.get<number>(`/metrics/realtime_users?tenant_id=${tenantId}`);
       return response.data;
     } catch {
       return 0;
@@ -259,7 +377,7 @@ export const dashboardAPI = {
   /** Fetch pages per minute data */
   async getPagesPerMinute(tenantId: string = 'twitter'): Promise<PagesPerMinuteDataPoint[]> {
     try {
-      const response = await apiClient.get(`/metrics/pages_per_minute?tenant_id=${tenantId}`);
+      const response = await apiClient.get<BackendPPMRow[]>(`/metrics/pages_per_minute?tenant_id=${tenantId}`);
       return response.data;
     } catch {
       return [];
@@ -269,53 +387,53 @@ export const dashboardAPI = {
   /** Fetch top pages data */
   async getTopPages(tenantId: string = 'twitter'): Promise<TopPage[]> {
     try {
-      const response = await apiClient.get(`/metrics/top_pages?tenant_id=${tenantId}`);
+      const response = await apiClient.get<BackendTopPageRow[]>(`/metrics/top_pages?tenant_id=${tenantId}`);
       return response.data;
     } catch {
-      return mockData.topPages;
+      return [];
     }
   },
 
   /** Fetch device breakdown data */
   async getDeviceBreakdown(tenantId: string = 'twitter'): Promise<DeviceBreakdown[]> {
     try {
-      const response = await apiClient.get(`/metrics/devices?tenant_id=${tenantId}`);
+      const response = await apiClient.get<DeviceBreakdown[]>(`/metrics/devices?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch device breakdown, using mock', err);
-      return mockData.deviceBreakdown;
+    } catch {
+      console.error('Failed to fetch device breakdown');
+      return [];
     }
   },
 
   /** Fetch user acquisition channel data */
   async getAcquisitionChannels(tenantId: string = 'twitter'): Promise<AcquisitionChannel[]> {
     try {
-      const response = await apiClient.get(`/metrics/channels?tenant_id=${tenantId}`);
+      const response = await apiClient.get<BackendChannelRow[]>(`/metrics/channels?tenant_id=${tenantId}`);
       return response.data;
     } catch {
-      return mockData.acquisitionChannels;
+      return [];
     }
   },
 
   /** Fetch top locations data from backend */
   async getLocations(tenantId: string = 'twitter'): Promise<LocationData[]> {
     try {
-      const response = await apiClient.get(`/locations?tenant_id=${tenantId}`);
+      const response = await apiClient.get<LocationData[]>(`/locations?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch Locations, using mock', err);
-      return mockData.locations;
+    } catch {
+      console.error('Failed to fetch Locations');
+      return [];
     }
   },
 
   /** Fetch audit logs from backend */
   async getAuditLogs(tenantId: string = 'twitter'): Promise<AuditLog[]> {
     try {
-      const response = await apiClient.get(`/audit_logs?tenant_id=${tenantId}`);
+      const response = await apiClient.get<AuditLog[]>(`/audit_logs?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch AuditLogs, using mock', err);
-      return mockData.auditLogs;
+    } catch {
+      console.error('Failed to fetch AuditLogs');
+      return [];
     }
   },
 
@@ -334,180 +452,178 @@ export const dashboardAPI = {
         isActive: true,
       }));
     } catch {
-      return mockData.featureConfigs;
+      return [];
     }
   },
 
   /** Fetch cohort retention data */
   async getRetentionData(tenantId: string = 'twitter'): Promise<RetentionData[]> {
     try {
-      const response = await apiClient.get(`/metrics/retention?tenant_id=${tenantId}`);
+      const response = await apiClient.get<RetentionData[]>(`/metrics/retention?tenant_id=${tenantId}`);
       return response.data;
     } catch {
-      return mockData.retentionData;
+      return [];
     }
   },
 
   /** ─────────────── Deployment & Admin APIs ─────────────── */
 
-  /** Fetch current backend deployment mode and local tenant (if on-prem) */
-  async getDeploymentInfo(): Promise<{ mode: string; is_cloud: boolean; is_on_prem: boolean; local_tenant: string | null }> {
+  async getDeploymentInfo(): Promise<DeploymentInfoResponse> {
     try {
-      const response = await apiClient.get('/deployment/info');
+      const response = await apiClient.get<DeploymentInfoResponse>('/deployment/info');
       return response.data;
-    } catch (err) {
-      console.warn('Failed to fetch deployment info, assuming CLOUD mode', err);
+    } catch {
+      console.warn('Failed to fetch deployment info, assuming CLOUD mode');
       return { mode: 'CLOUD', is_cloud: true, is_on_prem: false, local_tenant: null };
     }
   },
 
-  /** Fetch global admin summary (CLOUD mode only) */
-  async getAdminSummary(): Promise<{ total_tenants: number; total_events: number; top_tenants: any[] }> {
+  async getAdminSummary(): Promise<AdminSummaryResponse> {
     try {
-      const response = await apiClient.get('/admin/summary');
+      const response = await apiClient.get<AdminSummaryResponse>('/admin/summary');
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch admin summary', err);
+    } catch {
+      console.error('Failed to fetch admin summary');
       return { total_tenants: 0, total_events: 0, top_tenants: [] };
     }
   },
 
-  /** Fetch single app lightweight summary (CLOUD mode only) */
   async getAdminAppSummary(tenantId: string): Promise<{ kpi: KPIMetric[]; insights: AIInsight[] }> {
     try {
-      const response = await apiClient.get(`/admin/app/${tenantId}/summary`);
+      const response = await apiClient.get<AdminAppSummaryResponse>(`/admin/app/${tenantId}/summary`);
       const payload = response.data;
       
-      const insights = (payload.insights || []).map((insight: any, ix: number) => ({
+      const insights: AIInsight[] = (payload.insights || []).map((insight: BackendInsight, ix: number) => ({
         id: `ai-${ix}`,
-        type: insight.severity === 'high' ? 'warning' : insight.severity === 'medium' ? 'info' : 'success',
+        type: insight.severity === 'high' ? 'warning' as const : insight.severity === 'medium' ? 'info' as const : 'success' as const,
         title: insight.type || 'Backend Insight',
-        description: insight.message || insight,
+        message: insight.message || String(insight),
+        priority: insight.severity,
         impact: insight.severity === 'high' ? 'High' : 'Medium',
         actionRequired: insight.severity === 'high',
       }));
 
-      return { kpi: payload.kpi || mockData.kpiMetrics, insights };
-    } catch (err) {
-      console.error('Failed to fetch admin app summary', err);
-      return { kpi: mockData.kpiMetrics, insights: mockData.aiInsights };
+      return { kpi: payload.kpi || [], insights };
+    } catch {
+      console.error('Failed to fetch admin app summary');
+      return { kpi: [], insights: [] };
     }
   },
 
   /** Fetch transparency info showing what data goes to the cloud */
-  async getTransparencyInfo(tenantId: string = 'twitter'): Promise<any> {
+  async getTransparencyInfo(tenantId: string = 'twitter'): Promise<TransparencyResponse | null> {
     try {
-      const response = await apiClient.get(`/transparency/cloud-data?tenant_id=${tenantId}`);
+      const response = await apiClient.get<TransparencyResponse>(`/transparency/cloud-data?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.warn('Failed to fetch transparency info', err);
+    } catch {
+      console.warn('Failed to fetch transparency info');
       return null;
     }
   },
 
   /* ─────────────── License vs Usage ─────────────── */
 
-  async getLicenseUsage(tenantId: string): Promise<any> {
+  async getLicenseUsage(tenantId: string): Promise<LicenseUsageResponse> {
     try {
-      const response = await apiClient.get(`/license/usage?tenant_id=${tenantId}`);
+      const response = await apiClient.get<LicenseUsageResponse>(`/license/usage?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch license usage', err);
+    } catch {
+      console.error('Failed to fetch license usage');
       return { summary: { total_licensed: 0, total_used: 0, waste_pct: 0 }, licensed: [], unused_licensed: [], unlicensed_used: [] };
     }
   },
 
-  async syncLicenses(tenantId: string, features: any[]): Promise<any> {
+  async syncLicenses(tenantId: string, features: { feature_name: string; plan_tier: string }[]): Promise<{ status: string }> {
     try {
-      const response = await apiClient.post('/license/sync', { tenant_id: tenantId, features });
+      const response = await apiClient.post<{ status: string }>('/license/sync', { tenant_id: tenantId, features });
       return response.data;
-    } catch (err) {
-      console.error('Failed to sync licenses', err);
+    } catch {
+      console.error('Failed to sync licenses');
       return { status: 'error' };
     }
   },
 
   /* ─────────────── Tracking Toggles ─────────────── */
 
-  async getTrackingToggles(tenantId: string): Promise<any> {
+  async getTrackingToggles(tenantId: string): Promise<TrackingToggleResponse> {
     try {
-      const response = await apiClient.get(`/tracking/toggles?tenant_id=${tenantId}`);
+      const response = await apiClient.get<TrackingToggleResponse>(`/tracking/toggles?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch tracking toggles', err);
+    } catch {
+      console.error('Failed to fetch tracking toggles');
       return { toggles: [] };
     }
   },
 
-  async setTrackingToggle(tenantId: string, featureName: string, isEnabled: boolean, actorEmail: string): Promise<any> {
+  async setTrackingToggle(tenantId: string, featureName: string, isEnabled: boolean, actorEmail: string): Promise<{ status: string }> {
     try {
-      const response = await apiClient.post('/tracking/toggles', {
+      const response = await apiClient.post<{ status: string }>('/tracking/toggles', {
         tenant_id: tenantId,
         feature_name: featureName,
         is_enabled: isEnabled,
         actor_email: actorEmail,
       });
       return response.data;
-    } catch (err) {
-      console.error('Failed to set tracking toggle', err);
+    } catch {
+      console.error('Failed to set tracking toggle');
       return { status: 'error' };
     }
   },
 
   /* ─────────────── Config Audit Log ─────────────── */
 
-  async getConfigAuditLog(tenantId: string): Promise<any> {
+  async getConfigAuditLog(tenantId: string): Promise<ConfigAuditResponse> {
     try {
-      const response = await apiClient.get(`/config/audit-log?tenant_id=${tenantId}`);
+      const response = await apiClient.get<ConfigAuditResponse>(`/config/audit-log?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch config audit log', err);
+    } catch {
+      console.error('Failed to fetch config audit log');
       return { logs: [] };
     }
   },
 
   /* ─────────────── User Journey ─────────────── */
 
-  async getUserJourney(tenantId: string, userId: string): Promise<any> {
+  async getUserJourney(tenantId: string, userId: string): Promise<UserJourneyResponse> {
     try {
-      const response = await apiClient.get(`/journey/user?tenant_id=${tenantId}&user_id=${userId}`);
+      const response = await apiClient.get<UserJourneyResponse>(`/journey/user?tenant_id=${tenantId}&user_id=${userId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch user journey', err);
+    } catch {
+      console.error('Failed to fetch user journey');
       return { events: [], sessions: [], total_events: 0, total_sessions: 0 };
     }
   },
 
-  async getJourneyUsers(tenantId: string): Promise<any> {
+  async getJourneyUsers(tenantId: string): Promise<JourneyUsersResponse> {
     try {
-      const response = await apiClient.get(`/journey/users?tenant_id=${tenantId}`);
+      const response = await apiClient.get<JourneyUsersResponse>(`/journey/users?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch journey users', err);
+    } catch {
+      console.error('Failed to fetch journey users');
       return { users: [] };
     }
   },
 
   /* ─────────────── Segmentation ─────────────── */
 
-  async getSegmentationComparison(tenantId: string): Promise<any> {
+  async getSegmentationComparison(tenantId: string): Promise<SegmentationResponse> {
     try {
-      const response = await apiClient.get(`/segmentation/compare?tenant_id=${tenantId}`);
+      const response = await apiClient.get<SegmentationResponse>(`/segmentation/compare?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch segmentation', err);
+    } catch {
+      console.error('Failed to fetch segmentation');
       return { segments: [] };
     }
   },
 
   /* ─────────────── Predictive Adoption ─────────────── */
 
-  async getPredictiveAdoption(tenantId: string): Promise<any> {
+  async getPredictiveAdoption(tenantId: string): Promise<PredictiveResponse> {
     try {
-      const response = await apiClient.get(`/predictive/adoption?tenant_id=${tenantId}`);
+      const response = await apiClient.get<PredictiveResponse>(`/predictive/adoption?tenant_id=${tenantId}`);
       return response.data;
-    } catch (err) {
-      console.error('Failed to fetch predictive adoption', err);
+    } catch {
+      console.error('Failed to fetch predictive adoption');
       return { predictions: [], total_users: 0 };
     }
   },
