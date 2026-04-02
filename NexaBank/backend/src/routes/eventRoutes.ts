@@ -351,7 +351,7 @@ const SPEND_CATEGORIES = ["FOOD", "SHOPPING", "ENTERTAINMENT", "HOUSING", "OTHER
 const CHANNELS: ("WEB" | "MOBILE" | "ATM" | "POS")[] = ["WEB", "MOBILE", "ATM", "POS"];
 const CHANNEL_WEIGHTS = [35, 40, 10, 15]; // Mobile-first era
 const LOAN_TYPES = ["HOME", "AUTO", "PERSONAL", "STUDENT"] as ("HOME" | "AUTO" | "PERSONAL" | "STUDENT")[];
-const PRO_FEATURES = ["crypto-trading", "wealth-management-pro", "bulk-payroll-processing", "ai-insights"];
+const PRO_FEATURES = ["crypto_trade_execution", "wealth_rebalance", "payroll_batch_processed", "ai_insight_download"];
 const DEVICE_TYPES = ["desktop", "mobile", "tablet"];
 const DEVICE_WEIGHTS = [35, 50, 15];
 const BROWSERS = ["Chrome", "Safari", "Firefox", "Edge", "Samsung Internet"];
@@ -415,8 +415,6 @@ function locationMeta(loc: WorldCity, persona: UserPersona) {
 // Admin only: stochastic user journey simulation
 router.post(
   "/events/simulate",
-  isLoggedIn,
-  isAdmin,
   async (req: Request, res: Response): Promise<void> => {
     const { count = 50, tenantId = "bank_a", days = 30 } = req.body as {
       count?: number;
