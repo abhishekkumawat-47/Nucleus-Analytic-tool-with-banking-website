@@ -1124,6 +1124,33 @@ def get_license_usage(tenant_id: str):
     """Compare licensed features vs actual usage for a tenant — enriched with trends, pro users, and revenue."""
     require_tenant_access(tenant_id)
     try:
+        pro_feature_catalog = {
+            "pro.ai-insights.view": {
+                "feature_id": "ai-insights",
+                "title": "Finance Library",
+                "tagline": "Premium knowledge base for professional banking and investments.",
+                "price_inr": 2000,
+            },
+            "pro.crypto-trading.view": {
+                "feature_id": "crypto-trading",
+                "title": "Crypto Trading",
+                "tagline": "Institutional-grade digital asset management.",
+                "price_inr": 2000,
+            },
+            "pro.wealth-management-pro.view": {
+                "feature_id": "wealth-management-pro",
+                "title": "Wealth Management",
+                "tagline": "Sophisticated portfolio tracking and rebalancing.",
+                "price_inr": 2000,
+            },
+            "pro.bulk-payroll-processing.view": {
+                "feature_id": "bulk-payroll-processing",
+                "title": "Payroll Pro",
+                "tagline": "Enterprise-scale payroll automation.",
+                "price_inr": 2000,
+            },
+        }
+
         # Get licensed features
         sql_licensed = """
             SELECT feature_name, is_licensed, plan_tier
@@ -1144,6 +1171,34 @@ def get_license_usage(tenant_id: str):
         used = ch_client.query(sql_used, {"tenant_id": tenant_id})
         used_set = {r["feature_name"] for r in used}
         used_map = {r["feature_name"]: r for r in used}
+
+        # Relevant live NexaBank feature usage snapshot (core/auth/pro events from website)
+        sql_relevant = """
+            SELECT event_name as feature_name, sum(total_events) as usage_count, uniqMerge(unique_users) as unique_users
+            FROM feature_intelligence.daily_feature_usage
+            WHERE tenant_id = %(tenant_id)s
+              AND date >= today() - 30
+              AND (
+                                event_name LIKE 'core.%%'
+                                OR event_name LIKE 'auth.%%'
+                                OR event_name LIKE 'pro.%%'
+              )
+            GROUP BY event_name
+            ORDER BY usage_count DESC
+            LIMIT 10
+        """
+        relevant_rows = ch_client.query(sql_relevant, {"tenant_id": tenant_id})
+
+        sql_last_event = """
+            SELECT max(timestamp) as last_event_at
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id = %(tenant_id)s
+        """
+        last_event_res = ch_client.query(sql_last_event, {"tenant_id": tenant_id})
+        last_event_at = None
+        if last_event_res and last_event_res[0].get("last_event_at"):
+            ts = last_event_res[0]["last_event_at"]
+            last_event_at = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
         
         # --- NEW: Get daily usage trends for licensed features (last 7 days) ---
         sql_trends = """
@@ -1234,6 +1289,36 @@ def get_license_usage(tenant_id: str):
         
         # Estimated revenue from 4 enterprise licenses at ₹2000/user/month
         estimated_revenue = pro_user_count * 2000
+
+        pro_catalog_usage = []
+        for feature_name, meta in pro_feature_catalog.items():
+            usage = used_map.get(feature_name, {})
+            pro_catalog_usage.append({
+                "feature_name": feature_name,
+                "feature_id": meta["feature_id"],
+                "title": meta["title"],
+                "tagline": meta["tagline"],
+                "price_inr": meta["price_inr"],
+                "is_licensed": feature_name in licensed_set,
+                "is_used": feature_name in used_set,
+                "usage_count": int(usage.get("usage_count", 0)),
+                "unique_users": int(usage.get("unique_users", 0)),
+            })
+
+        top_relevant_features = []
+        for row in relevant_rows:
+            name = row["feature_name"]
+            meta = pro_feature_catalog.get(name)
+            top_relevant_features.append({
+                "feature_name": name,
+                "title": meta["title"] if meta else name,
+                "feature_id": meta["feature_id"] if meta else None,
+                "is_pro_feature": name.startswith("pro."),
+                "usage_count": int(row.get("usage_count", 0)),
+                "unique_users": int(row.get("unique_users", 0)),
+            })
+
+        pro_events_30d = sum(item["usage_count"] for item in pro_catalog_usage)
         
         return {
             "tenant_id": tenant_id,
@@ -1250,7 +1335,13 @@ def get_license_usage(tenant_id: str):
             },
             "licensed": licensed_list,
             "unused_licensed": unused_licensed,
-            "unlicensed_used": unlicensed_used
+            "unlicensed_used": unlicensed_used,
+            "nexabank_context": {
+                "last_event_at": last_event_at,
+                "pro_events_30d": pro_events_30d,
+                "pro_feature_catalog": pro_catalog_usage,
+                "top_relevant_features": top_relevant_features,
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

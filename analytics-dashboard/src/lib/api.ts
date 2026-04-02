@@ -183,10 +183,26 @@ interface TransparencyResponse {
 }
 
 interface LicenseUsageResponse {
-  summary: { total_licensed: number; total_used: number; waste_pct: number };
+  summary: {
+    total_licensed: number;
+    total_used: number;
+    total_used_licensed?: number;
+    waste_pct: number;
+    pro_users?: number;
+    total_users?: number;
+    pro_adoption_pct?: number;
+    estimated_revenue?: number;
+    wow_change?: number;
+  };
   licensed: unknown[];
   unused_licensed: unknown[];
   unlicensed_used: unknown[];
+  nexabank_context?: {
+    last_event_at?: string | null;
+    pro_events_30d?: number;
+    pro_feature_catalog?: unknown[];
+    top_relevant_features?: unknown[];
+  };
 }
 
 interface TrackingToggleResponse {
@@ -570,7 +586,7 @@ export const dashboardAPI = {
     }
   },
 
-  async syncLicenses(tenantId: string, features: { feature_name: string; plan_tier: string }[]): Promise<{ status: string }> {
+  async syncLicenses(tenantId: string, features: { feature_name: string; plan_tier: string; is_licensed?: boolean }[]): Promise<{ status: string }> {
     try {
       const response = await apiClient.post<{ status: string }>('/license/sync', { tenant_id: tenantId, features });
       return response.data;

@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { UserData } from "@/components/context/UserContext"
 
 export default function AdminSimulatePage() {
   const [count, setCount] = useState(20)

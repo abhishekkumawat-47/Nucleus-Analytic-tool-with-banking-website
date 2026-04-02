@@ -65,13 +65,14 @@ function AIInsightsPanel({ insights }: AIInsightsPanelProps) {
   return (
     <ChartContainer title="AI Insights" id="ai-insights-panel">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-        {insights.map((insight) => {
+        {insights.map((insight, index) => {
           const style = insightStyles[insight.type] || insightStyles.info;
           const Icon = style.icon;
+          const insightKey = `${insight.id ?? 'insight'}-${insight.type}-${index}`;
 
           return (
             <div
-              key={insight.id}
+              key={insightKey}
               className={`flex flex-col gap-3 p-4 rounded-xl border ${style.borderColor} ${style.bgColor} hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group cursor-pointer relative overflow-hidden`}
             >
               {/* Decorative Accent */}
