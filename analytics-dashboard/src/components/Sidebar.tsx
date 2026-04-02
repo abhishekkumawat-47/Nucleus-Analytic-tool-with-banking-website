@@ -104,7 +104,7 @@ function Sidebar(_props: SidebarProps) {
         </Link>
         {!sidebarCollapsed && (
           <span className="text-[18px] font-bold text-gray-900 tracking-tight">
-            <span className='text-[#1a73e8] font-bold'>Nuc</span>leus
+            <span className='text-[#1a73e8] font-bold'>Fin</span>Insights
           </span>
         )}
       </div>
@@ -113,8 +113,8 @@ function Sidebar(_props: SidebarProps) {
       {!sidebarCollapsed && (
         <div className="px-4 py-3 border-b border-gray-100">
           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${role === 'app_admin'
-              ? 'bg-orange-50 text-orange-700 border border-orange-200'
-              : 'bg-blue-50 text-blue-700 border border-blue-200'
+            ? 'bg-orange-50 text-orange-700 border border-orange-200'
+            : 'bg-blue-50 text-blue-700 border border-blue-200'
             }`}>
             {role === 'app_admin' ? (
               <>App Admin</>
@@ -136,8 +136,8 @@ function Sidebar(_props: SidebarProps) {
               key={item.id}
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 mx-3 rounded-lg text-[13px] font-medium transition-all duration-200 group ${isActive
-                  ? 'bg-[#f1f3f4] text-[#1a73e8]'
-                  : 'text-gray-600 px-2 hover:bg-gray-50'
+                ? 'bg-[#f1f3f4] text-[#1a73e8]'
+                : 'text-gray-600 px-2 hover:bg-gray-50'
                 }`}
               title={sidebarCollapsed ? item.label : undefined}
             >

@@ -62,7 +62,7 @@ export default function AppSelectorPage() {
             <div className="flex items-center gap-2.5">
               <Image src="/logo1.png" alt="Nucleus Logo" width={32} height={32} className="object-contain" />
               <span className="text-lg font-bold text-gray-900 tracking-tight">
-                <span className="text-[#1a73e8]">Nuc</span>leus
+                <span className="text-[#1a73e8]">Fin</span>Insights
               </span>
             </div>
             <div className="flex items-center gap-3">

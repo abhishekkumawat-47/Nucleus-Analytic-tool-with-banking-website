@@ -77,9 +77,11 @@ export default function AdminLoansPage() {
   // To handle account number input for disbursal (simplified to first account for now)
   const [targetAccNo, setTargetAccNo] = useState("")
 
+  const { isAuth } = UserData()
+
   useEffect(() => {
-    fetchApplications()
-  }, [])
+    if (isAuth) fetchApplications()
+  }, [isAuth])
 
   const fetchApplications = useCallback(async () => {
     setLoading(true)

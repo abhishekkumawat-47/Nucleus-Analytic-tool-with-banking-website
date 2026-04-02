@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '@/lib/api';
 
-export const useGeoLocation = (userId: string | undefined) => {
+export const useGeoLocation = (userId: string | undefined, isAuth: boolean = false) => {
   const [captured, setCaptured] = useState(false);
 
   useEffect(() => {
-    if (!userId || captured) return;
+    if (!userId || !isAuth || captured) return;
 
     if ('geolocation' in navigator) {
       const geoTimeout = setTimeout(() => {

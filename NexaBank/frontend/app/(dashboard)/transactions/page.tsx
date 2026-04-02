@@ -46,12 +46,19 @@ import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
 import axios from "axios";
 import { toast } from "sonner";
+import { useEventTracker } from "@/hooks/useEventTracker";
 
 export default function HistoryPage() {
   const [accountNo, setAccountNo] = useState<string>("");
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { track } = useEventTracker();
+
+  useEffect(() => {
+    track('core.transactions.view');
+  }, [track]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -79,7 +86,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     const fetchUserAndTransactions = async () => {
-      if (!userId) return;
+      if (!userId || !isAuth) return;
       setIsLoading(true);
       try {
         // Fetch accounts first to get Main Account No

@@ -26,6 +26,7 @@ import { useRouter } from "next/navigation"
 import { API_BASE_URL } from "@/lib/api";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useEventTracker } from "@/hooks/useEventTracker";
 
 const PayeeCardSkeleton = memo(() => (
   <Card className="overflow-hidden border border-gray-100 shadow-sm">
@@ -62,6 +63,12 @@ const PayeeCardSkeleton = memo(() => (
 PayeeCardSkeleton.displayName = "PayeeCardSkeleton"
 
 export default function PayeesPage() {
+  const { track } = useEventTracker();
+  
+  useEffect(() => {
+    track('core.payees.view');
+  }, [track]);
+
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddPayeeOpen, setIsAddPayeeOpen] = useState(false)
   const [isEditPayeeOpen, setIsEditPayeeOpen] = useState(false)
@@ -70,31 +77,6 @@ export default function PayeesPage() {
   const [isSearching, setIsSearching] = useState(false)
   const [bankList, setBankList] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-
-  useEffect(() => {
-    const fetchBanks = async () => {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/tenants/ifsc-list`, { withCredentials: true });
-        setBankList(res.data || []);
-      } catch (err) {
-        console.error("Failed to fetch bank list:", err);
-      }
-    };
-    fetchBanks();
-  }, []);
-
-  const [newPayee, setNewPayee] = useState({
-    name: "",
-    payeeAccNo: "",
-    ifsc: "",
-    payeeType: "OTHERS"
-  })
-  const [editPayee, setEditPayee] = useState({
-    payeeAccNo: "",
-    name: "",
-    ifsc: "",
-    payeeType: "OTHERS"
-  })
 
   const {
     fetchPayees,
@@ -110,6 +92,31 @@ export default function PayeesPage() {
     globalAccounts,
     fetchGlobalAccounts,
   } = UserData()
+
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/tenants/ifsc-list`, { withCredentials: true });
+        setBankList(res.data || []);
+      } catch (err) {
+        console.error("Failed to fetch bank list:", err);
+      }
+    };
+    if (isAuth) fetchBanks();
+  }, [isAuth]);
+
+  const [newPayee, setNewPayee] = useState({
+    name: "",
+    payeeAccNo: "",
+    ifsc: "",
+    payeeType: "OTHERS"
+  })
+  const [editPayee, setEditPayee] = useState({
+    payeeAccNo: "",
+    name: "",
+    ifsc: "",
+    payeeType: "OTHERS"
+  })
 
   const rawAccounts = globalAccounts;
 

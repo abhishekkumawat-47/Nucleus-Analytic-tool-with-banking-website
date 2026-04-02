@@ -36,6 +36,8 @@ import { API_BASE_URL } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { UserData } from "@/components/context/UserContext";
+import { nexaTracker } from "@/lib/tracker";
+import { useEventTracker } from "@/hooks/useEventTracker";
 
 // ✅ Define Validation Schema
 const formSchema = z.object({
@@ -50,6 +52,7 @@ export default function Register3() {
   const { setUserId, Auth } = UserData();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const { track } = useEventTracker();
 
   // ✅ Initialize React Hook Form with Context API values
   const form = useForm({
@@ -106,7 +109,9 @@ export default function Register3() {
       toast.success("Account created successfully!");
       if (response.data?.id) {
         setUserId(response.data.id);
+        nexaTracker.setUser(response.data.id, user.customerType || 'user', user.email);
       }
+      track('auth.register.success');
       await Auth(); // Refresh global auth state
       router.push("/dashboard");
       
