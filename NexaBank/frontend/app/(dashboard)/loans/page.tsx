@@ -28,9 +28,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ApplyLoanForm } from "@/components/loans/ApplyLoanForm";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEventTracker } from "@/hooks/useEventTracker";
 
 const Loans = () => {
   const { ref, isInView } = useScrollAnimation();
+  const { track } = useEventTracker();
+
+  useEffect(() => {
+    track('loans.dashboard.view');
+  }, [track]);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [selectedLoanType, setSelectedLoanType] = useState("PERSONAL");
   const [applications, setApplications] = useState<any[]>([]);
@@ -87,7 +93,7 @@ const Loans = () => {
   useEffect(() => {
     let isMounted = true;
     const fetchAllData = async () => {
-      if (!userId) return;
+      if (!userId || !isAuth) return;
       try {
         setFetchingApps(true);
         const appsRes = await axios.get(`${API_BASE_URL}/applications/${userId}`, { withCredentials: true });

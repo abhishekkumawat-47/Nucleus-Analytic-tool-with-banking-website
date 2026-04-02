@@ -56,19 +56,19 @@ export default function LoginPage() {
           </h2>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center">
                 <Activity className="w-4 h-4" />
               </div>
               <span className="text-sm text-white/80">Live event streaming via WebSockets</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center">
                 <Layers className="w-4 h-4" />
               </div>
               <span className="text-sm text-white/80">Multi-tenant analytics with role-based access</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <span className="text-sm text-white/80">Enterprise-grade data governance</span>
@@ -94,7 +94,7 @@ export default function LoginPage() {
           <button
             onClick={handleLogin}
             disabled={loading}
-            className="group w-full flex items-center justify-center gap-3 bg-white text-gray-800 px-6 py-3.5 rounded-xl font-semibold border border-gray-200 transition-all hover:border-gray-300 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:hover:scale-100 cursor-pointer"
+            className="group w-full flex items-center justify-center gap-3 bg-white text-gray-800 px-6 py-3.5 rounded-xl font-semibold border border-gray-200 transition-all hover:border-gray-300 hover:shadow-md  disabled:opacity-70 cursor-pointer"
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-800 rounded-full animate-spin" />
@@ -129,19 +129,13 @@ export default function LoginPage() {
               Access is restricted to authorized administrators only.
             </p>
             <div className="grid grid-cols-1 gap-3">
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50/50 border border-blue-100">
-                <div className="w-7 h-7 bg-blue-100 rounded-md flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-blue-700">SA</span>
-                </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-100 border border-blue-100">
                 <div>
                   <p className="text-xs font-semibold text-gray-900">Super Admin</p>
                   <p className="text-[10px] text-gray-500">Aggregated cloud-level overview</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
-                <div className="w-7 h-7 bg-gray-200 rounded-md flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-gray-700">AA</span>
-                </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-100 border border-gray-100">
                 <div>
                   <p className="text-xs font-semibold text-gray-900">App Admin</p>
                   <p className="text-[10px] text-gray-500">Full detailed analytics for assigned app</p>

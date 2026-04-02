@@ -21,12 +21,33 @@ export default function GovernancePage() {
   const [loadingConfigLogs, setLoadingConfigLogs] = useState(false);
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
 
+  const DEFAULT_FEATURES = [
+    { feature_name: "core.payees.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "core.transactions.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "loans.dashboard.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.crypto-trading.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.wealth-management.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+  ];
+
   // Fetch tracking toggles
   useEffect(() => {
     const fetch = async () => {
       setLoadingToggles(true);
       const result = await dashboardAPI.getTrackingToggles(tenantId);
-      setToggles(result.toggles || []);
+      const apiToggles = result.toggles || [];
+      
+      const mergedToggles = DEFAULT_FEATURES.map(f => {
+        const override = apiToggles.find((a: any) => a.feature_name === f.feature_name);
+        return override || f;
+      });
+
+      apiToggles.forEach((a: any) => {
+        if (!mergedToggles.find(m => m.feature_name === a.feature_name)) {
+            mergedToggles.push(a);
+        }
+      });
+
+      setToggles(mergedToggles);
       setLoadingToggles(false);
     };
     fetch();
@@ -50,7 +71,20 @@ export default function GovernancePage() {
     await dashboardAPI.setTrackingToggle(tenantId, featureName, !currentState, actorEmail);
     // Refresh toggles
     const result = await dashboardAPI.getTrackingToggles(tenantId);
-    setToggles(result.toggles || []);
+    const apiToggles = result.toggles || [];
+      
+    const mergedToggles = DEFAULT_FEATURES.map(f => {
+      const override = apiToggles.find((a: any) => a.feature_name === f.feature_name);
+      return override || f;
+    });
+
+    apiToggles.forEach((a: any) => {
+      if (!mergedToggles.find(m => m.feature_name === a.feature_name)) {
+          mergedToggles.push(a);
+      }
+    });
+
+    setToggles(mergedToggles);
     setTogglingFeature(null);
   };
 

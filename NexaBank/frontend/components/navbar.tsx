@@ -28,9 +28,9 @@ import { Badge } from "./ui/badge"
 
 export function Navbar() {
   const pathname = usePathname()
-  const { userId, role } = UserData()
+  const { userId, role, isAuth } = UserData()
 
-  useGeoLocation(userId)
+  useGeoLocation(userId, isAuth)
 
   const isAuthPage = pathname?.includes("/login") || pathname?.includes("/register")
   const isHomePage = pathname === "/"

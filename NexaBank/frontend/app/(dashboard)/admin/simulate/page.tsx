@@ -28,6 +28,8 @@ export default function AdminSimulatePage() {
   const [result, setResult] = useState<any>(null)
   const [bankList, setBankList] = useState<any[]>([])
 
+  const { isAuth } = UserData()
+
   useEffect(() => {
     const fetchBanks = async () => {
       try {
@@ -40,8 +42,8 @@ export default function AdminSimulatePage() {
         console.error("Failed to fetch bank list:", err);
       }
     };
-    fetchBanks();
-  }, []);
+    if (isAuth) fetchBanks();
+  }, [isAuth]);
 
   const handleSimulate = async () => {
     setLoading(true)

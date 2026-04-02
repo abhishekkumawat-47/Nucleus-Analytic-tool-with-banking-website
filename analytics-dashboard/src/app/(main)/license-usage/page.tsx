@@ -4,12 +4,30 @@ import React, { useEffect, useState } from 'react';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { TableSkeleton, KPICardSkeleton, ChartSkeleton } from '@/components/Skeletons';
-import {
-  Key, AlertTriangle, CheckCircle, XCircle, Loader2,
-  Users, DollarSign, Shield,
-  Zap, BarChart3, ArrowUpRight, ArrowDownRight, Crown,
-  RefreshCw, Sparkles, Activity
-} from 'lucide-react';
+
+const DummyIcon = () => null;
+const Key = DummyIcon;
+const AlertTriangle = DummyIcon;
+const CheckCircle = DummyIcon;
+const XCircle = DummyIcon;
+const Loader2 = () => <span className="animate-pulse">...</span>;
+const Users = DummyIcon;
+const DollarSign = DummyIcon;
+const Shield = DummyIcon;
+const Zap = DummyIcon;
+const BarChart3 = DummyIcon;
+const ArrowUpRight = DummyIcon;
+const ArrowDownRight = DummyIcon;
+const Crown = DummyIcon;
+const RefreshCw = DummyIcon;
+const Sparkles = DummyIcon;
+const Activity = DummyIcon;
+const Bitcoin = DummyIcon;
+const Scale = DummyIcon;
+const Briefcase = DummyIcon;
+const FileText = DummyIcon;
+
+
 import ChartContainer from '@/components/ChartContainer';
 import { toast } from 'sonner';
 
@@ -55,19 +73,15 @@ interface LicenseData {
 
 /* ─── Helpers ─── */
 
-const FEATURE_LABELS: Record<string, { label: string; icon: string; description: string }> = {
-  crypto_trade_execution: { label: 'Crypto Trading', icon: '₿', description: 'Real-time crypto buy/sell execution' },
-  wealth_rebalance: { label: 'Wealth Rebalance', icon: '⚖️', description: 'AI-driven portfolio rebalancing' },
-  payroll_batch_processed: { label: 'Bulk Payroll', icon: '💼', description: 'Batch salary disbursement processing' },
-  pro_book_download: { label: 'AI Insights Export', icon: '📊', description: 'Downloadable AI financial reports' },
+const FEATURE_LABELS: Record<string, { label: string; description: string }> = {
+  'pro.crypto.trade': { label: 'Crypto Trading', description: 'Real-time crypto buy/sell execution' },
+  'pro.wealth.rebalance': { label: 'Wealth Rebalance', description: 'AI-driven portfolio rebalancing' },
+  'pro.payroll.batch': { label: 'Bulk Payroll', description: 'Batch salary disbursement processing' },
+  'pro.insights.export': { label: 'AI Insights Export', description: 'Downloadable AI financial reports' },
 };
 
 function featureLabel(name: string): string {
   return FEATURE_LABELS[name]?.label || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function featureIcon(name: string): string {
-  return FEATURE_LABELS[name]?.icon || '⚡';
 }
 
 function featureDescription(name: string): string {
@@ -190,7 +204,7 @@ export default function LicenseUsagePage() {
 
   const summary = data?.summary;
   const hasWastedLicenses = (summary?.waste_pct || 0) > 20;
-  const licensedFeatures = data?.licensed || [];
+  const licensedFeatures = [ ...(data?.licensed || []), ...(data?.unused_licensed || []) ];
   const unlicensedFeatures = data?.unlicensed_used || [];
   const hasData = licensedFeatures.length > 0;
 
@@ -199,10 +213,10 @@ export default function LicenseUsagePage() {
     try {
       setSeeding(true);
       const features = [
-        { feature_name: "crypto_trade_execution", is_licensed: true, plan_tier: "enterprise" },
-        { feature_name: "wealth_rebalance", is_licensed: true, plan_tier: "enterprise" },
-        { feature_name: "payroll_batch_processed", is_licensed: true, plan_tier: "enterprise" },
-        { feature_name: "pro_book_download", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.crypto-trading.view", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.wealth-management.view", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.bulk-payroll-processing.view", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.ai-insights.view", is_licensed: true, plan_tier: "enterprise" },
       ];
       await dashboardAPI.syncLicenses(tenantId, features);
       await fetchData();
@@ -248,9 +262,6 @@ export default function LicenseUsagePage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-violet-100 rounded-lg">
-              <Crown className="h-5 w-5 text-violet-600" />
-            </div>
             <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">
               Enterprise License Usage
             </h1>
@@ -429,7 +440,6 @@ export default function LicenseUsagePage() {
               <div className="space-y-3 py-2">
                 {licensedFeatures.map((f, i) => (
                   <div key={i} className="flex items-center gap-3">
-                    <span className="text-lg w-8 text-center">{featureIcon(f.feature_name)}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium text-gray-900 truncate">{featureLabel(f.feature_name)}</span>
@@ -482,9 +492,6 @@ export default function LicenseUsagePage() {
                   <div className="p-5">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`text-2xl p-2.5 rounded-xl ${f.is_used ? 'bg-violet-50' : 'bg-red-50'}`}>
-                          {featureIcon(f.feature_name)}
-                        </div>
                         <div>
                           <h3 className="text-sm font-semibold text-gray-900">{featureLabel(f.feature_name)}</h3>
                           <p className="text-xs text-gray-500 mt-0.5">{featureDescription(f.feature_name)}</p>
@@ -552,7 +559,6 @@ export default function LicenseUsagePage() {
                       <tr key={i} className={`border-b border-gray-100 transition-colors ${!f.is_used ? 'bg-red-50/50' : 'hover:bg-gray-50'}`}>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
-                            <span className="text-base">{featureIcon(f.feature_name)}</span>
                             <div>
                               <p className="font-semibold text-gray-900 text-sm">{featureLabel(f.feature_name)}</p>
                               <p className="text-[11px] text-gray-400 mt-0.5">{featureDescription(f.feature_name)}</p>
@@ -612,7 +618,6 @@ export default function LicenseUsagePage() {
                         <tr key={i} className="border-b border-gray-100 hover:bg-amber-50/30 transition-colors">
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-2">
-                              <Zap className="h-4 w-4 text-amber-500" />
                               <span className="font-medium text-gray-900 capitalize">
                                 {f.feature_name.replace(/_/g, ' ')}
                               </span>
