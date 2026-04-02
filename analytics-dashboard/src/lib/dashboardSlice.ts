@@ -89,7 +89,10 @@ export const fetchDashboardData = createAsyncThunk<DashboardDataPayload, void, {
   'dashboard/fetchAll',
   async (_, { getState }) => {
     const state = getState();
-    const tenantId = state.dashboard.selectedTenant;
+    const selected = state.dashboard.selectedTenant;
+    const tenantId = selected === 'All Tenants' ? 'nexabank,safexbank' : selected;
+    const range = state.dashboard.timeRange;
+    const days = range === 'Last 30 Days' ? 30 : range === 'Last 90 Days' ? 90 : 7;
 
     const [
       kpiMetrics,
@@ -110,20 +113,20 @@ export const fetchDashboardData = createAsyncThunk<DashboardDataPayload, void, {
       featureConfigs,
       retentionData,
     ] = await Promise.all([
-      dashboardAPI.getKPIMetrics(tenantId),
-      dashboardAPI.getSecondaryKPIMetrics(tenantId),
-      dashboardAPI.getTrafficData(tenantId),
-      dashboardAPI.getFeatureUsageData(tenantId),
-      dashboardAPI.getTopFeatures(tenantId),
+      dashboardAPI.getKPIMetrics(tenantId, days),
+      dashboardAPI.getSecondaryKPIMetrics(tenantId, days),
+      dashboardAPI.getTrafficData(tenantId, days),
+      dashboardAPI.getFeatureUsageData(tenantId, days),
+      dashboardAPI.getTopFeatures(tenantId, days),
       dashboardAPI.getFunnelData(tenantId),
-      dashboardAPI.getFeatureActivity(tenantId),
-      dashboardAPI.getTenants(tenantId),
+      dashboardAPI.getFeatureActivity(tenantId, days),
+      dashboardAPI.getTenants(tenantId, days),
       dashboardAPI.getRealTimeUsers(tenantId),
       dashboardAPI.getPagesPerMinute(tenantId),
-      dashboardAPI.getTopPages(tenantId),
-      dashboardAPI.getDeviceBreakdown(tenantId),
-      dashboardAPI.getAcquisitionChannels(tenantId),
-      dashboardAPI.getLocations(tenantId),
+      dashboardAPI.getTopPages(tenantId, days),
+      dashboardAPI.getDeviceBreakdown(tenantId, days),
+      dashboardAPI.getAcquisitionChannels(tenantId, days),
+      dashboardAPI.getLocations(tenantId, days),
       dashboardAPI.getAuditLogs(tenantId),
       dashboardAPI.getFeatureConfigs(tenantId),
       dashboardAPI.getRetentionData(tenantId),

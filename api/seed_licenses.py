@@ -12,9 +12,9 @@ from storage.client import ch_client
 # Licensed = features the bank PAYS for under an enterprise plan.
 features = [
     # The 4 actual Pro features that require an enterprise license
-    {"feature_name": "crypto_trade_execution", "is_licensed": True, "plan_tier": "enterprise"},
+    {"feature_name": "pro-feature?id=crypto-trading", "is_licensed": True, "plan_tier": "enterprise"},
     {"feature_name": "wealth_rebalance", "is_licensed": True, "plan_tier": "enterprise"},
-    {"feature_name": "payroll_batch_processed", "is_licensed": True, "plan_tier": "enterprise"},
+    {"feature_name": "pro-feature?id=bulk-payroll-processing", "is_licensed": True, "plan_tier": "enterprise"},
     {"feature_name": "ai_insight_download", "is_licensed": True, "plan_tier": "enterprise"},
 ]
 

@@ -16,7 +16,7 @@ router.post(
       const { eventType, metadata } = req.body;
       const customerId = (req as any).user?.id;
       const tenantId = (req as any).user?.tenantId || "bank_a";
-      
+
       if (!customerId || !eventType) {
         res.status(400).json({ error: "Missing required fields" });
         return;
@@ -351,7 +351,7 @@ const SPEND_CATEGORIES = ["FOOD", "SHOPPING", "ENTERTAINMENT", "HOUSING", "OTHER
 const CHANNELS: ("WEB" | "MOBILE" | "ATM" | "POS")[] = ["WEB", "MOBILE", "ATM", "POS"];
 const CHANNEL_WEIGHTS = [35, 40, 10, 15]; // Mobile-first era
 const LOAN_TYPES = ["HOME", "AUTO", "PERSONAL", "STUDENT"] as ("HOME" | "AUTO" | "PERSONAL" | "STUDENT")[];
-const PRO_FEATURES = ["crypto_trade_execution", "wealth_rebalance", "payroll_batch_processed", "ai_insight_download"];
+const PRO_FEATURES = ["pro-feature?id=crypto-trading", "wealth_rebalance", "pro-feature?id=bulk-payroll-processing", "ai_insight_download"];
 const DEVICE_TYPES = ["desktop", "mobile", "tablet"];
 const DEVICE_WEIGHTS = [35, 50, 15];
 const BROWSERS = ["Chrome", "Safari", "Firefox", "Edge", "Samsung Internet"];
@@ -780,13 +780,99 @@ router.post(
           }
 
           // ── Pro Feature Usage (already pro users) ─────────
-          // Track the ACTUAL pro feature name as the event type for analytics
+          // Generate granular events per feature type for analytics tracking
           if (isPro && Math.random() < 0.5) {
-            const proAction = pick(["dashboard_view", "trade_view", "report_view", "data_export", "analysis_run"]);
-            // Track both the generic pro usage AND the specific feature event
-            await trackEvent("pro_feature_usage", customer.id, tenantId, { day, action: proAction, featureId: unlockedFeature, ...lMeta }, dayTs + 6000);
-            // Track the specific pro feature as its own event type for analytics dashboard
-            await trackEvent(unlockedFeature || pick(PRO_FEATURES), customer.id, tenantId, { action: proAction, ...lMeta }, dayTs + 6005);
+            // Log-normal response time: Box-Muller transform, median ~55ms, long tail to ~300ms
+            const u1 = Math.random() || 1e-10;
+            const u2 = Math.random();
+            const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+            const responseTime = Math.max(15, Math.min(300, Math.round(Math.exp(4.0 + z * 0.7))));
+            const isError = Math.random() < 0.03; // 3% error rate
+
+            if (unlockedFeature === "ai_insight_download") {
+              // Finance Library — book access events
+              const bookTitles = ["The Intelligent Investor", "Rich Dad Poor Dad", "The Psychology of Money", "A Random Walk Down Wall Street", "Common Stocks and Uncommon Profits", "The Little Book of Common Sense Investing"];
+              const bookTitle = pick(bookTitles);
+              await trackEvent("pro.finance-library.book_access", customer.id, tenantId, {
+                feature: "ai-insights", title: bookTitle, status: isError ? "error" : "success",
+                response_time_ms: responseTime, error: isError ? "timeout" : undefined, ...lMeta
+              }, dayTs + 6000);
+              await trackEvent("pro.finance-library.stats_view", customer.id, tenantId, {
+                feature: "ai-insights", books_tracked: Math.floor(1 + Math.random() * 5),
+                status: "success", response_time_ms: responseTime, ...lMeta
+              }, dayTs + 6100);
+              eventsCreated += 2;
+
+            } else if (unlockedFeature === "pro-feature?id=crypto-trading") {
+              // Crypto Trading — price views + trades
+              const assets = ["BTC", "ETH", "SOL", "XRP", "ADA"];
+              const asset = pick(assets);
+              const tradeType = pick(["BUY", "SELL"]);
+              await trackEvent("pro.crypto-trading.prices_view", customer.id, tenantId, {
+                feature: "crypto-trading", source: pick(["live", "cache"]),
+                status: isError ? "error" : "success", response_time_ms: responseTime,
+                assets_count: 5, ...lMeta
+              }, dayTs + 6000);
+              if (Math.random() < 0.4) {
+                const tradeAmount = parseFloat((0.001 + Math.random() * 0.5).toFixed(4));
+                await trackEvent("pro.crypto-trading.trade_execute", customer.id, tenantId, {
+                  feature: "crypto-trading", asset, amount: tradeAmount, type: tradeType,
+                  status: isError ? "error" : "success", response_time_ms: responseTime,
+                  error: isError ? "insufficient_funds" : undefined, ...lMeta
+                }, dayTs + 6200);
+                eventsCreated++;
+              }
+              await trackEvent("pro.crypto-trading.portfolio_view", customer.id, tenantId, {
+                feature: "crypto-trading", holdings_count: Math.floor(Math.random() * 4),
+                status: "success", response_time_ms: responseTime, ...lMeta
+              }, dayTs + 6300);
+              eventsCreated += 2;
+
+            } else if (unlockedFeature === "wealth_rebalance") {
+              // Wealth Management — insights + rebalance
+              await trackEvent("pro.wealth-management.insights_view", customer.id, tenantId, {
+                feature: "wealth-management-pro", status: isError ? "error" : "success",
+                response_time_ms: responseTime, accounts_count: Math.floor(1 + Math.random() * 3),
+                transactions_analyzed: Math.floor(10 + Math.random() * 200),
+                net_worth: Math.floor(50000 + Math.random() * 500000),
+                error: isError ? "db_timeout" : undefined, ...lMeta
+              }, dayTs + 6000);
+              if (Math.random() < 0.15) {
+                await trackEvent("pro.wealth-management.rebalance", customer.id, tenantId, {
+                  feature: "wealth-management-pro", status: "success",
+                  response_time_ms: Math.floor(100 + Math.random() * 1000),
+                  totalValue: Math.floor(100000 + Math.random() * 500000), ...lMeta
+                }, dayTs + 6500);
+                eventsCreated++;
+              }
+              eventsCreated++;
+
+            } else if (unlockedFeature === "pro-feature?id=bulk-payroll-processing") {
+              // Payroll Pro — payee views + batch processing
+              await trackEvent("pro.payroll-pro.payees_view", customer.id, tenantId, {
+                feature: "bulk-payroll-processing", payees_count: Math.floor(2 + Math.random() * 15),
+                status: "success", response_time_ms: responseTime, ...lMeta
+              }, dayTs + 6000);
+              if (Math.random() < 0.3) {
+                const payeeCount = Math.floor(2 + Math.random() * 10);
+                const amtPerPayee = Math.floor(1000 + Math.random() * 9000);
+                await trackEvent("pro.payroll-pro.batch_process", customer.id, tenantId, {
+                  feature: "bulk-payroll-processing",
+                  payees_count: payeeCount,
+                  amount_per_payee: amtPerPayee,
+                  total_amount: payeeCount * amtPerPayee,
+                  status: isError ? "error" : "success",
+                  response_time_ms: Math.floor(200 + Math.random() * 2000),
+                  error: isError ? "insufficient_funds" : undefined, ...lMeta
+                }, dayTs + 6500);
+                eventsCreated++;
+              }
+              eventsCreated++;
+            }
+
+            // Also fire legacy events for backward compat
+            await trackEvent("pro_feature_usage", customer.id, tenantId, { day, featureId: unlockedFeature, ...lMeta }, dayTs + 6800);
+            await trackEvent(unlockedFeature || pick(PRO_FEATURES), customer.id, tenantId, { ...lMeta }, dayTs + 6805);
             eventsCreated += 2;
           }
 

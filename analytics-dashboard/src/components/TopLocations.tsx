@@ -62,12 +62,12 @@ function TopLocations({ data }: TopLocationsProps) {
   // Continent colors for visual grouping
   const continentColors: Record<string, string> = {
     'Asia': '#1a73e8',
-    'North America': '#34A853',
-    'Europe': '#F59E0B',
-    'South America': '#8B5CF6',
-    'Africa': '#EF4444',
-    'Oceania': '#06B6D4',
-    'Other': '#9CA3AF',
+    'North America': '#1a73e8',
+    'Europe': '#1a73e8',
+    'South America': '#1a73e8',
+    'Africa': '#1a73e8',
+    'Oceania': '#1a73e8',
+    'Other': '#1a73e8',
   };
 
   return (
@@ -245,11 +245,6 @@ function TopLocations({ data }: TopLocationsProps) {
               ))
             )}
           </div>
-
-          <button className="mt-auto cursor-pointer pt-4 text-[12px] font-medium text-blue-600 hover:text-blue-700 transition-colors border-t border-gray-50 flex items-center gap-1.5 justify-center group">
-            View full report
-            <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-          </button>
         </div>
       </div>
     </ChartContainer>

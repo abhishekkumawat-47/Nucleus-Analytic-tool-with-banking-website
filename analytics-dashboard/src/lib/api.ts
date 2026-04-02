@@ -107,13 +107,7 @@ interface BackendAIReportResponse {
   insights?: BackendInsight[];
 }
 
-interface BackendAIReportResponse {
-  tenant_id: string;
-  report: string;
-  cached?: boolean;
-  generated_at?: string | null;
-  insights?: BackendInsight[];
-}
+/* (duplicate BackendAIReportResponse removed — declared above at L102) */
 
 interface BackendTrafficRow {
   date: string;
@@ -138,8 +132,9 @@ interface BackendChannelRow {
 }
 
 interface BackendTopPageRow {
-  url: string;
-  visits: string;
+  pageUrl: string;
+  totalEvents: number;
+  features: string[];
 }
 
 interface BackendPPMRow {
@@ -194,42 +189,42 @@ interface LicenseUsageResponse {
     estimated_revenue?: number;
     wow_change?: number;
   };
-  licensed: unknown[];
-  unused_licensed: unknown[];
-  unlicensed_used: unknown[];
+  licensed: Array<{ feature_name: string; plan_tier: string; is_used: boolean; usage_count: number; unique_users: number; usage_pct: number; trend: Array<{ date: string; count: number }> }>;
+  unused_licensed: Array<{ feature_name: string; plan_tier: string; is_used: boolean; usage_count: number; unique_users: number; usage_pct: number; trend: Array<{ date: string; count: number }> }>;
+  unlicensed_used: Array<{ feature_name: string; usage_count: number; unique_users: number; usage_pct: number }>;
   nexabank_context?: {
     last_event_at?: string | null;
     pro_events_30d?: number;
-    pro_feature_catalog?: unknown[];
-    top_relevant_features?: unknown[];
+    pro_feature_catalog?: Array<{ feature_id: string; title: string }>;
+    top_relevant_features?: Array<{ feature_name: string; usage_count: number }>;
   };
 }
 
 interface TrackingToggleResponse {
-  toggles: unknown[];
+  toggles: Array<{ feature: string; enabled: boolean; description?: string }>;
 }
 
 interface ConfigAuditResponse {
-  logs: unknown[];
+  logs: Array<{ timestamp: string; feature: string; action: string; by: string; reason?: string }>;
 }
 
 interface UserJourneyResponse {
-  events: unknown[];
-  sessions: unknown[];
+  events: Array<{ event_name: string; timestamp: string; channel?: string; metadata?: Record<string, string | number | boolean> }>;
+  sessions: Array<{ session_id: string; start_time: string; duration_seconds: number }>;
   total_events: number;
   total_sessions: number;
 }
 
 interface JourneyUsersResponse {
-  users: unknown[];
+  users: Array<{ user_id: string; total_events: number; last_active: string }>;
 }
 
 interface SegmentationResponse {
-  segments: unknown[];
+  segments: Array<{ segment: string; users: number }>;
 }
 
 interface PredictiveResponse {
-  predictions: unknown[];
+  predictions: Array<{ metric: string; predicted_value: number; confidence: number }>;
   total_users: number;
 }
 
@@ -237,9 +232,9 @@ interface PredictiveResponse {
 
 export const dashboardAPI = {
   /** Fetch KPI metrics for the dashboard header */
-  async getKPIMetrics(tenantId: string = 'twitter'): Promise<KPIMetric[]> {
+  async getKPIMetrics(tenantId: string = 'twitter', days: number = 7): Promise<KPIMetric[]> {
     try {
-      const response = await apiClient.get<KPIMetric[]>(`/metrics/kpi?tenant_id=${tenantId}`);
+      const response = await apiClient.get<KPIMetric[]>(`/metrics/kpi?tenant_id=${tenantId}&days=${days}`);
       return response.data;
     } catch {
       console.error('Failed to fetch KPI metrics');
@@ -248,9 +243,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch Secondary KPI metrics */
-  async getSecondaryKPIMetrics(tenantId: string = 'twitter'): Promise<KPIMetric[]> {
+  async getSecondaryKPIMetrics(tenantId: string = 'twitter', days: number = 7): Promise<KPIMetric[]> {
     try {
-      const response = await apiClient.get<KPIMetric[]>(`/metrics/secondary_kpi?tenant_id=${tenantId}`);
+      const response = await apiClient.get<KPIMetric[]>(`/metrics/secondary_kpi?tenant_id=${tenantId}&days=${days}`);
       return response.data;
     } catch {
       console.error('Failed to fetch Secondary KPI metrics');
@@ -259,14 +254,21 @@ export const dashboardAPI = {
   },
 
   /** Fetch traffic overview time series data */
-  async getTrafficData(tenantId: string = 'twitter'): Promise<TimeSeriesDataPoint[]> {
+  async getTrafficData(tenantId: string = 'twitter', days: number = 7): Promise<TimeSeriesDataPoint[]> {
     try {
-      const response = await apiClient.get<BackendTrafficRow[]>(`/metrics/traffic?tenant_id=${tenantId}&days=7`);
-      return response.data.map((r: BackendTrafficRow) => ({
-        date: r.date,
-        visitors: Number(r.visitors),
-        pageViews: Number(r.pageViews)
-      }));
+      const response = await apiClient.get<Record<string, string | number>[]>(`/metrics/traffic?tenant_id=${tenantId}&days=${days}`);
+      // Multi-tenant pivoted data has keys like nexabank_pageViews, safexbank_visitors
+      // Single-tenant data has simple visitors/pageViews
+      // Pass through the raw data shape — the chart dynamically reads keys
+      return response.data.map((r: Record<string, string | number>) => {
+        const point: Record<string, string | number> = { date: String(r.date) };
+        for (const key of Object.keys(r)) {
+          if (key !== 'date') {
+            point[key] = Number(r[key]) || 0;
+          }
+        }
+        return point as unknown as TimeSeriesDataPoint;
+      });
     } catch {
       console.error('Failed to fetch traffic data');
       return [];
@@ -274,13 +276,21 @@ export const dashboardAPI = {
   },
 
   /** Fetch feature usage over time data */
-  async getFeatureUsageData(tenantId: string = 'twitter'): Promise<FeatureUsageDataPoint[]> {
+  async getFeatureUsageData(tenantId: string = 'twitter', days: number = 7): Promise<FeatureUsageDataPoint[]> {
     try {
-      const response = await apiClient.get<BackendFeatureUsageRow[]>(`/metrics/feature_usage_series?tenant_id=${tenantId}&days=7`);
-      return response.data.map((r: BackendFeatureUsageRow) => ({
-        date: r.date,
-        usage: Number(r.usage)
-      }));
+      const response = await apiClient.get<Record<string, string | number>[]>(`/metrics/feature_usage_series?tenant_id=${tenantId}&days=${days}`);
+      // Multi-tenant pivoted data has keys like nexabank_usage, safexbank_usage
+      // Single-tenant data has simple usage key
+      // Pass through the raw data shape — the chart dynamically reads keys
+      return response.data.map((r: Record<string, string | number>) => {
+        const point: Record<string, string | number> = { date: String(r.date) };
+        for (const key of Object.keys(r)) {
+          if (key !== 'date') {
+            point[key] = Number(r[key]) || 0;
+          }
+        }
+        return point as unknown as FeatureUsageDataPoint;
+      });
     } catch {
       console.error('Failed to fetch feature usage');
       return [];
@@ -288,9 +298,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch top features ranking using backend /features/usage endpoint */
-  async getTopFeatures(tenantId: string = 'twitter'): Promise<BarDataPoint[]> {
+  async getTopFeatures(tenantId: string = 'twitter', days: number = 7): Promise<BarDataPoint[]> {
     try {
-      const response = await apiClient.get<{ usage: BackendFeatureUsageItem[] }>(`/features/usage?tenant_id=${tenantId}&days=7`);
+      const response = await apiClient.get<{ usage: BackendFeatureUsageItem[] }>(`/features/usage?tenant_id=${tenantId}&days=${days}`);
       const backendUsage = response.data.usage || [];
       return backendUsage.map((item: BackendFeatureUsageItem) => ({
         name: item.event_name,
@@ -303,13 +313,13 @@ export const dashboardAPI = {
   },
 
   /** Fetch user journey funnel data using backend /funnels endpoint */
-  async getFunnelData(tenantId: string = 'twitter'): Promise<FunnelStep[]> {
+  async getFunnelData(tenantId: string = 'twitter', days: number = 7): Promise<FunnelStep[]> {
     try {
       const { APP_REGISTRY } = await import('./feature-map');
       const appConfig = APP_REGISTRY[tenantId];
       const steps = appConfig?.funnelSteps?.join(',') || 'login,view_feed,post_tweet,like_tweet';
       
-      const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenant_id=${tenantId}&steps=${steps}&window_minutes=60`);
+      const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenant_id=${tenantId}&steps=${steps}&window_minutes=60&days=${days}`);
       const funnel = response.data.funnel || [];
       
       return funnel.map((step: BackendFunnelStep) => ({
@@ -327,9 +337,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch feature activity heatmap data */
-  async getFeatureActivity(tenantId: string = 'twitter'): Promise<FeatureActivityRow[]> {
+  async getFeatureActivity(tenantId: string = 'twitter', days: number = 7): Promise<FeatureActivityRow[]> {
     try {
-      const response = await apiClient.get<BackendActivityRow[]>(`/features/activity?tenant_id=${tenantId}`);
+      const response = await apiClient.get<BackendActivityRow[]>(`/features/activity?tenant_id=${tenantId}&days=${days}`);
       return response.data.map((row: BackendActivityRow) => ({
         feature: row.feature,
         segments: row.segments,
@@ -355,9 +365,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch tenant comparison data — passes tenant_id for RBAC */
-  async getTenants(tenantId?: string): Promise<Tenant[]> {
+  async getTenants(tenantId?: string, days: number = 7): Promise<Tenant[]> {
     try {
-      const params = tenantId ? `?tenant_id=${tenantId}` : '';
+      const params = tenantId ? `?tenant_id=${tenantId}&days=${days}` : `?days=${days}`;
       const response = await apiClient.get<Tenant[]>(`/tenants${params}`);
       return response.data;
     } catch {
@@ -366,23 +376,48 @@ export const dashboardAPI = {
   },
 
   /** Fetch AI-generated insights using backend /insights endpoint */
-  async getAIInsights(tenantId: string = 'twitter'): Promise<AIInsight[]> {
-    try {
-      const response = await apiClient.get<{ insights: BackendInsight[] }>(`/insights?tenant_id=${tenantId}`, { timeout: 1200000 });
-      const insights = response.data.insights || [];
-      return insights.map((insight: BackendInsight, ix: number) => ({
-        id: `ai-${ix}`,
-        type: insight.severity === 'high' ? 'warning' as const : insight.severity === 'medium' ? 'info' as const : 'success' as const,
-        title: insight.type || 'Backend Insight',
-        message: insight.message || String(insight),
-        impact: insight.severity === 'high' ? 'High' : 'Medium',
-        priority: insight.severity,
-        actionRequired: insight.severity === 'high',
-      }));
-    } catch {
-      console.error('Failed to fetch AI Insights');
-      return [];
+  async getAIInsights(tenantId: string = 'twitter', days: number = 7): Promise<AIInsight[]> {
+    // Retry once on failure before returning fallback
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await apiClient.get<{ insights: BackendInsight[] }>(
+          `/insights?tenant_id=${tenantId}&days=${days}`,
+          { timeout: attempt === 0 ? 15000 : 30000 } // 15s first try, 30s retry
+        );
+        const insights = response.data.insights || [];
+        return insights.map((insight: BackendInsight, ix: number) => ({
+          id: `ai-${ix}`,
+          type: insight.severity === 'high' ? 'warning' as const : insight.severity === 'medium' ? 'info' as const : 'success' as const,
+          title: insight.type || 'Backend Insight',
+          message: insight.message || String(insight),
+          impact: insight.severity === 'high' ? 'High' : 'Medium',
+          priority: insight.severity,
+          actionRequired: insight.severity === 'high',
+        }));
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        const isTimeout = (err as { code?: string })?.code === 'ECONNABORTED';
+        console.warn(`[AI Insights] Attempt ${attempt + 1} failed (status=${status}, timeout=${isTimeout})`);
+        
+        // Don't retry on 403 (RBAC) or 404 
+        if (status === 403 || status === 404) break;
+        
+        // Wait before retry
+        if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
+      }
     }
+    
+    // Return informative fallback insights when backend is unavailable
+    console.error('Failed to fetch AI Insights after retries');
+    return [{
+      id: 'ai-fallback-0',
+      type: 'info' as const,
+      title: 'Insights Temporarily Unavailable',
+      message: 'The AI insights engine is currently processing or unavailable. Insights will appear automatically once the backend is ready.',
+      impact: 'Low',
+      priority: 'low',
+      actionRequired: false,
+    }];
   },
 
   /** Fetch AI Summarization Report */
@@ -437,20 +472,24 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch top pages data */
-  async getTopPages(tenantId: string = 'twitter'): Promise<TopPage[]> {
+  /** Fetch top pages data — returns page-grouped entries with nested features */
+  async getTopPages(tenantId: string = 'twitter', days: number = 7): Promise<TopPage[]> {
     try {
-      const response = await apiClient.get<BackendTopPageRow[]>(`/metrics/top_pages?tenant_id=${tenantId}`);
-      return response.data;
+      const response = await apiClient.get<BackendTopPageRow[]>(`/metrics/top_pages?tenant_id=${tenantId}&days=${days}`);
+      return response.data.map((row: BackendTopPageRow) => ({
+        pageUrl: row.pageUrl,
+        totalEvents: row.totalEvents,
+        features: row.features || [],
+      }));
     } catch {
       return [];
     }
   },
 
   /** Fetch device breakdown data */
-  async getDeviceBreakdown(tenantId: string = 'twitter'): Promise<DeviceBreakdown[]> {
+  async getDeviceBreakdown(tenantId: string = 'twitter', days: number = 7): Promise<DeviceBreakdown[]> {
     try {
-      const response = await apiClient.get<DeviceBreakdown[]>(`/metrics/devices?tenant_id=${tenantId}`);
+      const response = await apiClient.get<DeviceBreakdown[]>(`/metrics/devices?tenant_id=${tenantId}&days=${days}`);
       return response.data;
     } catch {
       console.error('Failed to fetch device breakdown');
@@ -459,9 +498,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch user acquisition channel data */
-  async getAcquisitionChannels(tenantId: string = 'twitter'): Promise<AcquisitionChannel[]> {
+  async getAcquisitionChannels(tenantId: string = 'twitter', days: number = 7): Promise<AcquisitionChannel[]> {
     try {
-      const response = await apiClient.get<BackendChannelRow[]>(`/metrics/channels?tenant_id=${tenantId}`);
+      const response = await apiClient.get<BackendChannelRow[]>(`/metrics/channels?tenant_id=${tenantId}&days=${days}`);
       return response.data;
     } catch {
       return [];
@@ -469,9 +508,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch top locations data from backend */
-  async getLocations(tenantId: string = 'twitter'): Promise<LocationData[]> {
+  async getLocations(tenantId: string = 'twitter', days: number = 7): Promise<LocationData[]> {
     try {
-      const response = await apiClient.get<LocationData[]>(`/locations?tenant_id=${tenantId}`);
+      const response = await apiClient.get<LocationData[]>(`/locations?tenant_id=${tenantId}&days=${days}`);
       return response.data;
     } catch {
       console.error('Failed to fetch Locations');
@@ -509,10 +548,10 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch cohort retention data */
-  async getRetentionData(tenantId: string = 'twitter'): Promise<RetentionData[]> {
+  /** Fetch retention data */
+  async getRetentionData(tenantId: string = 'twitter', days: number = 7): Promise<RetentionData[]> {
     try {
-      const response = await apiClient.get<RetentionData[]>(`/metrics/retention?tenant_id=${tenantId}`);
+      const response = await apiClient.get<RetentionData[]>(`/metrics/retention?tenant_id=${tenantId}&days=${days}`);
       return response.data;
     } catch {
       return [];
