@@ -31,23 +31,6 @@ export interface AppConfig {
  * Add new apps here — no code changes needed elsewhere.
  */
 export const APP_REGISTRY: Record<string, AppConfig> = {
-  twitter: {
-    appId: 'twitter',
-    displayName: 'TwitClone',
-    description: 'Social media microblogging platform',
-    tenantId: 'twitter',
-    icon: 'twitter',
-    color: '#1DA1F2',
-    appUrl: process.env.NEXT_PUBLIC_TWITTER_URL || 'http://localhost:3000/twitter',
-    funnelSteps: ['login', 'view_feed', 'post_tweet', 'like_tweet'],
-    routes: [
-      { pattern: '/twitter',           featureName: 'login',           category: 'navigation',  funnel: 1 },
-      { pattern: '/twitter/feed',      featureName: 'view_feed',       category: 'navigation',  funnel: 2 },
-      { pattern: '/twitter/feed/*',    featureName: 'view_tweet',      category: 'navigation' },
-      { pattern: '/twitter/compose',   featureName: 'compose_tweet',   category: 'interaction' },
-      { pattern: '/twitter/admin',     featureName: 'view_admin_panel', category: 'navigation' },
-    ],
-  },
   nexabank: {
     appId: 'nexabank',
     displayName: 'NexaBank',
@@ -55,26 +38,26 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     tenantId: 'nexabank',
     icon: 'wallet',
     color: '#7C3AED',
-    appUrl: process.env.NEXT_PUBLIC_NEXABANK_URL || 'http://localhost:3002/nexabank',
+    appUrl: process.env.NEXT_PUBLIC_NEXABANK_URL || 'http://localhost:3002',
     funnelSteps: ['login', 'dashboard_view', 'loan_applied', 'kyc_started', 'kyc_completed'],
     routes: [
       // Core Banking
-      { pattern: '/nexabank/login',            featureName: 'login',              category: 'navigation',    funnel: 1 },
-      { pattern: '/nexabank/register',         featureName: 'register',           category: 'navigation' },
-      { pattern: '/nexabank/dashboard',        featureName: 'dashboard_view',     category: 'navigation',    funnel: 2 },
-      { pattern: '/nexabank/accounts',         featureName: 'accounts_view',      category: 'navigation' },
-      { pattern: '/nexabank/transactions',     featureName: 'transactions_view',  category: 'navigation' },
-      { pattern: '/nexabank/payees',           featureName: 'payees_view',        category: 'navigation' },
-      { pattern: '/nexabank/profile',          featureName: 'profile_view',       category: 'navigation' },
+      { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
+      { pattern: '/register',         featureName: 'auth.register.view',           category: 'navigation' },
+      { pattern: '/dashboard',        featureName: 'core.dashboard.view',     category: 'navigation',    funnel: 2 },
+      { pattern: '/accounts',         featureName: 'core.accounts.view',      category: 'navigation' },
+      { pattern: '/transactions',     featureName: 'core.transactions.view',  category: 'navigation' },
+      { pattern: '/payees',           featureName: 'core.payees.view',        category: 'navigation' },
+      { pattern: '/profile',          featureName: 'core.profile.view',       category: 'navigation' },
 
       // Loans
-      { pattern: '/nexabank/loans',            featureName: 'loans_page_view',    category: 'navigation',    funnel: 3 },
+      { pattern: '/loans',            featureName: 'loans.dashboard.view',    category: 'navigation',    funnel: 3 },
 
       // Pro Features
-      { pattern: '/nexabank/pro-feature',      featureName: 'pro_features_view',  category: 'navigation',    funnel: 4 },
+      { pattern: '/pro-feature',      featureName: 'pro.dashboard.view',  category: 'navigation',    funnel: 4 },
 
       // Admin
-      { pattern: '/nexabank/admin*',           featureName: 'admin_action',       category: 'system' },
+      { pattern: '/admin*',           featureName: 'admin.dashboard.view',       category: 'system' },
     ],
   },
 };
@@ -90,6 +73,23 @@ export function resolveFeature(pathname: string): { appId: string; featureName: 
       if (regex.test(pathname)) {
         return { appId, featureName: route.featureName, category: route.category };
       }
+    }
+  }
+  return null;
+}
+
+/**
+ * Reverse lookup to find a URL pattern for a given feature name.
+ * E.g., 'core.payees.view' => '/payees'
+ */
+export function resolveUrlFromFeature(featureName: string, appId: string = 'nexabank'): string | null {
+  const app = APP_REGISTRY[appId];
+  if (!app) return null;
+
+  for (const route of app.routes) {
+    if (route.featureName === featureName) {
+      // Remove trailing asterisk if it's a wildcard pattern for clean clicking
+      return route.pattern.replace(/\*$/, '');
     }
   }
   return null;
