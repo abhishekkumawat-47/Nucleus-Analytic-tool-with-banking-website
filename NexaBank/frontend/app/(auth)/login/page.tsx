@@ -9,6 +9,8 @@ import axios from "axios";
 import { API_BASE_URL } from "@/lib/api";
 import { nexaTracker } from "@/lib/tracker";
 import { toast } from "sonner";
+import { useEffect } from "react";
+import { useEventTracker } from "@/hooks/useEventTracker";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +47,11 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { setUserId, Auth } = UserData();
+  const { track } = useEventTracker();
+
+  useEffect(() => {
+    track('auth.login.view');
+  }, [track]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +74,7 @@ export default function LoginPage() {
         setUserId(result.userId);
         // Track the login event to the analytics pipeline
         nexaTracker.setUser(result.userId, result.role || 'user', email);
-        nexaTracker.track('login', { email });
+        track('auth.login.success');
         await Auth(); // Refresh auth state in context
         toast.success("Login successful");
         router.push("/dashboard");

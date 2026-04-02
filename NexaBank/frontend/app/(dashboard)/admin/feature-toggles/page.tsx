@@ -17,7 +17,11 @@ import {
   Calculator,
   Building2,
   Save,
-  Loader2
+  Loader2,
+  Users,
+  Activity,
+  Briefcase,
+  TrendingUp
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -30,11 +34,11 @@ interface Toggle {
 }
 
 const availableToggles: Toggle[] = [
-  { key: "emi_calculator", name: "EMI Calculator", description: "Enable the real-time EMI estimation tool on loan pages.", icon: Calculator },
-  { key: "kyc_module", name: "KYC Verification", description: "Require users to upload PAN/Aadhaar during registration.", icon: ShieldCheck },
-  { key: "loan_disbursal", name: "Instant Disbursal", description: "Allow automated fund transfer upon loan approval.", icon: Zap },
-  { key: "mobile_banking", name: "Mobile App Access", description: "Enable API endpoints for mobile platform integration.", icon: Smartphone },
-  { key: "credit_card_offers", name: "Credit Card Module", description: "Display tailored credit card offers on the dashboard.", icon: CreditCard },
+  { key: "core.payees.view", name: "Payees Management", description: "Track and toggle the payees management feature.", icon: Users },
+  { key: "core.transactions.view", name: "Transactions Tracker", description: "Track user interactions with their transaction history.", icon: Activity },
+  { key: "loans.dashboard.view", name: "Loan Origination", description: "Enable and track the loan application dashboard.", icon: Briefcase },
+  { key: "pro.crypto-trading.view", name: "Crypto Trading (Pro)", description: "Enterprise feature: Advanced cryptocurrency trading platform.", icon: Zap },
+  { key: "pro.wealth-management.view", name: "Wealth Management (Pro)", description: "Enterprise feature: Automated wealth rebalancing.", icon: TrendingUp },
 ]
 
 export default function AdminFeatureToggles() {
@@ -43,6 +47,7 @@ export default function AdminFeatureToggles() {
     bank_a: {},
     bank_b: {}
   })
+  const [dynamicToggles, setDynamicToggles] = useState<Toggle[]>(availableToggles)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
 
@@ -57,10 +62,31 @@ export default function AdminFeatureToggles() {
         axios.get(`${API_BASE_URL}/events/toggles/bank_a`),
         axios.get(`${API_BASE_URL}/events/toggles/bank_b`)
       ])
+      
+      const aData = resA.data || {};
+      const bData = resB.data || {};
+
       setToggles({
-        bank_a: resA.data,
-        bank_b: resB.data
+        bank_a: aData,
+        bank_b: bData
       })
+
+      // Combine predefined toggles with dynamic ones from backend
+      const backendKeys = new Set([...Object.keys(aData), ...Object.keys(bData)]);
+      const combined = [...availableToggles];
+      
+      backendKeys.forEach(key => {
+        if (!combined.find(t => t.key === key)) {
+          combined.push({
+            key,
+            name: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+            description: `Dynamically tracked event: ${key}`,
+            icon: Settings2
+          });
+        }
+      });
+      setDynamicToggles(combined);
+
     } catch (err) {
       console.error("Failed to fetch toggles:", err)
       toast.error("Could not load feature states")
@@ -114,7 +140,7 @@ export default function AdminFeatureToggles() {
           {[ 'bank_a', 'bank_b' ].map((tenant) => (
             <TabsContent key={tenant} value={tenant} className="mt-0">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {availableToggles.map((item) => {
+                  {dynamicToggles.map((item) => {
                     const isEnabled = toggles[tenant]?.[item.key] ?? true
                     const Icon = item.icon
                     const isSaving = saving === `${tenant}-${item.key}`

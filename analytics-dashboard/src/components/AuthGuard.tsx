@@ -32,8 +32,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   if (status === 'loading' || !authorized) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gray-50 flex-col space-y-4">
-        <Zap className="w-10 h-10 text-blue-500 animate-pulse" />
-        <p className="text-sm font-medium text-gray-400">Verifying permissions...</p>
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-medium text-gray-400">
+          Verifying permissions...
+        </p>
       </div>
     );
   }

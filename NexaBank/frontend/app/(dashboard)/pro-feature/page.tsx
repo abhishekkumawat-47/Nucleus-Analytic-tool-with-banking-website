@@ -25,6 +25,8 @@ import { toast } from "sonner"
 import axios from "axios"
 import { API_BASE_URL } from "@/lib/api"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import { useEventTracker } from "@/hooks/useEventTracker"
+import { UserData } from "@/components/context/UserContext"
 
 const featureData: Record<string, {
   title: string
@@ -96,9 +98,14 @@ function ProFeatureContent() {
   const [loading, setLoading] = useState(true)
   const [unlocking, setUnlocking] = useState(false)
 
+  const { isAuth } = UserData()
+  const { track } = useEventTracker()
+
   useEffect(() => {
-    fetchStatus()
-  }, [featureId])
+    track(`pro.${featureId}.view`)
+  }, [featureId, track])  useEffect(() => {
+    if (isAuth) fetchStatus()
+  }, [featureId, isAuth])
 
   const fetchStatus = async () => {
     try {
