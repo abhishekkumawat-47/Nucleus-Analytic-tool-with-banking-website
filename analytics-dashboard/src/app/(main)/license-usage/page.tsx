@@ -74,10 +74,10 @@ interface LicenseData {
 /* ─── Helpers ─── */
 
 const FEATURE_LABELS: Record<string, { label: string; description: string }> = {
-  'crypto_trade_execution': { label: 'Crypto Trading', description: 'Real-time crypto buy/sell execution' },
-  'wealth_rebalance': { label: 'Wealth Rebalance', description: 'AI-driven portfolio rebalancing' },
-  'payroll_batch_processed': { label: 'Bulk Payroll', description: 'Batch salary disbursement processing' },
-  'ai_insight_download': { label: 'Finance Library', description: 'Downloadable AI financial reports' },
+  'pro.crypto-trading.trade_execute': { label: 'Crypto Trading', description: 'Real-time crypto buy/sell execution' },
+  'pro.wealth-management.rebalance': { label: 'Wealth Rebalance', description: 'AI-driven portfolio rebalancing' },
+  'pro.payroll-pro.batch_process': { label: 'Bulk Payroll', description: 'Batch salary disbursement processing' },
+  'pro.finance-library.book_access': { label: 'Finance Library', description: 'Downloadable AI financial reports' },
 };
 
 function featureLabel(name: string): string {
@@ -213,10 +213,10 @@ export default function LicenseUsagePage() {
     try {
       setSeeding(true);
       const features = [
-        { feature_name: "crypto_trade_execution", is_licensed: true, plan_tier: "enterprise" },
-        { feature_name: "wealth_rebalance", is_licensed: true, plan_tier: "enterprise" },
-        { feature_name: "payroll_batch_processed", is_licensed: true, plan_tier: "enterprise" },
-        { feature_name: "ai_insight_download", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.crypto-trading.trade_execute", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.wealth-management.rebalance", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.payroll-pro.batch_process", is_licensed: true, plan_tier: "enterprise" },
+        { feature_name: "pro.finance-library.book_access", is_licensed: true, plan_tier: "enterprise" },
       ];
       await dashboardAPI.syncLicenses(tenantId, features);
       await fetchData();

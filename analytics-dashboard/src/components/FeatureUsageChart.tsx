@@ -3,7 +3,7 @@
 /**
  * Feature Usage Over Time line chart.
  * Displays feature usage trends with a filled area and smooth curve.
- * Updated to show clearer X/Y axes per user request.
+ * Supports multi-tenant comparison by dynamically rendering lines per tenant.
  */
 
 import React, { memo } from 'react';
@@ -15,6 +15,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from 'recharts';
 import ChartContainer from './ChartContainer';
 import { FeatureUsageDataPoint } from '@/types';
@@ -29,17 +30,28 @@ function CustomTooltip({
   label,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number }>;
+  payload?: Array<{ value: number; dataKey: string; color: string }>;
   label?: string;
 }) {
-  if (!active || !payload?.[0]) return null;
+  if (!active || !payload?.length) return null;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
       <p className="text-gray-500 font-medium mb-1">{label}</p>
-      <p className="text-gray-900 font-semibold">
-        {payload[0].value.toLocaleString()} events
-      </p>
+      {payload.map((entry) => (
+        <div key={entry.dataKey} className="flex items-center gap-2">
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: entry.color }}
+          />
+          <span className="text-gray-600 capitalize">
+            {entry.dataKey.replace(/_/g, ' ')}:
+          </span>
+          <span className="font-semibold text-gray-900">
+            {entry.value.toLocaleString()} events
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -49,17 +61,28 @@ function formatYAxis(value: number): string {
   return value.toString();
 }
 
+const MULTI_TENANT_COLORS = ['#1a73e8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
 function FeatureUsageChart({ data }: FeatureUsageChartProps) {
+  // Dynamically detect data keys (single-tenant: 'usage', multi-tenant: 'nexabank_usage', 'safexbank_usage')
+  const allKeys = Array.from(
+    new Set(data.flatMap((d) => Object.keys(d).filter((k) => k !== 'date')))
+  );
+
+  const isMultiTenant = allKeys.some((k) => k.includes('_'));
+
   return (
     <ChartContainer title="Feature Usage Over Time" id="feature-usage-chart">
       <div className="h-64 mt-2">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
             <defs>
-              <linearGradient id="featureUsageGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#1a73e8" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#1a73e8" stopOpacity={0.02} />
-              </linearGradient>
+              {allKeys.map((key, i) => (
+                <linearGradient key={key} id={`featureGrad-${key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={MULTI_TENANT_COLORS[i % MULTI_TENANT_COLORS.length]} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={MULTI_TENANT_COLORS[i % MULTI_TENANT_COLORS.length]} stopOpacity={0.02} />
+                </linearGradient>
+              ))}
             </defs>
 
             <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={true} horizontal={true}/>
@@ -83,15 +106,21 @@ function FeatureUsageChart({ data }: FeatureUsageChartProps) {
 
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#E5E7EB', strokeWidth: 1 }} />
 
-            <Area
-              type="monotone"
-              dataKey="usage"
-              stroke="#1a73e8"
-              strokeWidth={2.5}
-              fill="url(#featureUsageGradient)"
-              dot={{ r: 3, stroke: '#1a73e8', strokeWidth: 2, fill: '#fff' }}
-              activeDot={{ r: 5, stroke: '#1a73e8', strokeWidth: 2, fill: '#fff', cursor: 'pointer' }}
-            />
+            {isMultiTenant && <Legend wrapperStyle={{ fontSize: 12 }} />}
+
+            {allKeys.map((key, i) => (
+              <Area
+                key={key}
+                type="monotone"
+                dataKey={key}
+                name={isMultiTenant ? key.replace(/_usage$/, '').replace(/_/g, ' ') : 'Usage'}
+                stroke={MULTI_TENANT_COLORS[i % MULTI_TENANT_COLORS.length]}
+                strokeWidth={2.5}
+                fill={`url(#featureGrad-${key})`}
+                dot={{ r: 3, stroke: MULTI_TENANT_COLORS[i % MULTI_TENANT_COLORS.length], strokeWidth: 2, fill: '#fff' }}
+                activeDot={{ r: 5, stroke: MULTI_TENANT_COLORS[i % MULTI_TENANT_COLORS.length], strokeWidth: 2, fill: '#fff', cursor: 'pointer' }}
+              />
+            ))}
           </AreaChart>
         </ResponsiveContainer>
       </div>

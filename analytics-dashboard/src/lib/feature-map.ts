@@ -44,20 +44,32 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
       // Core Banking
       { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
       { pattern: '/register',         featureName: 'auth.register.view',           category: 'navigation' },
-      { pattern: '/dashboard',        featureName: 'core.dashboard.view',     category: 'navigation',    funnel: 2 },
-      { pattern: '/accounts',         featureName: 'core.accounts.view',      category: 'navigation' },
-      { pattern: '/transactions',     featureName: 'core.transactions.view',  category: 'navigation' },
-      { pattern: '/payees',           featureName: 'core.payees.view',        category: 'navigation' },
-      { pattern: '/profile',          featureName: 'core.profile.view',       category: 'navigation' },
+      { pattern: '/dashboard',        featureName: 'core.dashboard.view',          category: 'navigation',    funnel: 2 },
+      { pattern: '/accounts',         featureName: 'core.accounts.view',           category: 'navigation' },
+      { pattern: '/transactions',     featureName: 'core.transactions.view',       category: 'navigation' },
+      { pattern: '/payees',           featureName: 'core.payees.view',             category: 'navigation' },
+      { pattern: '/profile',          featureName: 'core.profile.view',            category: 'navigation' },
 
       // Loans
-      { pattern: '/loans',            featureName: 'loans.dashboard.view',    category: 'navigation',    funnel: 3 },
+      { pattern: '/loans',            featureName: 'loans.dashboard.view',         category: 'navigation',    funnel: 3 },
 
-      // Pro Features
-      { pattern: '/pro-feature',      featureName: 'pro.dashboard.view',  category: 'navigation',    funnel: 4 },
+      // Pro Features — Granular Routes
+      { pattern: '/pro-feature',      featureName: 'pro.dashboard.view',           category: 'navigation',    funnel: 4 },
+
+      // Pro Feature: Finance Library (ai-insights)
+      { pattern: '/pro-feature?id=ai-insights',            featureName: 'pro.finance-library.view',     category: 'navigation' },
+
+      // Pro Feature: Crypto Trading
+      { pattern: '/pro-feature?id=crypto-trading',          featureName: 'pro.crypto-trading.view',      category: 'navigation' },
+
+      // Pro Feature: Wealth Management
+      { pattern: '/pro-feature?id=wealth-management-pro',   featureName: 'pro.wealth-management.view',   category: 'navigation' },
+
+      // Pro Feature: Payroll Pro
+      { pattern: '/pro-feature?id=bulk-payroll-processing', featureName: 'pro.payroll-pro.view',         category: 'navigation' },
 
       // Admin
-      { pattern: '/admin*',           featureName: 'admin.dashboard.view',       category: 'system' },
+      { pattern: '/admin*',           featureName: 'admin.dashboard.view',         category: 'system' },
     ],
   },
 };
@@ -69,6 +81,31 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
 export function resolveFeature(pathname: string): { appId: string; featureName: string; category: string } | null {
   for (const [appId, config] of Object.entries(APP_REGISTRY)) {
     for (const route of config.routes) {
+      // Handle query-param based patterns (e.g., /pro-feature?id=crypto-trading)
+      if (route.pattern.includes('?')) {
+        const [patternPath, patternQuery] = route.pattern.split('?');
+        const urlObj = (() => {
+          try { return new URL(`http://x${pathname}`); }
+          catch { return null; }
+        })();
+        
+        if (urlObj && urlObj.pathname === patternPath) {
+          const params = new URLSearchParams(patternQuery);
+          const urlParams = urlObj.searchParams;
+          let allMatch = true;
+          for (const [key, value] of params.entries()) {
+            if (urlParams.get(key) !== value) {
+              allMatch = false;
+              break;
+            }
+          }
+          if (allMatch) {
+            return { appId, featureName: route.featureName, category: route.category };
+          }
+        }
+        continue;
+      }
+      
       const regex = new RegExp('^' + route.pattern.replace(/\*/g, '.*') + '$');
       if (regex.test(pathname)) {
         return { appId, featureName: route.featureName, category: route.category };

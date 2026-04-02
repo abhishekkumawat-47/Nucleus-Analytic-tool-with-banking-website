@@ -44,7 +44,7 @@ export default function DashboardContent() {
       {/* ═══════════ KPI METRICS ROW ═══════════ */}
       <section id="kpi-section" aria-label="Key Performance Indicators">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpiMetrics.map((metric: any) => (
+          {kpiMetrics.map((metric) => (
             <KPICard key={metric.id} metric={metric} />
           ))}
         </div>

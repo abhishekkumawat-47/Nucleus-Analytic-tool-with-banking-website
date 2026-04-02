@@ -15,6 +15,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from 'recharts';
 import ChartContainer from './ChartContainer';
 import { TimeSeriesDataPoint, TimeRange } from '@/types';
@@ -33,7 +34,7 @@ function CustomTooltip({
   label,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number; dataKey: string; color: string }>;
+  payload?: Array<{ value: number; dataKey: string; color: string; name?: string }>;
   label?: string;
 }) {
   if (!active || !payload) return null;
@@ -47,9 +48,9 @@ function CustomTooltip({
             className="w-2 h-2 rounded-full"
             style={{ backgroundColor: entry.color }}
           />
-          <span className="text-gray-600 capitalize">{entry.dataKey}:</span>
+          <span className="text-gray-600 capitalize">{(entry.name || entry.dataKey).replace(/_/g, ' ')}:</span>
           <span className="font-semibold text-gray-900">
-            {(entry.value / 1000).toFixed(1)}K
+            {entry.value >= 1000 ? (entry.value / 1000).toFixed(1) + 'K' : entry.value.toLocaleString()}
           </span>
         </div>
       ))}
@@ -81,9 +82,21 @@ function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps)
     </div>
   );
 
-  const totalVisitors = data.reduce((sum, item) => sum + (item.visitors || 0), 0);
-  const totalPageViews = data.reduce((sum, item) => sum + (item.pageViews || 0), 0);
+  const keys = Array.from(new Set(data.flatMap(d => Object.keys(d).filter(k => k !== 'date'))));
+  const visitorKeys = keys.filter(k => k.endsWith('visitors'));
+  const pageViewKeys = keys.filter(k => k.endsWith('pageViews'));
+
+  let totalVisitors = 0;
+  visitorKeys.forEach(k => { totalVisitors += data.reduce((sum, item) => sum + (Number(item[k as keyof TimeSeriesDataPoint]) || 0), 0); });
+  let totalPageViews = 0;
+  pageViewKeys.forEach(k => { totalPageViews += data.reduce((sum, item) => sum + (Number(item[k as keyof TimeSeriesDataPoint]) || 0), 0); });
+
   const formatTotal = (val: number) => val >= 1000 ? (val / 1000).toFixed(1) + 'K' : val.toString();
+
+  const isMultiTenant = keys.some(k => k.includes('_'));
+
+  const colors = ['#1a73e8', '#10b981', '#f59e0b', '#ef4444'];
+  const viewColors = ['#8AB4F8', '#6ee7b7', '#fcd34d', '#fca5a5'];
 
   return (
     <ChartContainer
@@ -126,25 +139,35 @@ function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps)
 
             <Tooltip content={<CustomTooltip />} />
 
-            <Area
-              type="monotone"
-              dataKey="pageViews"
-              stroke="#8AB4F8"
-              strokeWidth={2}
-              fill="url(#pageViewsGradient)"
-              dot={false}
-              activeDot={{ r: 4, stroke: '#8AB4F8', strokeWidth: 2, fill: '#fff', cursor: 'pointer' }}
-            />
+            {isMultiTenant && <Legend wrapperStyle={{ fontSize: 12 }} />}
 
-            <Area
-              type="monotone"
-              dataKey="visitors"
-              stroke="#1a73e8"
-              strokeWidth={2.5}
-              fill="url(#visitorsGradient)"
-              dot={{ r: 3, stroke: '#1a73e8', strokeWidth: 2, fill: '#fff' }}
-              activeDot={{ r: 5, stroke: '#1a73e8', strokeWidth: 2, fill: '#fff', cursor: 'pointer' }}
-            />
+            {pageViewKeys.map((key, i) => (
+              <Area
+                key={key}
+                type="monotone"
+                dataKey={key}
+                name={key.replace(/_/g, ' ')}
+                stroke={viewColors[i % viewColors.length]}
+                strokeWidth={2}
+                fill="url(#pageViewsGradient)"
+                dot={false}
+                activeDot={{ r: 4, stroke: viewColors[i % viewColors.length], strokeWidth: 2, fill: '#fff', cursor: 'pointer' }}
+              />
+            ))}
+
+            {visitorKeys.map((key, i) => (
+              <Area
+                key={key}
+                type="monotone"
+                dataKey={key}
+                name={key.replace(/_/g, ' ')}
+                stroke={colors[i % colors.length]}
+                strokeWidth={2.5}
+                fill="url(#visitorsGradient)"
+                dot={{ r: 3, stroke: colors[i % colors.length], strokeWidth: 2, fill: '#fff' }}
+                activeDot={{ r: 5, stroke: colors[i % colors.length], strokeWidth: 2, fill: '#fff', cursor: 'pointer' }}
+              />
+            ))}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -153,12 +176,12 @@ function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps)
         <div className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
           <span className="w-3 h-3 rounded-full bg-[#1a73e8]" />
           <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">{formatTotal(totalVisitors)}</span>
-          <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Visitors</span>
+          <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Total Visitors</span>
         </div>
         <div className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
           <span className="w-3 h-3 rounded-full bg-[#4285F4]" />
           <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">{formatTotal(totalPageViews)}</span>
-          <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Page Views</span>
+          <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Total Page Views</span>
         </div>
       </div>
     </ChartContainer>
