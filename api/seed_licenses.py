@@ -15,7 +15,7 @@ features = [
     {"feature_name": "crypto_trade_execution", "is_licensed": True, "plan_tier": "enterprise"},
     {"feature_name": "wealth_rebalance", "is_licensed": True, "plan_tier": "enterprise"},
     {"feature_name": "payroll_batch_processed", "is_licensed": True, "plan_tier": "enterprise"},
-    {"feature_name": "pro_book_download", "is_licensed": True, "plan_tier": "enterprise"},
+    {"feature_name": "ai_insight_download", "is_licensed": True, "plan_tier": "enterprise"},
 ]
 
 # Seed for both tenant IDs (bank_a is legacy, nexabank is current)

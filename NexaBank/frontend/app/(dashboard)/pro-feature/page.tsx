@@ -103,7 +103,9 @@ function ProFeatureContent() {
 
   useEffect(() => {
     track(`pro.${featureId}.view`)
-  }, [featureId, track])  useEffect(() => {
+  }, [featureId, track])
+
+  useEffect(() => {
     if (isAuth) fetchStatus()
   }, [featureId, isAuth])
 

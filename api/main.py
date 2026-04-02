@@ -274,6 +274,22 @@ def get_insights(tenant_id: str):
     if cached_data and cached_data.get("insights"):
         return {"tenant_id": tenant_id, "insights": cached_data["insights"], "cached": True}
 
+    # Try loading from ClickHouse if in-memory cache is empty
+    import json as _json
+    try:
+        sql_db = """
+            SELECT insights FROM feature_intelligence.ai_reports FINAL
+            WHERE tenant_id = %(tenant_id)s LIMIT 1
+        """
+        db_rows = ch_client.query(sql_db, {"tenant_id": tenant_id})
+        if db_rows and db_rows[0].get("insights"):
+            raw = db_rows[0]["insights"]
+            parsed = _json.loads(raw) if isinstance(raw, str) else raw
+            if parsed:
+                return {"tenant_id": tenant_id, "insights": parsed, "cached": True}
+    except Exception:
+        pass
+
     insights_data = generate_insights(tenant_id)
     existing = AI_REPORT_CACHE.get(tenant_id, {})
     AI_REPORT_CACHE[tenant_id] = {
@@ -1125,28 +1141,28 @@ def get_license_usage(tenant_id: str):
     require_tenant_access(tenant_id)
     try:
         pro_feature_catalog = {
-            "pro.ai-insights.view": {
-                "feature_id": "ai-insights",
-                "title": "Finance Library",
-                "tagline": "Premium knowledge base for professional banking and investments.",
-                "price_inr": 2000,
-            },
-            "pro.crypto-trading.view": {
+            "crypto_trade_execution": {
                 "feature_id": "crypto-trading",
                 "title": "Crypto Trading",
                 "tagline": "Institutional-grade digital asset management.",
                 "price_inr": 2000,
             },
-            "pro.wealth-management-pro.view": {
+            "wealth_rebalance": {
                 "feature_id": "wealth-management-pro",
                 "title": "Wealth Management",
                 "tagline": "Sophisticated portfolio tracking and rebalancing.",
                 "price_inr": 2000,
             },
-            "pro.bulk-payroll-processing.view": {
+            "payroll_batch_processed": {
                 "feature_id": "bulk-payroll-processing",
                 "title": "Payroll Pro",
                 "tagline": "Enterprise-scale payroll automation.",
+                "price_inr": 2000,
+            },
+            "ai_insight_download": {
+                "feature_id": "ai-insights",
+                "title": "Finance Library",
+                "tagline": "Premium knowledge base for professional banking and investments.",
                 "price_inr": 2000,
             },
         }
@@ -1157,7 +1173,10 @@ def get_license_usage(tenant_id: str):
             FROM feature_intelligence.tenant_licenses FINAL
             WHERE tenant_id = %(tenant_id)s AND is_licensed = 1 AND plan_tier = 'enterprise'
         """
-        licensed = ch_client.query(sql_licensed, {"tenant_id": tenant_id})
+        raw_licensed = ch_client.query(sql_licensed, {"tenant_id": tenant_id})
+        
+        # Filter out legacy/stale feature names that are no longer in our current catalog
+        licensed = [r for r in raw_licensed if r["feature_name"] in pro_feature_catalog]
         licensed_set = {r["feature_name"] for r in licensed}
         
         # Get actually used features (last 30 days)
@@ -1706,29 +1725,87 @@ def get_predictive_adoption(tenant_id: str):
 
 @app.get("/ai_report")
 def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")):
-    """Generates a comprehensive AI-powered summarization report for the dashboard."""
+    """Generates a comprehensive AI-powered summarization report for the dashboard.
+    Reports are persisted in ClickHouse (ai_reports table). Old reports are auto-replaced."""
     require_tenant_access(tenant_id)
+    import json as _json
+
+    def _load_report_from_db(tid: str):
+        """Load the latest stored report from ClickHouse."""
+        sql = """
+            SELECT report, insights, generated_by, generated_at
+            FROM feature_intelligence.ai_reports FINAL
+            WHERE tenant_id = %(tenant_id)s
+            LIMIT 1
+        """
+        rows = ch_client.query(sql, {"tenant_id": tid})
+        if not rows:
+            return None
+        row = rows[0]
+        insights_raw = row.get("insights", "[]")
+        try:
+            insights_parsed = _json.loads(insights_raw) if isinstance(insights_raw, str) else insights_raw
+        except Exception:
+            insights_parsed = []
+        generated_at = row.get("generated_at")
+        generated_at_str = generated_at.isoformat() if hasattr(generated_at, "isoformat") else str(generated_at)
+        return {
+            "report": row.get("report", ""),
+            "insights": insights_parsed,
+            "generated_by": row.get("generated_by", ""),
+            "generated_at": generated_at_str,
+        }
+
+    def _save_report_to_db(tid: str, report: str, insights_list: list, generated_by: str = ""):
+        """Insert a new report into ClickHouse. ReplacingMergeTree will replace the old one."""
+        client = ch_client._get_client()
+        client.insert(
+            'feature_intelligence.ai_reports',
+            [[tid, generated_by, report, _json.dumps(insights_list), datetime.utcnow()]],
+            column_names=['tenant_id', 'generated_by', 'report', 'insights', 'generated_at']
+        )
+
     try:
-        # Check cache first
-        now = time.time()
-        if not force_refresh and tenant_id in AI_REPORT_CACHE:
-            cached_data = AI_REPORT_CACHE[tenant_id]
-            if now - cached_data["timestamp"] < AI_CACHE_TTL:
+        # --- If NOT force refreshing, try to return stored report ---
+        if not force_refresh:
+            # Fast path: in-memory cache
+            now = time.time()
+            if tenant_id in AI_REPORT_CACHE:
+                cached_data = AI_REPORT_CACHE[tenant_id]
+                if now - cached_data["timestamp"] < AI_CACHE_TTL:
+                    return {
+                        "tenant_id": tenant_id,
+                        "report": cached_data.get("report", ""),
+                        "cached": True,
+                        "generated_at": cached_data.get("generated_at"),
+                        "insights": cached_data.get("insights", []),
+                    }
+
+            # Slow path: load from ClickHouse
+            db_report = _load_report_from_db(tenant_id)
+            if db_report and db_report["report"]:
+                # Populate in-memory cache for fast subsequent reads
+                AI_REPORT_CACHE[tenant_id] = {
+                    "timestamp": time.time(),
+                    "report": db_report["report"],
+                    "insights": db_report["insights"],
+                    "generated_at": db_report["generated_at"],
+                }
                 return {
                     "tenant_id": tenant_id,
-                    "report": cached_data.get("report", ""),
+                    "report": db_report["report"],
                     "cached": True,
-                    "generated_at": cached_data.get("generated_at"),
-                    "insights": cached_data.get("insights", []),
+                    "generated_at": db_report["generated_at"],
+                    "insights": db_report["insights"],
                 }
 
-        # Fetch basic context
+        # --- Generate a fresh report ---
         kpi = get_kpi_metrics(tenant_id)
         secondary = get_secondary_kpi(tenant_id)
-        locations = get_locations(tenant_id)[:5] # Top 5
+        locations = get_locations(tenant_id)[:5]
         activities = get_feature_activity(tenant_id)
 
-        # Build beautiful HTML visualization payload for the report
+        # Build HTML visualization payload
         kpi_cards_html = f'''
         <section style="margin-bottom: 20px; font-family: inherit; line-height: 1.35;">
             <h3 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0 0 14px;">Platform Health & Activity Metrics</h3>
@@ -1744,7 +1821,6 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
                     <p style="margin: 10px 0 0; font-size: 34px; font-weight: 800; color: #0b1f44;">{val}</p>
                 </div>
             '''
-
         kpi_cards_html += '</div></section>'
 
         activity_html = f'''
@@ -1758,8 +1834,7 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
 
         for act in activities[:6]:
             feat_name = act.get('feature', 'Unknown')
-            # Generate deterministic engagement volume
-            hash_val = sum(ord(c) for c in feat_name) % 60 + 20 
+            hash_val = sum(ord(c) for c in feat_name) % 60 + 20
             color = act.get('segments', [{'color': '#3b82f6'}])[0].get('color', '#3b82f6')
             activity_html += f'''
                 <div style="padding: 12px; background: #f8fafc; border-radius: 10px; border: 1px solid #e6edf5;">
@@ -1775,15 +1850,10 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
         activity_html += '</div></section>'
 
         continent_map = {
-            "USA": "North America",
-            "Canada": "North America",
-            "United Kingdom": "Europe",
-            "Germany": "Europe",
-            "France": "Europe",
-            "India": "Asia",
-            "Japan": "Asia",
-            "Australia": "Oceania",
-            "Brazil": "South America"
+            "USA": "North America", "Canada": "North America",
+            "United Kingdom": "Europe", "Germany": "Europe", "France": "Europe",
+            "India": "Asia", "Japan": "Asia",
+            "Australia": "Oceania", "Brazil": "South America"
         }
 
         continent_data = {}
@@ -1794,7 +1864,6 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
             cont = continent_map.get(c, "Other Regions")
             continent_data[cont] = continent_data.get(cont, 0) + v
             total_visits += v
-
         if total_visits == 0: total_visits = 1
 
         geo_html = f'''
@@ -1822,7 +1891,6 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
             '''
         geo_html += '</div></section>'
 
-        # Decorative divider
         divider = '<hr style="border: 0; height: 1px; background: #e2e8f0; margin: 40px 0;" />'
 
         context_str = f"KPI Metrics: {kpi}\n\nSecondary Metrics: {secondary}\n\nTop Locations: {locations}\n\nFeature Activities: {activities}"
@@ -1858,23 +1926,34 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
         if not llm_response:
             raise HTTPException(status_code=503, detail="AI Model currently initializing or unavailable.")
 
-        # Combine HTML payload with Markdown report
         final_report = f"{kpi_cards_html}\n{activity_html}\n{geo_html}\n{divider}\n{llm_response}"
         insights_payload = generate_insights(tenant_id)
-             
-        # Store in cache
+
+        # Get the user who triggered generation (from request headers)
+        generated_by = ""
+        try:
+            from starlette.requests import Request as _Req
+            # Use the request context if available
+        except Exception:
+            pass
+
+        # Persist to ClickHouse (old report is auto-replaced by ReplacingMergeTree)
+        _save_report_to_db(tenant_id, final_report, insights_payload, generated_by)
+
+        # Update in-memory cache
+        gen_at = datetime.utcnow().isoformat()
         AI_REPORT_CACHE[tenant_id] = {
             "timestamp": time.time(),
             "report": final_report,
             "insights": insights_payload,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": gen_at,
         }
 
         return {
             "tenant_id": tenant_id,
             "report": final_report,
             "cached": False,
-            "generated_at": AI_REPORT_CACHE[tenant_id]["generated_at"],
+            "generated_at": gen_at,
             "insights": insights_payload,
         }
     except Exception as e:

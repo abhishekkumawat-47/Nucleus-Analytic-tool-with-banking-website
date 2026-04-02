@@ -79,3 +79,18 @@ CREATE TABLE IF NOT EXISTS feature_intelligence.config_audit_log (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, timestamp);
+
+-- ═══════════════════════════════════════════════════════════
+-- AI Reports Storage
+-- Stores generated AI reports per tenant.
+-- ReplacingMergeTree ensures only the latest report is kept
+-- per tenant after background merges.
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS feature_intelligence.ai_reports (
+    tenant_id String,
+    generated_by String DEFAULT '',
+    report String,
+    insights String DEFAULT '[]',
+    generated_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(generated_at)
+ORDER BY (tenant_id);
