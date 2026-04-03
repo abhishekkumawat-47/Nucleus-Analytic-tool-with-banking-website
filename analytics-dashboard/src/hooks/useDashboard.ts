@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useCallback, useMemo, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { setTimeRange, setSelectedTenants, updateRealTimeUsers, updateKPIMetrics } from '@/lib/dashboardSlice';
 import { TimeRange } from '@/types';
@@ -25,8 +25,10 @@ function timeRangeToParam(tr: TimeRange): string {
  */
 export function useDashboardData() {
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
   const dashboardState = useAppSelector((state) => state.dashboard);
   const { data: session } = useSession();
+  const lastInvalidateAtRef = useRef(0);
 
   // Auto-pin app_admins to their assigned tenants
   useEffect(() => {
@@ -112,7 +114,11 @@ export function useDashboardData() {
         retentionData,
       };
     },
-    staleTime: 5 * 60 * 1000,
+    // Keep data responsive while avoiding noisy re-fetching.
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     retry: 1,
   });
 
@@ -144,6 +150,16 @@ export function useDashboardData() {
           if (data.payload.kpiMetrics?.length) {
             dispatch(updateKPIMetrics(data.payload.kpiMetrics));
           }
+
+          // Throttle invalidation to prevent websocket bursts from causing request storms.
+          const now = Date.now();
+          if (now - lastInvalidateAtRef.current > 5000) {
+            lastInvalidateAtRef.current = now;
+            queryClient.invalidateQueries({
+              queryKey: ['dashboardData', tenantsParam, rangeParam],
+              refetchType: 'active',
+            });
+          }
         }
       } catch (e) {
         console.error('Error parsing WebSocket message:', e);
@@ -151,7 +167,7 @@ export function useDashboardData() {
     };
 
     return () => { ws.close(); };
-  }, [dispatch, dashboardState.selectedTenants]);
+  }, [dispatch, dashboardState.selectedTenants, queryClient, tenantsParam, rangeParam]);
 
   // ─── Actions ───
   const changeTimeRange = useCallback(
