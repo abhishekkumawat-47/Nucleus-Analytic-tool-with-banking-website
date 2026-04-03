@@ -161,7 +161,7 @@ export default function FunnelPage() {
                       className="h-full rounded-lg bg-gradient-to-r from-[#1a73e8] to-[#4285F4] transition-all duration-700"
                       style={{ width: `${barWidth}%` }}
                     />
-                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs font-medium text-black">
+                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs font-medium text-gray-300">
                       <span>{stageLabel}</span>
                       {item.nextStepLabel ? <span>Drop: {item.step.dropOff}%</span> : <span>Final step</span>}
                     </div>

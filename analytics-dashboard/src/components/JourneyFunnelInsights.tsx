@@ -82,7 +82,7 @@ function JourneyFunnelInsights({ data }: JourneyFunnelInsightsProps) {
                     className="h-full rounded-lg bg-gradient-to-r from-[#1a73e8] to-[#4285F4]"
                     style={{ width: `${width}%` }}
                   />
-                  <div className="absolute inset-0 px-3 flex items-center justify-between text-[11px] font-medium text-white">
+                  <div className="absolute inset-0 px-3 flex items-center justify-between text-[11px] font-medium text-gray-300">
                     <span>{formatPercent(stage.normalized)} of entry</span>
                     {isFinal ? <span>Final</span> : <span>Drop-off {stage.dropOff}%</span>}
                   </div>
