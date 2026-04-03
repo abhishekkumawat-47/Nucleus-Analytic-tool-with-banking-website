@@ -10,16 +10,18 @@ const nextConfig: NextConfig = {
       beforeFiles: [],
       afterFiles: [
         {
-          // Proxy /api/* to FastAPI backend, EXCEPT /api/auth/* which NextAuth handles
-          source: '/api/:path((?!auth).*)*',
-          destination: `http://${analyticsApiHost}:8001/:path*`,
-        },
-        {
           source: '/ingest/:path*',
           destination: `http://${ingestionApiHost}:8000/:path*`,
         },
       ],
-      fallback: [],
+      fallback: [
+        {
+          // Proxy /api/* to FastAPI backend as a fallback
+          // This ensures internal routes like /api/auth are NEVER caught
+          source: '/api/:path*',
+          destination: `http://${analyticsApiHost}:8001/:path*`,
+        },
+      ],
     };
   },
 };
