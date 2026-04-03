@@ -282,6 +282,140 @@ export function GenericPageSkeleton() {
   );
 }
 
+/** /predictive page skeleton */
+export function PredictivePageSkeleton() {
+  return (
+    <div className="animate-in fade-in duration-300 space-y-6">
+      {/* Header Section */}
+      <div className="flex justify-between items-center flex-wrap gap-4">
+        <div className="flex-1">
+          <SkeletonBlock className="h-6 w-72 mb-2" />
+          <SkeletonBlock className="h-4 w-96" />
+        </div>
+        <SkeletonBlock className="h-10 w-56" />
+      </div>
+
+      {/* KPI Cards (5 cards) */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <article key={i} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <SkeletonBlock className="h-3 w-24 mb-2" />
+            <SkeletonBlock className="h-8 w-16 mt-2" />
+          </article>
+        ))}
+      </section>
+
+      {/* Opportunity Radar + Model Pulse Section */}
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm xl:col-span-2">
+          <SkeletonBlock className="h-5 w-48 mb-3" />
+          <SkeletonBlock className="h-4 w-96 mb-4" />
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <SkeletonBlock className="h-4 w-32" />
+                  <SkeletonBlock className="h-5 w-20 rounded-full" />
+                </div>
+                <SkeletonBlock className="h-2 w-full" />
+                <div className="mt-2 flex items-center justify-between">
+                  <SkeletonBlock className="h-3 w-20" />
+                  <SkeletonBlock className="h-3 w-24" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <SkeletonBlock className="h-5 w-40 mb-4" />
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <SkeletonBlock className="h-3 w-28 mb-2" />
+                <SkeletonBlock className="h-6 w-20 mt-1" />
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      {/* Anomaly Alerts Section *)}
+      <div className="rounded-xl border border-gray-200 bg-white mt-6">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <SkeletonBlock className="h-5 w-40 mb-2" />
+          <SkeletonBlock className="h-3 w-56" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-200">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <th key={i} className="px-6 py-3">
+                    <SkeletonBlock className="h-3 w-20" />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <tr key={i} className="border-b border-gray-100">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <td key={j} className="px-6 py-4">
+                      <SkeletonBlock className="h-3 w-24" />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Predictions Table */}
+      <div className="rounded-xl border border-gray-200 bg-white">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <SkeletonBlock className="h-5 w-48 mb-2" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[1200px] w-full">
+            <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
+              <tr>
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <th key={i} className="px-4 py-3">
+                    <SkeletonBlock className="h-3 w-20" />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-b border-gray-100">
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <td key={j} className="px-4 py-3">
+                      <SkeletonBlock className="h-3 w-24" />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Score Legend */}
+      <div className="flex items-center justify-evenly flex-wrap gap-4 text-xs text-gray-500 p-4 bg-white rounded-lg border border-gray-200">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <SkeletonBlock className="w-3 h-3 rounded-full" />
+            <SkeletonBlock className="h-3 w-32" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** /ai-report page skeleton */
 export function AIReportPageSkeleton() {
   return (

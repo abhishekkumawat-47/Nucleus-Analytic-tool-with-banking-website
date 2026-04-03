@@ -589,8 +589,8 @@ export const dashboardAPI = {
     try {
       const response = await apiClient.get<AuditLog[]>(`/audit_logs?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
-    } catch {
-      console.error('Failed to fetch AuditLogs');
+    } catch (error) {
+      console.error('Failed to fetch AuditLogs:', error instanceof Error ? error.message : String(error));
       return [];
     }
   },
