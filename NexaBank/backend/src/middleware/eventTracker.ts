@@ -214,7 +214,8 @@ async function forwardToIngestionAPI(
   userId: string,
   tenantId: string,
   metadata: Record<string, unknown>,
-  timestampOverride?: number
+  timestampOverride?: number,
+  tier?: string
 ): Promise<void> {
   // Enforce taxonomy
   const mappedEventName = enforceTaxonomy(eventName);
@@ -246,6 +247,7 @@ async function forwardToIngestionAPI(
         response_time_ms: metadata.response_time_ms || simTime,
         // Page-level path for Top Pages aggregation
         path: metadata.path || derivePathFromEvent(mappedEventName),
+        tier: tier || metadata.tier
       },
     }, { timeout: 3000 });
   } catch (_err: unknown) {
@@ -262,7 +264,8 @@ export async function trackEvent(
   customerId: string | null,
   tenantId: string,
   metadata: Record<string, unknown>,
-  timestampOverride?: number
+  timestampOverride?: number,
+  tier?: 'free' | 'pro' | 'enterprise'
 ): Promise<void> {
   try {
     const hashedUserId = customerId ? hashUserId(customerId) : "anonymous";
@@ -272,13 +275,13 @@ export async function trackEvent(
         tenantId,
         userId: hashedUserId,
         customerId: customerId || null,
-        metadata: metadata as any,
+        metadata: { ...metadata, tier } as any,
         timestamp: timestampOverride ? new Date(timestampOverride * 1000) : undefined,
       },
     });
 
     // Forward to the Pathway analytics pipeline (fire-and-forget)
-    forwardToIngestionAPI(eventName, hashedUserId, tenantId, metadata, timestampOverride).catch(() => { });
+    forwardToIngestionAPI(eventName, hashedUserId, tenantId, metadata, timestampOverride, tier).catch(() => { });
 
     // Broadcast via WebSocket for real-time updates (lazy import to avoid circular deps)
     try {

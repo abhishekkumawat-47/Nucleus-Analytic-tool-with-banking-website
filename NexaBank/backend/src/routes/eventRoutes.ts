@@ -804,11 +804,11 @@ router.post(
               await trackEvent("pro.finance-library.book_access", customer.id, tenantId, {
                 feature: "ai-insights", title: bookTitle, status: isError ? "error" : "success",
                 response_time_ms: responseTime, error: isError ? "timeout" : undefined, ...lMeta
-              }, dayTs + 6000);
+              }, dayTs + 6000, 'enterprise');
               await trackEvent("pro.finance-library.stats_view", customer.id, tenantId, {
                 feature: "ai-insights", books_tracked: Math.floor(1 + Math.random() * 5),
                 status: "success", response_time_ms: responseTime, ...lMeta
-              }, dayTs + 6100);
+              }, dayTs + 6100, 'enterprise');
               eventsCreated += 2;
 
             } else if (unlockedFeature === "pro-feature?id=crypto-trading") {
@@ -820,20 +820,20 @@ router.post(
                 feature: "crypto-trading", source: pick(["live", "cache"]),
                 status: isError ? "error" : "success", response_time_ms: responseTime,
                 assets_count: 5, ...lMeta
-              }, dayTs + 6000);
+              }, dayTs + 6000, 'enterprise');
               if (Math.random() < 0.4) {
                 const tradeAmount = parseFloat((0.001 + Math.random() * 0.5).toFixed(4));
                 await trackEvent("pro.crypto-trading.trade_execute", customer.id, tenantId, {
                   feature: "crypto-trading", asset, amount: tradeAmount, type: tradeType,
                   status: isError ? "error" : "success", response_time_ms: responseTime,
                   error: isError ? "insufficient_funds" : undefined, ...lMeta
-                }, dayTs + 6200);
+                }, dayTs + 6200, 'enterprise');
                 eventsCreated++;
               }
               await trackEvent("pro.crypto-trading.portfolio_view", customer.id, tenantId, {
                 feature: "crypto-trading", holdings_count: Math.floor(Math.random() * 4),
                 status: "success", response_time_ms: responseTime, ...lMeta
-              }, dayTs + 6300);
+              }, dayTs + 6300, 'enterprise');
               eventsCreated += 2;
 
             } else if (unlockedFeature === "wealth_rebalance") {
@@ -844,13 +844,13 @@ router.post(
                 transactions_analyzed: Math.floor(10 + Math.random() * 200),
                 net_worth: Math.floor(50000 + Math.random() * 500000),
                 error: isError ? "db_timeout" : undefined, ...lMeta
-              }, dayTs + 6000);
+              }, dayTs + 6000, 'enterprise');
               if (Math.random() < 0.15) {
                 await trackEvent("pro.wealth-management.rebalance", customer.id, tenantId, {
                   feature: "wealth-management-pro", status: "success",
                   response_time_ms: Math.floor(100 + Math.random() * 1000),
                   totalValue: Math.floor(100000 + Math.random() * 500000), ...lMeta
-                }, dayTs + 6500);
+                }, dayTs + 6500, 'enterprise');
                 eventsCreated++;
               }
               eventsCreated++;
@@ -860,7 +860,7 @@ router.post(
               await trackEvent("pro.payroll-pro.payees_view", customer.id, tenantId, {
                 feature: "bulk-payroll-processing", payees_count: Math.floor(2 + Math.random() * 15),
                 status: "success", response_time_ms: responseTime, ...lMeta
-              }, dayTs + 6000);
+              }, dayTs + 6000, 'enterprise');
               if (Math.random() < 0.3) {
                 const payeeCount = Math.floor(2 + Math.random() * 10);
                 const amtPerPayee = Math.floor(1000 + Math.random() * 9000);
@@ -872,14 +872,14 @@ router.post(
                   status: isError ? "error" : "success",
                   response_time_ms: Math.floor(200 + Math.random() * 2000),
                   error: isError ? "insufficient_funds" : undefined, ...lMeta
-                }, dayTs + 6500);
+                }, dayTs + 6500, 'enterprise');
                 eventsCreated++;
               }
               eventsCreated++;
             }
 
             // Pro dashboard view each time
-            await trackEvent("pro.dashboard.view", customer.id, tenantId, { day, featureId: unlockedFeature, ...lMeta }, dayTs + 6800);
+            await trackEvent("pro.dashboard.view", customer.id, tenantId, { day, featureId: unlockedFeature, ...lMeta }, dayTs + 6800, 'enterprise');
             eventsCreated++;
           }
 

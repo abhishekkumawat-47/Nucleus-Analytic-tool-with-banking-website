@@ -1704,51 +1704,166 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
     params = {"tenant_id": tenant_list[0], "days": days} if len(tenant_list) == 1 else {"tenant_ids": tuple(tenant_list), "days": days}
 
     try:
-    try:
-        # Single source of truth catalog
+        # 1. Single source of truth catalog
         feature_catalog = {
-            "pro.crypto-trading.trade_execute": {"plan": "enterprise"},
-            "pro.crypto-trading.prices_view": {"plan": "enterprise"},
-            "pro.crypto-trading.portfolio_view": {"plan": "enterprise"},
-            "pro.wealth-management.rebalance": {"plan": "enterprise"},
-            "pro.wealth-management.insights_view": {"plan": "enterprise"},
-            "pro.payroll-pro.batch_process": {"plan": "enterprise"},
-            "pro.payroll-pro.payees_view": {"plan": "enterprise"},
-            "pro.payroll-pro.search_payees": {"plan": "enterprise"},
-            "pro.finance-library.book_access": {"plan": "enterprise"},
-            "pro.finance-library.stats_view": {"plan": "enterprise"},
+            # Enterprise
+            "pro.crypto_trade_execution.success": {"plan": "enterprise"},
+            "pro.crypto_trade_execution.failed": {"plan": "enterprise"},
+            "pro.crypto_price_feeds.view": {"plan": "enterprise"},
+            "pro.crypto_portfolio.view": {"plan": "enterprise"},
+            "pro.wealth_rebalance.success": {"plan": "enterprise"},
+            "pro.wealth_rebalance.failed": {"plan": "enterprise"},
+            "pro.wealth_insights.view": {"plan": "enterprise"},
+            "pro.payroll_batch.success": {"plan": "enterprise"},
+            "pro.payroll_batch.failed": {"plan": "enterprise"},
+            "pro.payroll_payees.view": {"plan": "enterprise"},
+            "pro.payroll_search.success": {"plan": "enterprise"},
+            "pro.payroll_search.failed": {"plan": "enterprise"},
+            "pro.finance_library_book.access": {"plan": "enterprise"},
+            "pro.finance_library_stats.view": {"plan": "enterprise"},
             "pro.features.view": {"plan": "enterprise"},
-            "pro.features.unlock_success": {"plan": "enterprise"},
-            "core.dashboard.view": {"plan": "free"},
-            "auth.login.success": {"plan": "free"},
-            "core.transactions.transfer": {"plan": "free"},
+            "pro.features_unlock.success": {"plan": "enterprise"},
+            "pro.features_unlock.failed": {"plan": "enterprise"},
+            
+            # Free / Base
+            "free.dashboard.view": {"plan": "free"},
+            "free.auth.login.success": {"plan": "free"},
+            "free.auth.login.failed": {"plan": "free"},
+            "free.auth.register.success": {"plan": "free"},
+            "free.auth.register.failed": {"plan": "free"},
+            "free.payment.success": {"plan": "free"},
+            "free.payment.failed": {"plan": "free"},
+            "free.accounts.view": {"plan": "free"},
+            "free.transactions.view": {"plan": "free"},
+            "free.payees.view": {"plan": "free"},
+            "free.payees.add_success": {"plan": "free"},
+            "free.payees.add_failed": {"plan": "free"},
+            "free.payees.edit_success": {"plan": "free"},
+            "free.payees.edit_failed": {"plan": "free"},
+            "free.payees.delete_success": {"plan": "free"},
+            "free.payees.delete_failed": {"plan": "free"},
+            "free.loan.applied": {"plan": "free"},
+            "free.loan.approved": {"plan": "free"},
+            "free.loan.rejected": {"plan": "free"},
+            "free.loans.view": {"plan": "free"},
+            "free.loan.kyc_started": {"plan": "free"},
+            "free.loan.kyc_completed": {"plan": "free"},
+            "free.loan.kyc_failed": {"plan": "free"},
+            "free.loan.kyc_abandoned": {"plan": "free"},
+            "free.profile.view": {"plan": "free"},
+            "free.profile.edit_success": {"plan": "free"},
+            "free.profile.edit_failed": {"plan": "free"},
+            "free.profile.location": {"plan": "free"},
         }
         
-        # Fetch usage
+        # 2. Normalization Mappings
+        MAPPINGS = {
+            # Enterprise mappings
+            "pro.crypto_trade_execution.success": [
+                "crypto trade execution", "cryptotradeexecution", "crypto_trade_execution_success", 
+                "real-time crypto buy/sell execution", "pro.crypto-trading.trade_execute", "crypto trade execution success"
+            ],
+            "pro.crypto_trade_execution.failed": [
+                "crypto trade execution failed", "pro.crypto-trading.trade_execute_failed", "crypto_trade_failed"
+            ],
+            "pro.crypto_price_feeds.view": ["crypto price feeds", "crypto prices view", "pro.crypto-trading.prices_view"],
+            "pro.crypto_portfolio.view": ["pro.crypto-trading.portfolio_view", "crypto_trading", "crypto-trading", "pro.crypto-trading.view"],
+            "pro.wealth_rebalance.success": ["wealth rebalance", "wealth rebalancing", "pro.wealth-management.rebalance", "wealth rebalance success"],
+            "pro.wealth_rebalance.failed": ["wealth rebalance failed", "pro.wealth-management.rebalance_failed"],
+            "pro.wealth_insights.view": ["pro.wealth-management.insights_view", "wealth insights view", "wealth_management_pro", "wealth-management-pro", "pro.wealth-management.view"],
+            "pro.payroll_batch.success": ["payroll batch processed", "bulk payroll processing", "pro.payroll-pro.batch_process", "payroll batch success", "bulk-payroll-processing", "pro.payroll-pro.view"],
+            "pro.payroll_batch.failed": ["payroll batch failed", "pro.payroll-pro.batch_process_failed"],
+            "pro.payroll_search.success": ["payroll search", "search payees", "pro.payroll-pro.search_payees", "payroll search success"],
+            "pro.payroll_search.failed": ["payroll search failed", "pro.payroll-pro.search_payees_failed"],
+            "pro.payroll_payees.view": ["pro.payroll-pro.payees_view", "payroll payees view"],
+            "pro.finance_library_book.access": ["pro.finance-library.book_access"],
+            "pro.finance_library_stats.view": ["pro.finance-library.stats_view", "ai-insights", "pro.finance-library.view"],
+            "pro.features.view": ["pro.features.view", "feature_view", "feature view"],
+            "pro.features_unlock.success": ["pro.features.unlock_success"],
+            "pro.features_unlock.failed": ["pro.features.unlock_failed"],
+            
+            # Base mappings
+            "free.dashboard.view": ["core.dashboard.view", "dashboard view", "view_dashboard", "page_view", "core.dashboard.viewed"],
+            "free.auth.login.success": ["auth.login.success", "login success", "login", "login_success"],
+            "free.auth.login.failed": ["auth.login.failed", "login_failed", "login failed"],
+            "free.auth.register.success": ["auth.register.success", "register success", "register", "register_success"],
+            "free.auth.register.failed": ["auth.register.failed", "register_failed", "register failed"],
+            "free.payment.success": ["transfer funds", "core.transactions.transfer", "transfer funds success", "payment_completed", "payment.completed", "core.payees.pay_success", "payees"],
+            "free.payment.failed": ["payment_failed", "payment.failed"],
+            "free.accounts.view": ["accounts_view", "core.accounts.viewed", "account_view"],
+            "free.transactions.view": ["transactions_view", "payments.history.viewed", "transaction_view"],
+            "free.payees.view": ["payees_view", "core.payees.viewed"],
+            "free.payees.add_success": ["payee_added", "core.payees.add_success"],
+            "free.payees.add_failed": ["payee_add_failed", "core.payees.add_failed"],
+            "free.payees.edit_success": ["payee_edited", "core.payees.edit_success"],
+            "free.payees.edit_failed": ["payee_edit_failed", "core.payees.edit_failed"],
+            "free.payees.delete_success": ["payee_deleted", "payee_removed", "core.payees.delete_success"],
+            "free.payees.delete_failed": ["payee_delete_failed", "core.payees.delete_failed"],
+            "free.loan.applied": ["loan_applied", "lending.loan.applied"],
+            "free.loan.approved": ["loan_approved", "lending.loan.approved"],
+            "free.loan.rejected": ["loan_rejected", "lending.loan.rejected"],
+            "free.loans.view": ["loans_page_view", "loan_page_view", "lending.loans.viewed"],
+            "free.loan.kyc_started": ["kyc_started", "lending.loan.kyc_started"],
+            "free.loan.kyc_completed": ["kyc_completed", "lending.loan.kyc_completed"],
+            "free.loan.kyc_failed": ["kyc_failed", "lending.loan.kyc_failed"],
+            "free.loan.kyc_abandoned": ["kyc_abandoned", "lending.loan.kyc_abandoned"],
+            "free.profile.view": ["profile_view", "core.profile.viewed"],
+            "free.profile.edit_success": ["profile_updated", "core.profile.edit_success"],
+            "free.profile.edit_failed": ["profile_update_failed", "core.profile.edit_failed"],
+            "free.profile.location": ["location_captured", "core.profile.location", "core.location_captured.action"],
+        }
+        
+        # 3. Invalid Features to explicitly drop
+        INVALID_FEATURES = [
+            "reports download", "pro book download", "pro feature usage", 
+            "pro unlocked", "pro license unlocked", "ai insights",
+            "reports_download", "pro_book_download", "pro_feature_usage",
+            "pro_unlocked", "pro_license_unlocked", "ai_insights"
+        ]
+
+        # 4. Generate SQL normalization MultiIf
+        mapping_sql_parts = []
+        mapping_sql_parts.append(f"snake_event IN ({', '.join(repr(f) for f in INVALID_FEATURES)})")
+        mapping_sql_parts.append("'INVALID'")
+        
+        for canonical, variations in MAPPINGS.items():
+            vars_prep = list(set([v.lower().replace(' ', '_') for v in variations] + [canonical.lower().replace(' ', '_'), canonical]))
+            mapping_sql_parts.append(f"snake_event IN ({', '.join(repr(v) for v in vars_prep)})")
+            mapping_sql_parts.append(f"'{canonical}'")
+        
+        mapping_sql_parts.append("'UNKNOWN'") 
+        
+        normalized_expr = f"""
+            WITH lower(replaceRegexpAll(event_name, ' ', '_')) AS snake_event,
+                 multiIf({', '.join(mapping_sql_parts)}) AS normalized_feature
+        """
+
         sql_used = f"""
-            SELECT event_name as feature_name, count() as usage_count, uniqExact(user_id) as unique_users
+            {normalized_expr}
+            SELECT 
+                normalized_feature as feature_name, 
+                count() as usage_count, 
+                uniqExact(user_id) as unique_users,
+                max(JSONExtractString(metadata, 'tier')) as tier_hint
             FROM feature_intelligence.events_raw
             WHERE {cond} AND timestamp >= today() - %(days)s
-            GROUP BY event_name
+            GROUP BY normalized_feature
+            HAVING normalized_feature != 'INVALID'
             ORDER BY usage_count DESC
         """
         used = ch_client.query(sql_used, params)
         used_map = {r["feature_name"]: r for r in used}
 
-        # Dynamically append any actually used "pro." items to enterprise so they aren't marked as generic free items
-        for fname in used_map.keys():
-            if fname.startswith("pro.") and fname not in feature_catalog:
-                feature_catalog[fname] = {"plan": "enterprise"}
-
         pro_features_set = {k for k, v in feature_catalog.items() if v["plan"] == "enterprise"}
 
-        
         # ─── Usage trends (last 7 days) ───
         sql_trends = f"""
-            SELECT event_name as feature_name, toDate(timestamp) as date, count() as count
+            {normalized_expr}
+            SELECT normalized_feature as feature_name, toDate(timestamp) as date, count() as count
             FROM feature_intelligence.events_raw
             WHERE {cond} AND timestamp >= today() - 7
-            GROUP BY event_name, date
+            GROUP BY normalized_feature, date
+            HAVING normalized_feature != 'INVALID'
             ORDER BY date ASC
         """
         trend_rows = ch_client.query(sql_trends, params)
@@ -1767,7 +1882,7 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
         unused_licensed = []
         unlicensed_used = []
         
-        # Populate pro/licensed
+        # Populate pro/licensed from STRICT catalog
         for fname in pro_features_set:
             uc = int(used_map.get(fname, {}).get("usage_count", 0))
             item = {
@@ -1784,9 +1899,10 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
             else:
                 unused_licensed.append(item)
                 
-        # Populate free/unlicensed
+        # Populate free/unlicensed ONLY from known catalog + what's not Pro
         for fname, r in used_map.items():
             if fname not in pro_features_set:
+                # Do not use raw event names directly, enforce taxonomy where possible
                 uc = int(r["usage_count"])
                 unlicensed_used.append({
                     "feature_name": fname,

@@ -19,11 +19,10 @@ export default function GovernancePage() {
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
 
   const DEFAULT_FEATURES = [
-    { feature_name: "core.payees.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "core.transactions.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "loans.dashboard.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "pro.crypto-trading.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "pro.wealth-management.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.wealth_insights.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.finance_library_stats.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.crypto_portfolio.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.payroll_batch.success", is_enabled: true, changed_by: 'system', changed_at: '-' },
   ];
 
   // Fetch tracking toggles

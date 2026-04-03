@@ -171,7 +171,7 @@ function TopNavbar() {
           </div>
 
           {/* ── Tenant Selector Dropdown ── */}
-          <div ref={tenantRef} className="relative">
+          <div ref={tenantRef} className="hidden md:flex relative">
             <button
               onClick={() => setShowTenantDropdown(!showTenantDropdown)}
               className="flex items-center cursor-pointer gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-300 transition-colors min-w-[130px]"
@@ -276,7 +276,7 @@ function TopNavbar() {
         </div>
 
         {/* Data Sync & Transparency */}
-        <div className="relative" ref={transparencyRef}>
+        <div className="hidden md:flex relative" ref={transparencyRef}>
           <button
             onClick={handleTransparencyClick}
             className="flex items-center gap-3 px-3 py-2.5 cursor-pointer rounded-md text-xs font-medium transition-all duration-200 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"

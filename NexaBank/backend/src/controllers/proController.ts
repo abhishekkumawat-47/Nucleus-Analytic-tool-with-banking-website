@@ -77,7 +77,7 @@ export const unlockFeature = async (req: Request, res: Response): Promise<void> 
       return license;
     });
 
-    await trackEvent("pro_license_unlocked", customerId, tenantId, { featureId, amount: 2000 });
+    await trackEvent("pro.features.unlock_success", customerId, tenantId, { featureId, amount: 2000 }, undefined, 'enterprise');
 
     res.status(200).json({
       message: "Feature unlocked successfully for 1 month",
@@ -125,7 +125,7 @@ export const accessBook = async (req: Request, res: Response): Promise<void> => 
     const responseTime = Date.now() - startTime;
     await trackEvent("pro.finance-library.book_access", customerId || "unknown", tenantId, {
       feature: "ai-insights", title, status: "error", error: "missing_params", response_time_ms: responseTime
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(400).json({ error: "Missing title" });
     return;
   }
@@ -138,7 +138,7 @@ export const accessBook = async (req: Request, res: Response): Promise<void> => 
       url: url || "",
       status: "success",
       response_time_ms: Date.now() - startTime,
-    });
+    }, undefined, 'enterprise');
 
     res.status(200).json({ success: true, message: `Accessing ${title}...` });
   } catch (err) {
@@ -146,7 +146,7 @@ export const accessBook = async (req: Request, res: Response): Promise<void> => 
     console.error("Book access error:", err);
     await trackEvent("pro.finance-library.book_access", customerId, tenantId, {
       feature: "ai-insights", title, status: "error", error: String(err), response_time_ms: responseTime
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(500).json({ error: "Failed to track book access" });
   }
 };
@@ -186,7 +186,7 @@ export const getBookStats = async (req: Request, res: Response): Promise<void> =
       books_tracked: Object.keys(bookCounts).length,
       status: "success",
       response_time_ms: Date.now() - startTime,
-    });
+    }, undefined, 'enterprise');
 
     res.status(200).json({ counts: bookCounts });
   } catch (err) {
@@ -215,7 +215,7 @@ export const getCryptoPrices = async (req: Request, res: Response): Promise<void
       await trackEvent("pro.crypto-trading.prices_view", customerId || "anonymous", tenantId, {
         feature: "crypto-trading", source: "cache", status: "success",
         response_time_ms: Date.now() - startTime,
-      }).catch(() => { });
+      }, undefined, 'enterprise').catch(() => { });
       res.status(200).json(cryptoPriceCache.data);
       return;
     }
@@ -254,7 +254,7 @@ export const getCryptoPrices = async (req: Request, res: Response): Promise<void
       feature: "crypto-trading", source: "live", status: "success",
       response_time_ms: responseTime,
       assets_count: 5,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
 
     res.status(200).json(formatted);
   } catch (err) {
@@ -264,7 +264,7 @@ export const getCryptoPrices = async (req: Request, res: Response): Promise<void
     await trackEvent("pro.crypto-trading.prices_view", customerId || "anonymous", tenantId, {
       feature: "crypto-trading", source: "live", status: "error",
       error: String(err), response_time_ms: responseTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
 
     // Fallback static prices if API fails
     res.status(200).json({
@@ -293,7 +293,7 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
     await trackEvent("pro.crypto-trading.trade_execute", customerId || "unknown", tenantId, {
       feature: "crypto-trading", status: "error", error: "missing_params",
       response_time_ms: responseTime, asset, type
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(400).json({ error: "Missing trade details" });
     return;
   }
@@ -308,7 +308,7 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
       await trackEvent("pro.crypto-trading.trade_execute", customerId, tenantId, {
         feature: "crypto-trading", status: "error", error: "account_not_found",
         response_time_ms: Date.now() - startTime, asset, type
-      }).catch(() => { });
+      }, undefined, 'enterprise').catch(() => { });
       res.status(404).json({ error: "Account not found" });
       return;
     }
@@ -318,7 +318,7 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
       await trackEvent("pro.crypto-trading.trade_execute", customerId, tenantId, {
         feature: "crypto-trading", status: "error", error: "insufficient_funds",
         response_time_ms: Date.now() - startTime, asset, type, amount, totalCost
-      }).catch(() => { });
+      }, undefined, 'enterprise').catch(() => { });
       res.status(400).json({ error: "Insufficient funds for trade" });
       return;
     }
@@ -342,7 +342,7 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
         await trackEvent("pro.crypto-trading.trade_execute", customerId, tenantId, {
           feature: "crypto-trading", status: "error", error: "insufficient_holdings",
           response_time_ms: Date.now() - startTime, asset, type, amount
-        }).catch(() => { });
+        }, undefined, 'enterprise').catch(() => { });
         res.status(400).json({ error: "Insufficient asset holdings" });
         return;
       }
@@ -378,10 +378,10 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
     await trackEvent("pro.crypto-trading.trade_execute", customerId, tenantId, {
       feature: "crypto-trading", asset, amount, type, totalCost,
       status: "success", response_time_ms: responseTime,
-    });
+    }, undefined, 'enterprise');
 
     // Also fire the legacy event for backward compat with analytics
-    await trackEvent("pro-feature?id=crypto-trading", customerId, tenantId, { asset, amount, type });
+    await trackEvent("pro-feature?id=crypto-trading", customerId, tenantId, { asset, amount, type }, undefined, 'enterprise');
 
     res.status(200).json({ success: true, investments: updatedInvestments });
   } catch (err) {
@@ -390,7 +390,7 @@ export const executeTrade = async (req: Request, res: Response): Promise<void> =
     await trackEvent("pro.crypto-trading.trade_execute", customerId || "unknown", tenantId, {
       feature: "crypto-trading", status: "error", error: String(err),
       response_time_ms: responseTime, asset, type
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(500).json({ error: "Trade failed" });
   }
 };
@@ -417,7 +417,7 @@ export const getPortfolio = async (req: Request, res: Response): Promise<void> =
     await trackEvent("pro.crypto-trading.portfolio_view", customerId, tenantId, {
       feature: "crypto-trading", holdings_count: investments.length,
       status: "success", response_time_ms: Date.now() - startTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
 
     res.status(200).json({
       holdings: investments.filter(i => i.type === "CRYPTO"),
@@ -524,12 +524,9 @@ export const getWealthInsights = async (req: Request, res: Response): Promise<vo
     const responseTime = Date.now() - startTime;
     await trackEvent("pro.wealth-management.insights_view", customerId, tenantId, {
       feature: "wealth-management-pro",
-      status: "success",
-      response_time_ms: responseTime,
-      accounts_count: accounts.length,
       transactions_analyzed: transactions.length,
       net_worth: netWorth,
-    });
+    }, undefined, 'enterprise');
 
     res.status(200).json({
       netWorth,
@@ -553,8 +550,8 @@ export const getWealthInsights = async (req: Request, res: Response): Promise<vo
     console.error("Wealth insights error:", err);
     await trackEvent("pro.wealth-management.insights_view", customerId || "unknown", tenantId, {
       feature: "wealth-management-pro", status: "error",
-      error: String(err), response_time_ms: responseTime,
-    }).catch(() => { });
+      error_msg: String(err), response_time_ms: responseTime,
+    }, undefined, 'enterprise').catch(() => { });
     res.status(500).json({ error: "Failed to fetch wealth insights" });
   }
 };
@@ -576,10 +573,10 @@ export const rebalanceWealth = async (req: Request, res: Response): Promise<void
       where: { customerId, featureId: "wealth-management-pro", active: true, expiryDate: { gt: new Date() } }
     });
     if (!license) {
-      await trackEvent("pro.wealth-management.rebalance", customerId, tenantId, {
+      await trackEvent("pro.wealth-management.rebalance_execute", customerId, tenantId, {
         feature: "wealth-management-pro", status: "error", error: "no_license",
         response_time_ms: Date.now() - startTime,
-      }).catch(() => { });
+      }, undefined, 'enterprise').catch(() => { });
       res.status(403).json({ error: "Active wealth-management-pro license required." });
       return;
     }
@@ -645,20 +642,20 @@ export const rebalanceWealth = async (req: Request, res: Response): Promise<void
     ]);
 
     const responseTime = Date.now() - startTime;
-    await trackEvent("pro.wealth-management.rebalance", customerId, tenantId, {
+    await trackEvent("pro.wealth-management.rebalance_execute", customerId, tenantId, {
       feature: "wealth-management-pro",
       totalValue: totalPortfolioValue,
       allocations: TARGET_WEIGHTS,
       status: "success",
       response_time_ms: responseTime,
-    });
+    }, undefined, 'enterprise');
 
     // Legacy event for backward compat
     await trackEvent("wealth_rebalance", customerId, tenantId, {
       feature: "wealth-management-pro",
       totalValue: totalPortfolioValue,
       allocations: TARGET_WEIGHTS,
-    });
+    }, undefined, 'enterprise');
 
     res.status(200).json({
       success: true,
@@ -673,10 +670,10 @@ export const rebalanceWealth = async (req: Request, res: Response): Promise<void
   } catch (err) {
     const responseTime = Date.now() - startTime;
     console.error("Rebalance error:", err);
-    await trackEvent("pro.wealth-management.rebalance", customerId || "unknown", tenantId, {
+    await trackEvent("pro.wealth-management.rebalance_execute", customerId || "unknown", tenantId, {
       feature: "wealth-management-pro", status: "error",
-      error: String(err), response_time_ms: responseTime,
-    }).catch(() => { });
+      error_msg: String(err), response_time_ms: responseTime,
+    }, undefined, 'enterprise').catch(() => { });
     res.status(500).json({ error: "Rebalance failed" });
   }
 };
@@ -711,7 +708,7 @@ export const getPayrollPayees = async (req: Request, res: Response): Promise<voi
       payees_count: payees.length,
       status: "success",
       response_time_ms: Date.now() - startTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
 
     res.status(200).json(payees);
   } catch (err) {
@@ -758,13 +755,13 @@ export const searchPayrollPayees = async (req: Request, res: Response): Promise<
         ifsc: r.account[0].ifsc,
       }));
 
-    await trackEvent("pro.payroll-pro.search_payees", customerId, tenantId, {
+    await trackEvent("pro.payroll-pro.payees_search", customerId, tenantId, {
       feature: "bulk-payroll-processing",
       query_length: query.length,
       results_count: formatted.length,
       status: "success",
       response_time_ms: Date.now() - startTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
 
     res.status(200).json(formatted);
   } catch (err) {
@@ -793,7 +790,7 @@ export const processPayroll = async (req: Request, res: Response): Promise<void>
     await trackEvent("pro.payroll-pro.batch_process", customerId, tenantId, {
       feature: "bulk-payroll-processing", status: "error", error: "no_payees",
       response_time_ms: Date.now() - startTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(400).json({ error: "No payees selected" });
     return;
   }
@@ -802,7 +799,7 @@ export const processPayroll = async (req: Request, res: Response): Promise<void>
     await trackEvent("pro.payroll-pro.batch_process", customerId, tenantId, {
       feature: "bulk-payroll-processing", status: "error", error: "too_many_payees",
       payees_count: payees.length, response_time_ms: Date.now() - startTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(400).json({ error: "Maximum 20 payees per batch" });
     return;
   }
@@ -816,7 +813,7 @@ export const processPayroll = async (req: Request, res: Response): Promise<void>
     await trackEvent("pro.payroll-pro.batch_process", customerId, tenantId, {
       feature: "bulk-payroll-processing", status: "error", error: "amount_exceeded",
       amountPerPayee, response_time_ms: Date.now() - startTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(400).json({ error: "Maximum ₹10,000 per payee per batch" });
     return;
   }
@@ -832,7 +829,7 @@ export const processPayroll = async (req: Request, res: Response): Promise<void>
       await trackEvent("pro.payroll-pro.batch_process", customerId, tenantId, {
         feature: "bulk-payroll-processing", status: "error", error: "no_license",
         response_time_ms: Date.now() - startTime,
-      }).catch(() => { });
+      }, undefined, 'enterprise').catch(() => { });
       res.status(403).json({ error: "Active Payroll Pro license required." });
       return;
     }
@@ -853,7 +850,7 @@ export const processPayroll = async (req: Request, res: Response): Promise<void>
         feature: "bulk-payroll-processing", status: "error", error: "insufficient_funds",
         required: totalAmount, available: account.balance,
         response_time_ms: Date.now() - startTime,
-      }).catch(() => { });
+      }, undefined, 'enterprise').catch(() => { });
       res.status(400).json({
         error: `Insufficient funds. Required: ₹${totalAmount.toLocaleString("en-IN")}, Available: ₹${account.balance.toLocaleString("en-IN")}`
       });
@@ -921,14 +918,14 @@ export const processPayroll = async (req: Request, res: Response): Promise<void>
       total_amount: totalAmount,
       status: "success",
       response_time_ms: responseTime,
-    });
+    }, undefined, 'enterprise');
 
     // Legacy event
     await trackEvent("pro-feature?id=bulk-payroll-processing", customerId, tenantId, {
       feature: "bulk-payroll-processing",
       amount: totalAmount,
       employees: payees.length,
-    });
+    }, undefined, 'enterprise');
 
     res.status(200).json({
       success: true,
@@ -942,7 +939,7 @@ export const processPayroll = async (req: Request, res: Response): Promise<void>
     await trackEvent("pro.payroll-pro.batch_process", customerId || "unknown", tenantId, {
       feature: "bulk-payroll-processing", status: "error",
       error: String(err), response_time_ms: responseTime,
-    }).catch(() => { });
+    }, undefined, 'enterprise').catch(() => { });
     res.status(500).json({ error: "Payroll processing failed" });
   }
 };

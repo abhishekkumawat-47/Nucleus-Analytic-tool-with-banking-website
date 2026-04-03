@@ -76,14 +76,43 @@ interface LicenseData {
 /* ─── Helpers ─── */
 
 const FEATURE_LABELS: Record<string, { label: string; description: string }> = {
-  'pro.crypto-trading.trade_execute': { label: 'Crypto Trading', description: 'Real-time crypto buy/sell execution' },
-  'pro.wealth-management.rebalance': { label: 'Wealth Rebalance', description: 'AI-driven portfolio rebalancing' },
-  'pro.payroll-pro.batch_process': { label: 'Bulk Payroll', description: 'Batch salary disbursement processing' },
-  'pro.finance-library.book_access': { label: 'Finance Library', description: 'Downloadable AI financial reports' },
+  'pro.crypto_trade_execution.success': { label: 'Crypto Trade execution', description: 'Real-time crypto buy/sell execution' },
+  'pro.crypto_trade_execution.failed': { label: 'Crypto Trade Failed', description: 'Unsuccessful trade attempt' },
+  'pro.crypto_price_feeds.view': { label: 'Crypto Price feeds', description: 'Live asset price monitoring' },
+  'pro.crypto_portfolio.view': { label: 'Crypto Portfolio', description: 'User digital asset holdings' },
+  'pro.wealth_rebalance.success': { label: 'Wealth Rebalancing', description: 'AI-driven portfolio rebalancing' },
+  'pro.wealth_rebalance.failed': { label: 'Rebalancing Failed', description: 'Unsuccessful portfolio adjustment' },
+  'pro.wealth_insights.view': { label: 'Investment Insights', description: 'Personalized wealth analytics' },
+  'pro.payroll_batch.success': { label: 'Payroll Batch Process', description: 'Mass salary disbursement processing' },
+  'pro.payroll_batch.failed': { label: 'Payroll Batch Failed', description: 'Failed salary bulk operation' },
+  'pro.payroll_payees.view': { label: 'Payroll Payee List', description: 'Viewing payroll recipients' },
+  'pro.payroll_search.success': { label: 'Payroll Search', description: 'Searching for new payroll payees' },
+  'pro.payroll_search.failed': { label: 'Payroll Search Failed', description: 'Search operation timeout/failure' },
+  'pro.finance_library_book.access': { label: 'Premium Library Access', description: 'Downloaded financial resources' },
+  'pro.finance_library_stats.view': { label: 'Financial Statistics', description: 'Advanced financial data visualization' },
+  'pro.features.view': { label: 'Pro Feature Explorer', description: 'Browsing available platform upgrades' },
+  'pro.features_unlock.success': { label: 'Feature Activation', description: 'Successful license entitlement gain' },
+  'pro.features_unlock.failed': { label: 'Activation Failed', description: 'Insufficient funds or verification error' },
 };
 
 function featureLabel(name: string): string {
-  return FEATURE_LABELS[name]?.label || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  let label = FEATURE_LABELS[name]?.label;
+  if (label) return label;
+
+  // Clean technical prefixes
+  let cleaned = name
+    .replace(/^pro\./i, '')
+    .replace(/^core\./i, '')
+    .replace(/^auth\./i, '')
+    .replace(/^payroll-pro\./i, '');
+
+  // If dot-separated, take segments
+  const parts = cleaned.split('.');
+  if (parts.length > 1) {
+    cleaned = parts.slice(-2).join(' ');
+  }
+
+  return cleaned.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function featureDescription(name: string): string {
@@ -115,14 +144,14 @@ function Sparkline({ data, color = '#7C3AED', height = 32 }: { data: TrendPoint[
   return (
     <svg width={w} height={height} viewBox={`0 0 ${w} ${height}`} className="overflow-visible">
       <defs>
-        <linearGradient id={`grad-${color.replace('#','')}`} x1="0%" y1="0%" x2="0%" y2="100%">
+        <linearGradient id={`grad-${color.replace('#', '')}`} x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor={color} stopOpacity="0.25" />
           <stop offset="100%" stopColor={color} stopOpacity="0.02" />
         </linearGradient>
       </defs>
       <polygon
         points={`0,${height} ${points} ${w},${height}`}
-        fill={`url(#grad-${color.replace('#','')})`}
+        fill={`url(#grad-${color.replace('#', '')})`}
       />
       <polyline
         points={points}
@@ -288,10 +317,7 @@ export default function LicenseUsagePage() {
 
       {/* ─── Alert ─── */}
       {hasData && summary && hasWastedLicenses && (
-        <div className="bg-white border border-[#1a73e8] border-l-4 text-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm">
-          <div className="p-2 bg-[#1a73e8]/10 rounded-full flex-shrink-0">
-            <AlertTriangle className="h-4 w-4 text-[#1a73e8]" />
-          </div>
+        <div className="bg-white border bg-yellow-100 border-yellow-400 border-l-4 text-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm">
           <div>
             <h3 className="text-sm font-semibold">License Optimization Alert</h3>
             <p className="text-sm mt-0.5 text-gray-700">
@@ -405,50 +431,68 @@ export default function LicenseUsagePage() {
           </div>
 
           {/* ─── KPI Row 2: Donut Charts ─── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <ChartContainer title="License Utilization" id="license-utilization">
-              <div className="flex items-center justify-around py-4">
-                <DonutChart
-                  value={summary.total_used_licensed}
-                  max={summary.total_licensed}
-                  label="Licenses Used"
-                  color="#1a73e8"
-                />
-                <DonutChart
-                  value={summary.pro_users}
-                  max={summary.total_users}
-                  label="Pro Adoption"
-                  color="#4285F4"
-                />
-                <DonutChart
-                  value={summary.total_used_licensed}
-                  max={Math.max(summary.total_used, 1)}
-                  label="Licensed Share"
-                  color="#8AB4F8"
-                />
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+
+            {/* 1 column */}
+            <ChartContainer
+              title="License Utilization"
+              id="license-utilization"
+              className="lg:col-span-1"
+            >
+              <div className="flex flex-col justify-between h-full py-6 gap-3">
+                <div className="flex items-center justify-center lg:flex-col flex-1 gap-5">
+                  <DonutChart
+                    value={summary.total_used_licensed}
+                    max={summary.total_licensed}
+                    label="Licenses Used"
+                    color="#1a73e8"
+                  />
+                  <DonutChart
+                    value={summary.pro_users}
+                    max={summary.total_users}
+                    label="Pro Adoption"
+                    color="#4285F4"
+                  />
+                </div>
               </div>
             </ChartContainer>
 
-            <ChartContainer title="Pro Feature Distribution" id="feature-distribution" className="lg:col-span-2">
+            {/* 3 columns */}
+            <ChartContainer
+              title="Pro Feature Distribution"
+              id="feature-distribution"
+              className="lg:col-span-3"
+            >
               <div className="space-y-3 py-2">
                 {licensedFeatures.map((f, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-900 truncate">{featureLabel(f.feature_name)}</span>
-                        <span className="text-xs font-mono text-gray-500 ml-2">{f.usage_count.toLocaleString()} events</span>
+                        <span className="text-sm font-medium text-gray-900 truncate">
+                          {featureLabel(f.feature_name)}
+                        </span>
+                        <span className="text-xs font-mono text-gray-500 ml-2">
+                          {f.usage_count.toLocaleString()} events
+                        </span>
                       </div>
+
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
-                          <UsageBar pct={f.usage_pct} color={f.is_used ? '#1a73e8' : '#9ca3af'} />
+                          <UsageBar
+                            pct={f.usage_pct}
+                            color={f.is_used ? '#1a73e8' : '#9ca3af'}
+                          />
                         </div>
-                        <span className="text-[10px] font-medium text-gray-400 w-10 text-right">{f.usage_pct}%</span>
+                        <span className="text-[10px] font-medium text-gray-400 w-10 text-right">
+                          {f.usage_pct}%
+                        </span>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             </ChartContainer>
+
           </div>
 
           {/* ─── Tabs ─── */}
@@ -461,11 +505,10 @@ export default function LicenseUsagePage() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeTab === tab.key
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${activeTab === tab.key
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 <tab.icon className="h-3.5 w-3.5" />
                 {tab.label}
@@ -479,9 +522,8 @@ export default function LicenseUsagePage() {
 
               {/* Licensed Feature Cards */}
               {licensedFeatures.map((f, i) => (
-                <div key={i} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${
-                  !f.is_used ? 'border-red-200 bg-red-50/30' : 'border-gray-100'
-                }`}>
+                <div key={i} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${!f.is_used ? 'border-red-200 bg-red-50/30' : 'border-gray-100'
+                  }`}>
                   <div className="p-5">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
@@ -490,11 +532,10 @@ export default function LicenseUsagePage() {
                           <p className="text-xs text-gray-500 mt-0.5">{featureDescription(f.feature_name)}</p>
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        f.is_used
-                          ? 'bg-white border border-gray-200 text-gray-700'
-                          : 'bg-white border border-gray-200 text-gray-500'
-                      }`}>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${f.is_used
+                        ? 'bg-white border border-gray-200 text-gray-700'
+                        : 'bg-white border border-gray-200 text-gray-500'
+                        }`}>
                         {f.is_used ? 'Active' : 'Unused'}
                       </span>
                     </div>
@@ -539,11 +580,10 @@ export default function LicenseUsagePage() {
                   <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
                     <tr>
                       <th className="px-4 py-3 font-medium">Feature</th>
-                      <th className="px-4 py-3 font-medium">Tier</th>
                       <th className="px-4 py-3 font-medium">Status</th>
                       <th className="px-4 py-3 font-medium text-right">Usage Count</th>
                       <th className="px-4 py-3 font-medium text-right">Unique Users</th>
-                      <th className="px-4 py-3 font-medium text-right">Share</th>
+                      <th className="px-4 py-3 font-medium text-right">Usage %</th>
                       <th className="px-4 py-3 font-medium w-28">7-Day Trend</th>
                     </tr>
                   </thead>
@@ -557,11 +597,6 @@ export default function LicenseUsagePage() {
                               <p className="text-[11px] text-gray-400 mt-0.5">{featureDescription(f.feature_name)}</p>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white text-gray-600 border border-gray-200">
-                            Enterprise
-                          </span>
                         </td>
                         <td className="px-4 py-3.5">
                           {f.is_used ? (
@@ -601,7 +636,7 @@ export default function LicenseUsagePage() {
                         <th className="px-4 py-3 font-medium">Feature</th>
                         <th className="px-4 py-3 font-medium text-right">Usage Count</th>
                         <th className="px-4 py-3 font-medium text-right">Unique Users</th>
-                        <th className="px-4 py-3 font-medium text-right">Share</th>
+                        <th className="px-4 py-3 font-medium text-right">Usage %</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -609,8 +644,8 @@ export default function LicenseUsagePage() {
                         <tr key={i} className="border-b border-gray-100 hover:bg-amber-50/30 transition-colors">
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900 capitalize">
-                                {f.feature_name.replace(/_/g, ' ')}
+                              <span className="font-medium text-gray-900">
+                                {featureLabel(f.feature_name)}
                               </span>
                             </div>
                           </td>
