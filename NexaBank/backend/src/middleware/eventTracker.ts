@@ -117,44 +117,44 @@ function enforceTaxonomy(eventName: string): string {
 
   // Explicit legacy → canonical mappings
   const LEGACY_MAP: Record<string, string> = {
-    'login':                'auth.login.success',
-    'login_success':        'auth.login.success',
-    'login_failed':         'auth.login.failed',
-    'register':             'auth.register.success',
-    'register_success':     'auth.register.success',
-    'dashboard_view':       'core.dashboard.viewed',
-    'accounts_view':        'core.accounts.viewed',
-    'account_view':         'core.accounts.viewed',
-    'transactions_view':    'payments.history.viewed',
-    'transaction_view':     'payments.history.viewed',
-    'payees_view':          'core.payees.viewed',
-    'payee_added':          'core.payees.add_success',
-    'payee_edited':         'core.payees.edit_success',
-    'payee_deleted':        'core.payees.delete_success',
-    'payee_removed':        'core.payees.delete_success',
-    'payees':               'core.payees.pay_success',
-    'payment_completed':    'payment.completed',
-    'payment_failed':       'payment.failed',
-    'loan_applied':         'lending.loan.applied',
-    'loans_page_view':      'lending.loans.viewed',
-    'kyc_started':          'lending.loan.kyc_started',
-    'kyc_completed':        'lending.loan.kyc_completed',
-    'kyc_failed':           'lending.loan.kyc_failed',
-    'kyc_abandoned':        'lending.loan.kyc_abandoned',
-    'profile_view':         'core.profile.viewed',
-    'profile_updated':      'core.profile.edit_success',
-    'pro_unlocked':         'pro.features.unlock_success',
-    'pro_license_unlocked': 'pro.features.unlock_success',
+    'login':                'free.auth.login.success',
+    'login_success':        'free.auth.login.success',
+    'login_failed':         'free.auth.login.failed',
+    'register':             'free.auth.register.success',
+    'register_success':     'free.auth.register.success',
+    'dashboard_view':       'free.dashboard.view',
+    'accounts_view':        'free.accounts.view',
+    'account_view':         'free.accounts.view',
+    'transactions_view':    'free.transactions.view',
+    'transaction_view':     'free.transactions.view',
+    'payees_view':          'free.payees.view',
+    'payee_added':          'free.payees.add_success',
+    'payee_edited':         'free.payees.edit_success',
+    'payee_deleted':        'free.payees.delete_success',
+    'payee_removed':        'free.payees.delete_success',
+    'payees':               'free.payment.success',
+    'payment_completed':    'free.payment.success',
+    'payment_failed':       'free.payment.failed',
+    'loan_applied':         'free.loan.applied',
+    'loans_page_view':      'free.loans.view',
+    'kyc_started':          'free.loan.kyc_started',
+    'kyc_completed':        'free.loan.kyc_completed',
+    'kyc_failed':           'free.loan.kyc_failed',
+    'kyc_abandoned':        'free.loan.kyc_abandoned',
+    'profile_view':         'free.profile.view',
+    'profile_updated':      'free.profile.edit_success',
+    'pro_unlocked':         'pro.features_unlock.success',
+    'pro_license_unlocked': 'pro.features_unlock.success',
     'pro_feature_usage':    'pro.features.view',
     'feature_view':         'pro.features.view',
-    'wealth_rebalance':     'pro.wealth-management.rebalance',
-    'ai_insight_download':  'pro.finance-library.book_access',
-    'crypto-trading':       'pro.crypto-trading.view',
-    'wealth-management-pro': 'pro.wealth-management.view',
-    'bulk-payroll-processing': 'pro.payroll-pro.view',
-    'ai-insights':          'pro.finance-library.view',
-    'page_view':            'core.dashboard.viewed',
-    'location_captured':    'core.profile.location',
+    'wealth_rebalance':     'pro.wealth_rebalance.success',
+    'ai_insight_download':  'pro.finance_library_book.access',
+    'crypto-trading':       'pro.crypto_portfolio.view',
+    'wealth-management-pro': 'pro.wealth_insights.view',
+    'bulk-payroll-processing': 'pro.payroll_payees.view',
+    'ai-insights':          'pro.finance_library_stats.view',
+    'page_view':            'free.dashboard.view',
+    'location_captured':    'free.profile.location',
   };
 
   const mapped = LEGACY_MAP[eventName];
@@ -198,10 +198,27 @@ function derivePathFromEvent(eventName: string): string {
   if (eventName === 'payees_view' || eventName === 'payees') return '/payees';
   if (eventName === 'loan_applied' || eventName === 'loans_page_view') return '/loans';
   if (eventName === 'profile_view') return '/profile';
-  // Derive from second segment
+  // Generic background or cross-page features map to dashboard
+  if (eventName.includes('.location') || eventName.includes('.stats') || eventName.includes('.features_unlock')) return '/dashboard';
+  
+  // Derive from second segment, fallback to /dashboard if unexpected segment length
   const parts = eventName.split('.');
-  if (parts.length >= 2) return `/${parts[1].replace(/_/g, '-')}`;
-  return `/${eventName.replace(/[^a-z0-9-]/g, '-')}`;
+  if (parts.length >= 2) {
+      // Map known sub-spaces back to their major pages to avoid fragment paths
+      const sub = parts[1];
+      if (sub === 'loan') return '/loans';
+      if (sub === 'payment' || sub === 'history' || sub === 'transactions') return '/transactions';
+      if (sub === 'profile' || sub === 'dashboard') return `/${sub}`;
+      if (sub === 'payees') return '/payees';
+      if (sub === 'crypto_portfolio' || sub === 'crypto_trade_execution') return '/pro-features';
+      if (sub.includes('wealth')) return '/pro-features';
+      if (sub.includes('payroll')) return '/pro-features';
+      if (sub.includes('finance_library')) return '/pro-features';
+      
+      // otherwise, default to dashboard
+      return '/dashboard';
+  }
+  return '/dashboard';
 }
 
 /**

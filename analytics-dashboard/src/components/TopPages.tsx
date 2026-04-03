@@ -24,7 +24,7 @@ function TopPages({ data }: TopPagesProps) {
 
   return (
     <ChartContainer title="Top Pages" id="top-pages">
-      <table className="w-full mt-2">
+      <table className="w-full px-10 mt-2">
         <thead>
           <tr className="border-b border-gray-100">
             <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider pb-2 pl-1">

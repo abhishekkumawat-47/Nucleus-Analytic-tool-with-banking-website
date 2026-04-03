@@ -42,6 +42,7 @@ FEATURE_PAGE_MAP: dict[str, str] = {
     "register":                     "/register",
     "dashboard_view":               "/dashboard",
     "page_view":                    "/dashboard",
+    "view_dashboard":               "/dashboard",
     "accounts_view":                "/accounts",
     "transactions_view":            "/transactions",
     "payment_completed":            "/transactions",
@@ -49,10 +50,20 @@ FEATURE_PAGE_MAP: dict[str, str] = {
     "payee_added":                  "/payees",
     "loan_applied":                 "/loans",
     "loans_page_view":              "/loans",
-    "crypto-trading":               "/pro-features",
-    "wealth-management-pro":        "/pro-features",
-    "bulk-payroll-processing":      "/pro-features",
-    "ai-insights":                  "/pro-features",
+    "crypto-trading":               "/pro-feature?id=crypto-trading",
+    "crypto_trade_execution":       "/pro-feature?id=crypto-trading",
+    "wealth-management-pro":        "/pro-feature?id=wealth-management-pro",
+    "wealth_rebalance":             "/pro-feature?id=wealth-management-pro",
+    "bulk-payroll-processing":      "/pro-feature?id=bulk-payroll-processing",
+    "payroll_batch_processed":      "/pro-feature?id=bulk-payroll-processing",
+    "ai-insights":                  "/pro-feature?id=ai-insights",
+    "pro_book_download":            "/pro-feature?id=ai-insights",
+    "kyc_completed":                "/loans",
+    "kyc_started":                  "/loans",
+    "transfer_funds":               "/accounts",
+    "feature_view":                 "/dashboard",
+    "pro_feature_usage":            "/dashboard",
+    "location_captured":            "/dashboard",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,6 +150,73 @@ FEATURE_DISPLAY_NAMES: dict[str, str] = {
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def normalize_event(event_name: str) -> str:
+    """
+    Centralized normalization layer.
+    Maps all raw events into canonical feature IDs.
+    Format: [domain].[feature].[status]
+    """
+    if not event_name:
+        return "core.unknown.view"
+        
+    e = event_name.lower().strip()
+    
+    # 1. Map known duplicates & synonyms
+    mapping = {
+        "page_view": "dashboard.page.view",
+        "dashboard_view": "dashboard.page.view",
+        "view_dashboard": "dashboard.page.view",
+        "accounts_view": "accounts.page.view",
+        "transactions_view": "transactions.page.view",
+        "payees_view": "payees.page.view",
+        "payees": "payees.pay_now.success",
+        "payment_completed": "transactions.pay_now.success",
+        "payment_failed": "transactions.pay_now.failed",
+        "loan_applied": "loans.apply_loan.action",
+        
+        # Ensure free.* mapping aligns exactly to duplicates
+        "free.dashboard.view": "dashboard.page.view",
+        "free.accounts.view": "accounts.page.view",
+        "free.transactions.view": "transactions.page.view",
+        "free.payment.success": "transactions.pay_now.success",
+        "free.auth.login.success": "login.auth.success",
+        
+        # New Raw Simulation Mappings
+        "payroll_batch_processed": "pro-feature.bulk-payroll-processing.pay_all_success",
+        "crypto_trade_execution": "pro-feature.crypto-trading.buy_success",
+        "location_captured": "dashboard.location.captured",
+        "wealth_rebalance": "pro-feature.wealth-management-pro.rebalance_success",
+        "pro_book_download": "pro-feature.ai-insights.read_online",
+        "kyc_completed": "loans.submit_application.success",
+        "kyc_started": "loans.proceed_to_kyc.action",
+        "transfer_funds": "accounts.transfer_money.success",
+        "feature_view": "dashboard.feature.view",
+        "pro_feature_usage": "dashboard.feature.usage",
+        
+        # Fix missing prefixes
+        "crypto-trading": "pro-feature.crypto-trading.page_view",
+        "wealth-management-pro": "pro-feature.wealth-management-pro.insights_view",
+        "bulk-payroll-processing": "pro-feature.bulk-payroll-processing.page_view",
+        "ai-insights": "pro-feature.ai-insights.read_online"
+    }
+    
+    if e in mapping:
+        return mapping[e]
+
+    # 2. Heuristic suffix normalizations
+    if e.endswith("_success"):
+        e = e.replace("_success", ".success")
+    elif e.endswith("_failed"):
+        e = e.replace("_failed", ".failed")
+    elif e.endswith("_view"):
+        e = e.replace("_view", ".view")
+
+    # 3. Taxonomy enforcer
+    if "." not in e:
+        e = f"core.{e}.view"
+        
+    return e
+
 def resolve_page(event_name: str) -> Optional[str]:
     """
     Resolve an event_name to its canonical page URL.
@@ -155,6 +233,11 @@ def resolve_page(event_name: str) -> Optional[str]:
     parts = event_name.split(".")
     if len(parts) >= 2:
         page_root = parts[0]
+        
+        # Handle dynamic query param pro-feature URL routing
+        if page_root == "pro-feature" and len(parts) >= 3:
+            return f"/pro-feature?id={parts[1]}"
+            
         # Map roots like admin_loans to /admin/loans
         if page_root in URL_MAP:
             return URL_MAP[page_root]

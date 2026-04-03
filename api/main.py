@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from storage.client import ch_client
 from api.insights import generate_insights, query_ollama
-from api.page_map import resolve_page, resolve_display_name
+from api.page_map import resolve_page, resolve_display_name, normalize_event
 from core.config import settings
 from core.middleware import require_cloud_mode, require_tenant_access
 
@@ -919,38 +919,37 @@ def get_device_breakdown(tenants: str = Query(..., description="Comma-separated 
                 merged[dev] = merged.get(dev, 0) + raw_val
         
         if not merged:
-            return [
-                {"name": 'Desktop', "value": 62, "color": '#1a73e8'},
-                {"name": 'Mobile', "value": 38, "color": '#4285F4'}
-            ]
-        
-        # Hare-Niemeyer method for exact 100 allocation
+            return []
+
         total = sum(merged.values())
         items = list(merged.items())
         quotients = [(name, count, (count / total) * 100) for name, count in items]
         floors = [(name, count, int(q)) for name, count, q in quotients]
         remainders = [(name, count, (count / total) * 100 - int((count / total) * 100)) for name, count in items]
+        
         allocated_sum = sum(f for _, _, f in floors)
         remainder_seats = 100 - allocated_sum
         remainders.sort(key=lambda x: x[2], reverse=True)
         final = {name: fl for name, _, fl in floors}
-        for i in builtins_range(remainder_seats):
+        for i in range(remainder_seats):
             final[remainders[i][0]] += 1
-        
+
         breakdown = []
-        for dev_name, pct in final.items():
-            breakdown.append({
-                "name": dev_name.capitalize(),
-                "value": pct,
-                "color": colors.get(dev_name, '#3B82F6')
-            })
-        
+        base_colors = ['#1a73e8', '#4285F4', '#8AB4F8', '#34A853', '#F59E0B']
+        i_color = 0
+        for name, _ in remainders:
+            if final[name] > 0:
+                breakdown.append({
+                    "name": name.capitalize(),
+                    "value": final[name],
+                    "color": base_colors[i_color % len(base_colors)]
+                })
+                i_color += 1
+
+        breakdown.sort(key=lambda x: x["value"], reverse=True)
         return breakdown
     except Exception:
-        return [
-            {"name": 'Desktop', "value": 50, "color": '#1a73e8'},
-            {"name": 'Mobile', "value": 50, "color": '#4285F4'}
-        ]
+        return []
 
 @app.get("/metrics/channels")
 def get_acquisition_channels(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
@@ -1198,7 +1197,7 @@ def get_realtime_users(tenants: str = Query(..., description="Comma-separated li
     sql = f"""
         SELECT uniqExact(user_id) as users 
         FROM feature_intelligence.events_raw 
-        WHERE {cond} AND timestamp >= now('UTC') - INTERVAL 5 MINUTE
+        WHERE {cond} AND timestamp >= now('Asia/Kolkata') - INTERVAL 5 MINUTE
     """
     try:
         results = ch_client.query(sql, params)
@@ -1267,34 +1266,57 @@ def get_top_pages(tenants: str = Query(..., description="Comma-separated list of
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
 
     sql = f"""
-        SELECT
-            event_name,
+        SELECT 
+            JSONExtractString(metadata, 'path') as page,
+            event_name as raw_feature,
             count() as cnt
         FROM feature_intelligence.events_raw
         WHERE {cond} AND timestamp >= today() - %(days)s
-        GROUP BY event_name ORDER BY cnt DESC
+        GROUP BY page, raw_feature
     """
     try:
         results = ch_client.query(sql, params)
 
-        # Group features by their parent page using centralized page_map
-        page_data: dict = {}  # pageUrl -> { totalEvents: int, features: dict[str, int] }
+        # 4. BUILD PROPER PAGE -> FEATURE MODEL
+        page_data: dict = {}
+        
+        # Exact explicit known pages for the test app
+        KNOWN_PAGES = {
+            "/register", "/login", "/dashboard", "/accounts", "/payees",
+            "/transactions", "/loans", "/pro-feature?id=crypto-trading",
+            "/pro-feature?id=ai-insights", "/pro-feature?id=wealth-management-pro",
+            "/pro-feature?id=bulk-payroll-processing", "/profile"
+        }
+        
         for r in results:
-            ev = r['event_name']
+            raw_page = r['page']
+            raw_feature = r['raw_feature']
             cnt = int(r['cnt'])
-            if not ev:
-                continue
 
-            page_url = resolve_page(ev)
+            # 6. HANDLE NULL PATHS CORRECTLY
+            # For legacy simulated events before path ingestion became standard, 
+            # we must fallback to guessing the physical page to prevent dropping data.
+            if not raw_page or raw_page == "null" or raw_page == "":
+                page = resolve_page(raw_feature)
+                if not page:
+                    page = "/dashboard"
+            else:
+                page = str(raw_page)
+                
+            # If the resolved or database path doesn't strictly match a known real page, fallback to dashboard
+            if page not in KNOWN_PAGES:
+                # Some old paths might be /pro-features, which mapping dictates should be one of the query id params
+                # But typically generic unmapped items like location captured bounce to dashboard
+                page = "/dashboard"
 
-            # Drop events that couldn't be resolved to a real page
-            if not page_url or page_url == "/_other":
-                continue
+            # 1. & 5. NORMALIZE EVENTS & FIX DUPLICATES
+            feature = normalize_event(raw_feature)
 
-            if page_url not in page_data:
-                page_data[page_url] = {"totalEvents": 0, "features": {}}
-            page_data[page_url]["totalEvents"] += cnt
-            page_data[page_url]["features"][ev] = page_data[page_url]["features"].get(ev, 0) + cnt
+            if page not in page_data:
+                page_data[page] = {"totalEvents": 0, "features": {}}
+
+            page_data[page]["totalEvents"] += cnt
+            page_data[page]["features"][feature] = page_data[page]["features"].get(feature, 0) + cnt
 
         # Sort by total events
         sorted_pages = sorted(page_data.items(), key=lambda x: x[1]["totalEvents"], reverse=True)
@@ -1305,15 +1327,17 @@ def get_top_pages(tenants: str = Query(..., description="Comma-separated list of
             page_total = data["totalEvents"] or 1
             # Sort features by count desc, take top 10
             sorted_feat = sorted(data["features"].items(), key=lambda x: x[1], reverse=True)[:10]
+            
             formatted_features = [
                 {
-                    "feature": k,
-                    "displayName": resolve_display_name(k),
+                    "feature": k,  # 8. No raw event names in UI -> using normalized k
+                    "displayName": resolve_display_name(k) if resolve_display_name(k) != "Unknown" else k,
                     "count": v,
                     "inPagePct": round((v / page_total) * 100, 1),
                 }
                 for k, v in sorted_feat
             ]
+            
             comparison_pct = round((data["totalEvents"] / total_all_events) * 100, 1)
             formatted.append({
                 "pageUrl": page_url,
@@ -1344,32 +1368,15 @@ def get_feature_activity(tenants: str = Query(..., description="Comma-separated 
     try:
         results = ch_client.query(sql, params)
         activities = []
-        colors = ['#1a73e8', '#4285F4', '#8AB4F8', '#34A853', '#F59E0B', '#EF4444']
-        for i, r in enumerate(results):
-            c = r['total']
-            # Compute a stable deterministic pseudo-random hash to make segments repeatable without random
-            h1 = (hash(r['event_name']) % 40) + 10
-            h2 = ((hash(r['event_name']) * 3) % 40) + 10
-            h3 = 100 - (h1 + h2)
-            
-            pieces = [h1, h2, h3]
-            norm = sum(pieces)
-            segments = []
-            for j, p in enumerate(pieces):
-                segments.append({
-                    "color": colors[(i + j) % len(colors)],
-                    "width": int((p / norm) * 100)
-                })
+        for r in results:
             activities.append({
-                "feature": str(r["event_name"]).capitalize().replace("_", " "),
-                "segments": segments,
-                "level": "High" if c > 10 else "Low"
+                "feature": str(r["event_name"]),
+                "segments": [],
+                "level": "High" if r['total'] > 10 else "Low"
             })
-        if not activities:
-             activities = [{"feature": "No Activity Yet", "segments": [{"color": "#cccccc", "width": 100}], "level": "None"}]
         return activities
     except Exception as e:
-        return [{"feature": str(e), "segments": [], "level": "Error"}]
+        return []
 
 @app.get("/features/heatmap")
 def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated list of tenants")):
@@ -1459,7 +1466,7 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
                 })
                 
             activities.append({
-                "feature": f.capitalize().replace("_", " "),
+                "feature": f,
                 "raw_feature": f,
                 "total_usage": f_total,
                 "segments": segments,
@@ -1504,9 +1511,7 @@ def get_feature_configs(tenants: str = Query(..., description="Comma-separated l
                 "isActive": True
             })
         if not configs:
-            return [
-                { "id": 'fc-1', "pattern": '/feed', "featureName": 'View Feed', "category": 'interaction', "isActive": True }
-            ]
+            return []
         return configs
     except Exception:
         return []
@@ -1569,9 +1574,7 @@ def get_retention(tenants: str = Query(..., description="Comma-separated list of
             cohort_data[cw_str][offset] = count_val
         
         if not cohort_data:
-            return [
-                { "cohort": 'This Week', "users": 0, "month1": 100, "month2": 0, "month3": 0 },
-            ]
+            return []
         
         retention = []
         cohort_names = ["This Week", "Last Week", "2 Weeks Ago", "3 Weeks Ago"]
@@ -1595,9 +1598,7 @@ def get_retention(tenants: str = Query(..., description="Comma-separated list of
                 "month3": m3_pct
             })
         
-        return retention if retention else [
-            { "cohort": 'This Week', "users": 0, "month1": 100, "month2": 0, "month3": 0 },
-        ]
+        return retention
     except Exception as e:
         return []
 
@@ -1755,100 +1756,15 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
             "free.profile.edit_failed": {"plan": "free"},
             "free.profile.location": {"plan": "free"},
         }
-        
-        # 2. Normalization Mappings
-        MAPPINGS = {
-            # Enterprise mappings
-            "pro.crypto_trade_execution.success": [
-                "crypto trade execution", "cryptotradeexecution", "crypto_trade_execution_success", 
-                "real-time crypto buy/sell execution", "pro.crypto-trading.trade_execute", "crypto trade execution success"
-            ],
-            "pro.crypto_trade_execution.failed": [
-                "crypto trade execution failed", "pro.crypto-trading.trade_execute_failed", "crypto_trade_failed"
-            ],
-            "pro.crypto_price_feeds.view": ["crypto price feeds", "crypto prices view", "pro.crypto-trading.prices_view"],
-            "pro.crypto_portfolio.view": ["pro.crypto-trading.portfolio_view", "crypto_trading", "crypto-trading", "pro.crypto-trading.view"],
-            "pro.wealth_rebalance.success": ["wealth rebalance", "wealth rebalancing", "pro.wealth-management.rebalance", "wealth rebalance success"],
-            "pro.wealth_rebalance.failed": ["wealth rebalance failed", "pro.wealth-management.rebalance_failed"],
-            "pro.wealth_insights.view": ["pro.wealth-management.insights_view", "wealth insights view", "wealth_management_pro", "wealth-management-pro", "pro.wealth-management.view"],
-            "pro.payroll_batch.success": ["payroll batch processed", "bulk payroll processing", "pro.payroll-pro.batch_process", "payroll batch success", "bulk-payroll-processing", "pro.payroll-pro.view"],
-            "pro.payroll_batch.failed": ["payroll batch failed", "pro.payroll-pro.batch_process_failed"],
-            "pro.payroll_search.success": ["payroll search", "search payees", "pro.payroll-pro.search_payees", "payroll search success"],
-            "pro.payroll_search.failed": ["payroll search failed", "pro.payroll-pro.search_payees_failed"],
-            "pro.payroll_payees.view": ["pro.payroll-pro.payees_view", "payroll payees view"],
-            "pro.finance_library_book.access": ["pro.finance-library.book_access"],
-            "pro.finance_library_stats.view": ["pro.finance-library.stats_view", "ai-insights", "pro.finance-library.view"],
-            "pro.features.view": ["pro.features.view", "feature_view", "feature view"],
-            "pro.features_unlock.success": ["pro.features.unlock_success"],
-            "pro.features_unlock.failed": ["pro.features.unlock_failed"],
-            
-            # Base mappings
-            "free.dashboard.view": ["core.dashboard.view", "dashboard view", "view_dashboard", "page_view", "core.dashboard.viewed"],
-            "free.auth.login.success": ["auth.login.success", "login success", "login", "login_success"],
-            "free.auth.login.failed": ["auth.login.failed", "login_failed", "login failed"],
-            "free.auth.register.success": ["auth.register.success", "register success", "register", "register_success"],
-            "free.auth.register.failed": ["auth.register.failed", "register_failed", "register failed"],
-            "free.payment.success": ["transfer funds", "core.transactions.transfer", "transfer funds success", "payment_completed", "payment.completed", "core.payees.pay_success", "payees"],
-            "free.payment.failed": ["payment_failed", "payment.failed"],
-            "free.accounts.view": ["accounts_view", "core.accounts.viewed", "account_view"],
-            "free.transactions.view": ["transactions_view", "payments.history.viewed", "transaction_view"],
-            "free.payees.view": ["payees_view", "core.payees.viewed"],
-            "free.payees.add_success": ["payee_added", "core.payees.add_success"],
-            "free.payees.add_failed": ["payee_add_failed", "core.payees.add_failed"],
-            "free.payees.edit_success": ["payee_edited", "core.payees.edit_success"],
-            "free.payees.edit_failed": ["payee_edit_failed", "core.payees.edit_failed"],
-            "free.payees.delete_success": ["payee_deleted", "payee_removed", "core.payees.delete_success"],
-            "free.payees.delete_failed": ["payee_delete_failed", "core.payees.delete_failed"],
-            "free.loan.applied": ["loan_applied", "lending.loan.applied"],
-            "free.loan.approved": ["loan_approved", "lending.loan.approved"],
-            "free.loan.rejected": ["loan_rejected", "lending.loan.rejected"],
-            "free.loans.view": ["loans_page_view", "loan_page_view", "lending.loans.viewed"],
-            "free.loan.kyc_started": ["kyc_started", "lending.loan.kyc_started"],
-            "free.loan.kyc_completed": ["kyc_completed", "lending.loan.kyc_completed"],
-            "free.loan.kyc_failed": ["kyc_failed", "lending.loan.kyc_failed"],
-            "free.loan.kyc_abandoned": ["kyc_abandoned", "lending.loan.kyc_abandoned"],
-            "free.profile.view": ["profile_view", "core.profile.viewed"],
-            "free.profile.edit_success": ["profile_updated", "core.profile.edit_success"],
-            "free.profile.edit_failed": ["profile_update_failed", "core.profile.edit_failed"],
-            "free.profile.location": ["location_captured", "core.profile.location", "core.location_captured.action"],
-        }
-        
-        # 3. Invalid Features to explicitly drop
-        INVALID_FEATURES = [
-            "reports download", "pro book download", "pro feature usage", 
-            "pro unlocked", "pro license unlocked", "ai insights",
-            "reports_download", "pro_book_download", "pro_feature_usage",
-            "pro_unlocked", "pro_license_unlocked", "ai_insights"
-        ]
-
-        # 4. Generate SQL normalization MultiIf
-        mapping_sql_parts = []
-        mapping_sql_parts.append(f"snake_event IN ({', '.join(repr(f) for f in INVALID_FEATURES)})")
-        mapping_sql_parts.append("'INVALID'")
-        
-        for canonical, variations in MAPPINGS.items():
-            vars_prep = list(set([v.lower().replace(' ', '_') for v in variations] + [canonical.lower().replace(' ', '_'), canonical]))
-            mapping_sql_parts.append(f"snake_event IN ({', '.join(repr(v) for v in vars_prep)})")
-            mapping_sql_parts.append(f"'{canonical}'")
-        
-        mapping_sql_parts.append("'UNKNOWN'") 
-        
-        normalized_expr = f"""
-            WITH lower(replaceRegexpAll(event_name, ' ', '_')) AS snake_event,
-                 multiIf({', '.join(mapping_sql_parts)}) AS normalized_feature
-        """
-
         sql_used = f"""
-            {normalized_expr}
             SELECT 
-                normalized_feature as feature_name, 
+                event_name as feature_name, 
                 count() as usage_count, 
                 uniqExact(user_id) as unique_users,
                 max(JSONExtractString(metadata, 'tier')) as tier_hint
             FROM feature_intelligence.events_raw
             WHERE {cond} AND timestamp >= today() - %(days)s
-            GROUP BY normalized_feature
-            HAVING normalized_feature != 'INVALID'
+            GROUP BY feature_name
             ORDER BY usage_count DESC
         """
         used = ch_client.query(sql_used, params)
@@ -1858,12 +1774,10 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
 
         # ─── Usage trends (last 7 days) ───
         sql_trends = f"""
-            {normalized_expr}
-            SELECT normalized_feature as feature_name, toDate(timestamp) as date, count() as count
+            SELECT event_name as feature_name, toDate(timestamp) as date, count() as count
             FROM feature_intelligence.events_raw
             WHERE {cond} AND timestamp >= today() - 7
-            GROUP BY normalized_feature, date
-            HAVING normalized_feature != 'INVALID'
+            GROUP BY feature_name, date
             ORDER BY date ASC
         """
         trend_rows = ch_client.query(sql_trends, params)

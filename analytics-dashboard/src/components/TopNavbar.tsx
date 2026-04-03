@@ -285,7 +285,7 @@ function TopNavbar() {
           </button>
 
           {showTransparency && (
-            <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
                 <h3 className="text-sm font-bold text-gray-900">Cloud Sync Status</h3>
                 <div

@@ -158,11 +158,11 @@ function RealTimeUsers({ activeUsers, pagesPerMinute, timestampIST }: RealTimeUs
           <p className="text-xs text-gray-500 font-semibold">Pages / Minute</p>
           <p className="text-[10px] text-gray-400">Last 60 min · IST</p>
         </div>
-        <div className="h-32 min-h-[128px] w-full cursor-pointer">
+        <div className="h-36 min-h-[128px] w-full cursor-pointer">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={pagesPerMinute}
-              margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
+              margin={{ top: 0, right: 0, left: -20, bottom: -10 }}
             >
               <XAxis
                 dataKey="hour"

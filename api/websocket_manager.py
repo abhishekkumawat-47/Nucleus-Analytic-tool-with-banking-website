@@ -97,9 +97,8 @@ async def poll_dashboard_metrics():
         for tenant_id in tenants_to_update:
             try:
                 # Wrap sync database calls in executor to avoid blocking the event loop
-                # IMPORTANT: pass days=7 explicitly — without it, the FastAPI Query() default
-                # object leaks into the SQL string instead of the integer 7.
-                kpi = await loop.run_in_executor(None, get_kpi_metrics, tenant_id, 7)
+                # IMPORTANT: pass "7d" explicitly as string
+                kpi = await loop.run_in_executor(None, get_kpi_metrics, tenant_id, "7d")
                 rt_data = await loop.run_in_executor(None, get_realtime_users, tenant_id)
                 # get_realtime_users now returns {count, timestamp_ist, timezone}
                 rt_count = rt_data.get("count", 0) if isinstance(rt_data, dict) else rt_data
