@@ -210,9 +210,6 @@ export default function TransparencyPage() {
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
-              <div className="p-2 bg-[#1a73e8]/10 rounded-xl text-[#1a73e8] border border-[#1a73e8]/20 shadow-sm">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
               Trust & Transparency
             </h1>
             <p className="text-gray-500 text-sm mt-2 max-w-xl leading-relaxed">
@@ -235,12 +232,6 @@ export default function TransparencyPage() {
             >
               <Server className={`w-4 h-4 transition-colors ${viewMode === 'on-prem' ? 'text-[#1a73e8]' : ''}`} />
               On-Prem
-              {viewMode === 'on-prem' && (
-                <span className="flex h-2 w-2 relative ml-1">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1a73e8]"></span>
-                </span>
-              )}
             </button>
             <button
               onClick={() => setViewMode('cloud')}
@@ -253,12 +244,6 @@ export default function TransparencyPage() {
             >
               <Cloud className={`w-4 h-4 transition-colors ${viewMode === 'cloud' ? 'text-blue-600' : ''}`} />
               Cloud
-              {viewMode === 'cloud' && (
-                <span className="flex h-2 w-2 relative ml-1">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                </span>
-              )}
             </button>
           </div>
         </div>
@@ -305,17 +290,13 @@ export default function TransparencyPage() {
 
         {/* ═══════════ STATUS BANNER ═══════════ */}
         {viewMode === 'on-prem' ? (
-          <div className="bg-white border-l-4 border-l-[#1a73e8] border border-gray-200 rounded-2xl p-5 flex items-start gap-4">
+          <div className="bg-blue-50 border-l-4 border-l-[#1a73e8] border border-gray-200 rounded-2xl p-5 flex items-start gap-4">
             <div className="p-3 bg-[#1a73e8]/10 rounded-xl flex-shrink-0">
               <Lock className="w-5 h-5 text-[#1a73e8]" />
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                 On-Premise Mode — Full Data Access
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1a73e8]"></span>
-                </span>
               </h3>
               <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
                 You are viewing the <strong>complete analytics dashboard</strong> as it exists on your infrastructure.
@@ -329,17 +310,13 @@ export default function TransparencyPage() {
             </div>
           </div>
         ) : (
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 flex items-start gap-4">
+          <div className="bg-blue-50 border-l-4 border-l-[#1a73e8] border border-gray-200 rounded-2xl p-5 flex items-start gap-4">
             <div className="p-3 bg-blue-100 rounded-xl flex-shrink-0">
               <Cloud className="w-5 h-5 text-blue-700" />
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
                 Cloud Mode — Super Admin&apos;s Exact View
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                </span>
               </h3>
               <p className="text-xs text-blue-700 mt-1.5 leading-relaxed">
                 Below is <strong>exactly</strong> what the Super Admin sees when they log in.
@@ -357,7 +334,6 @@ export default function TransparencyPage() {
         {/* ═══════════ DATA FLOW VISUALIZATION ═══════════ */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-5">
-            <Zap className="w-4 h-4 text-amber-500" />
             <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Data Flow Architecture</h3>
           </div>
           <div className="flex items-center justify-center gap-4 sm:gap-8 flex-wrap">
@@ -530,14 +506,6 @@ export default function TransparencyPage() {
                 ? 'bg-white border-[#1a73e8]/20 text-[#1a73e8]'
                 : 'bg-white border-[#1a73e8]/20 text-blue-700'
             }`}>
-              <span className="flex h-2 w-2 relative">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  viewMode === 'on-prem' ? 'bg-[#1a73e8]' : 'bg-blue-400'
-                }`}></span>
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                  viewMode === 'on-prem' ? 'bg-[#1a73e8]' : 'bg-blue-500'
-                }`}></span>
-              </span>
               <span className="text-[11px] font-bold uppercase tracking-wider">
                 {viewMode === 'on-prem' ? 'Live On-Prem' : 'Cloud Preview'}
               </span>
@@ -598,7 +566,7 @@ export default function TransparencyPage() {
 
                   {/* Funnel + Heatmap */}
                   <section>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       <JourneyFunnelInsights data={dashboardData.funnelData} />
                       <FeatureHeatmap />
                     </div>
@@ -614,18 +582,13 @@ export default function TransparencyPage() {
                     <TopLocations data={dashboardData.locations} />
                   </section>
 
-                  {/* Bottom Row */}
-                  <section>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      <TopPages data={dashboardData.topPages} />
-                      <div className="rounded-2xl border-gray-200 border bg-white p-1.5 shadow-sm">
-                        <DeviceBreakdownChart data={dashboardData.deviceBreakdown} />
-                      </div>
-                      <div className="rounded-2xl border-gray-200 border bg-white p-1.5 shadow-sm">
-                        <UserAcquisitionChart data={dashboardData.acquisitionChannels} />
-                      </div>
-                    </div>
-                  </section>
+                  <section className="flex-col" id="detail-section" aria-label="Detailed Analytics">
+                          <TopPages data={dashboardData.topPages} />
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mt-8">
+                            <DeviceBreakdownChart data={dashboardData.deviceBreakdown} />
+                            <UserAcquisitionChart data={dashboardData.acquisitionChannels} />
+                          </div>
+                        </section>
 
                   {/* Secondary KPIs */}
                   <section>
