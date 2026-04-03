@@ -11,7 +11,7 @@ import React from 'react';
 function SkeletonBlock({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 bg-[length:400%_100%] rounded-lg ${className}`}
+      className={`animate-pulse bg-linear-to-r from-gray-100 via-gray-200 to-gray-100 bg-size-[400%_100%] rounded-lg ${className}`}
       style={{ animation: 'shimmer 1.8s infinite linear' }}
     />
   );
@@ -21,7 +21,7 @@ function SkeletonBlock({ className = '' }: { className?: string }) {
 
 export function KPICardSkeleton() {
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col justify-between h-[104px]">
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col justify-between h-26">
       <div className="flex items-center gap-2 mb-3">
         <SkeletonBlock className="w-4 h-4 rounded" />
         <SkeletonBlock className="h-4 w-24" />
@@ -151,13 +151,101 @@ export function FunnelPageSkeleton() {
 /** /tenants page skeleton */
 export function TenantsPageSkeleton() {
   return (
-    <div className="animate-in fade-in duration-300 space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="animate-in fade-in duration-300 space-y-8">
+      {/* Hero */}
+      <div className="rounded-4xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3 w-full max-w-3xl">
+            <SkeletonBlock className="h-3 w-48" />
+            <SkeletonBlock className="h-9 w-96" />
+            <SkeletonBlock className="h-4 w-full" />
+            <SkeletonBlock className="h-4 w-5/6" />
+          </div>
+          <div className="h-12 w-64 rounded-full border border-gray-200 bg-gray-50 p-1.5">
+            <SkeletonBlock className="h-full w-full rounded-full" />
+          </div>
+        </div>
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-gray-200 bg-white p-4">
+              <SkeletonBlock className="h-3 w-20" />
+              <SkeletonBlock className="h-6 w-28 mt-3" />
+              <SkeletonBlock className="h-4 w-24 mt-2" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Overview KPI cards */}
+      <div className="space-y-4">
+        <SkeletonBlock className="h-6 w-72" />
+        <SkeletonBlock className="h-4 w-2/3" />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <SkeletonBlock className="h-4 w-32" />
+                <SkeletonBlock className="h-6 w-24 rounded-full" />
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-4">
+                <SkeletonBlock className="h-20 w-full" />
+                <SkeletonBlock className="h-20 w-full" />
+              </div>
+              <SkeletonBlock className="h-2 w-full mt-4" />
+              <div className="mt-3 flex justify-between">
+                <SkeletonBlock className="h-3 w-28" />
+                <SkeletonBlock className="h-3 w-24" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Trend */}
+      <div className="space-y-4">
+        <SkeletonBlock className="h-6 w-64" />
+        <SkeletonBlock className="h-4 w-2/3" />
+        <ChartSkeleton height="h-80" />
+      </div>
+
+      {/* Tables */}
+      <div className="space-y-4">
+        <SkeletonBlock className="h-6 w-72" />
+        <SkeletonBlock className="h-4 w-2/3" />
+        <TableSkeleton rows={10} />
+      </div>
+
+      <div className="space-y-4">
+        <SkeletonBlock className="h-6 w-72" />
+        <SkeletonBlock className="h-4 w-2/3" />
+        <TableSkeleton rows={8} />
+      </div>
+
+      {/* Bottom cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <KPICardSkeleton key={i} />
+          <div key={i} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <SkeletonBlock className="h-4 w-28" />
+            <SkeletonBlock className="h-20 w-full mt-4" />
+            <SkeletonBlock className="h-2 w-full mt-4" />
+          </div>
         ))}
       </div>
-      <TableSkeleton rows={8} />
+
+      {/* Insights */}
+      <div className="space-y-4">
+        <SkeletonBlock className="h-6 w-60" />
+        <SkeletonBlock className="h-4 w-2/3" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <SkeletonBlock className="h-3 w-32" />
+              <SkeletonBlock className="h-4 w-full mt-4" />
+              <SkeletonBlock className="h-4 w-5/6 mt-2" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
