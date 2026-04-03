@@ -1,49 +1,63 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
-import { TrendingUp, TrendingDown, Activity, Users, Loader2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import ChartContainer from '@/components/ChartContainer';
 import { TableSkeleton } from '@/components/Skeletons';
 
-export default function PredictivePage() {
-  const { selectedTenant } = useDashboardData();
-  const tenantId = selectedTenant || 'nexabank';
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+interface Prediction {
+  feature_name: string;
+  score: number;
+  trend_score: number;
+  users_pct: number;
+  frequency_score: number;
+  recent_7d: number;
+  prev_7d: number;
+  status: string;
+  growth_rate?: number;
+  projected_next_7d?: number;
+  anomaly?: boolean;
+}
 
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      const result = await dashboardAPI.getPredictiveAdoption(tenantId);
-      setData(result);
-      setLoading(false);
-    };
-    fetch();
-  }, [tenantId]);
+export default function PredictivePage() {
+  const { tenantsParam, rangeParam, selectedTenants, timeRange } = useDashboardData();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['predictiveAdoption', tenantsParam, rangeParam],
+    queryFn: () => dashboardAPI.getPredictiveAdoption(tenantsParam, rangeParam),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const getScoreColor = (score: number) => {
-    if (score >= 70) return 'text-green-600';
-    if (score >= 40) return 'text-amber-600';
-    return 'text-red-600';
+    if (score >= 70) return 'text-[#1a73e8]';
+    if (score >= 40) return 'text-gray-700';
+    return 'text-gray-500';
   };
 
   const getScoreBarColor = (score: number) => {
-    if (score >= 70) return 'bg-green-500';
-    if (score >= 40) return 'bg-amber-500';
-    return 'bg-red-500';
+    if (score >= 70) return 'bg-[#1a73e8]';
+    if (score >= 40) return 'bg-gray-400';
+    return 'bg-gray-300';
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'High Adoption': return 'bg-green-100 text-green-700 border border-green-200';
-      case 'Growing': return 'bg-amber-100 text-amber-700 border border-amber-200';
-      default: return 'bg-red-100 text-red-700 border border-red-200';
+      case 'High Adoption': return 'bg-white text-[#1a73e8] border border-[#1a73e8]/30';
+      case 'Growing': return 'bg-white text-gray-600 border border-gray-300';
+      default: return 'bg-white text-gray-500 border border-gray-200';
     }
   };
 
-  if (loading) {
+  const getGrowthIcon = (rate: number) => {
+    if (rate > 5) return <TrendingUp className="h-4 w-4 text-[#1a73e8]" />;
+    if (rate < -5) return <TrendingDown className="h-4 w-4 text-red-500" />;
+    return <Minus className="h-4 w-4 text-gray-400" />;
+  };
+
+  if (isLoading) {
     return (
       <div className="animate-in fade-in duration-500 space-y-6">
         <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">Predictive Adoption Insights</h1>
@@ -52,71 +66,152 @@ export default function PredictivePage() {
     );
   }
 
-  const predictions = data?.predictions || [];
+  const predictions: Prediction[] = data?.predictions || [];
+  const anomalies = predictions.filter((p) => p.anomaly);
 
   return (
     <div className="animate-in fade-in duration-500 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">Predictive Adoption Insights</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Heuristic scoring: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">Score = Trend(40%) + Users(30%) + Frequency(30%)</code>
+            Tenant: <strong className="text-gray-700">{selectedTenants.join(', ')}</strong> &middot; Range: <strong className="text-gray-700">{timeRange}</strong>
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Score = Trend(40%) + Users(30%) + Frequency(30%)
           </p>
         </div>
-        <div className="px-4 py-2 bg-blue-50 rounded-lg text-sm">
-          <span className="text-gray-500">Total Users:</span> <span className="font-bold text-blue-700">{data?.total_users || 0}</span>
+        <div className="px-4 py-2 border border-[#1a73e8] bg-[#1a73e8]/5 rounded-lg text-sm">
+          <span className="text-gray-500">Total Users:</span> <span className="font-bold text-[#1a73e8]">{data?.total_users?.toLocaleString() || 0}</span>
         </div>
       </div>
 
-      {/* Predictions */}
+      {/* Anomaly alerts */}
+      {anomalies.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white mt-6">
+
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Anomaly Insights
+            </h3>
+            <p className="text-xs text-gray-500">
+              Features with unusual growth or decline
+            </p>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-200">
+                  <th className="px-6 py-3 font-medium">Feature</th>
+                  <th className="px-6 py-3 font-medium">Growth</th>
+                  <th className="px-6 py-3 font-medium">Trend</th>
+                  <th className="px-6 py-3 font-medium">Projected (Next 7d)</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {anomalies.map((a) => {
+                  const growth = a.growth_rate ?? 0;
+
+                  const trend =
+                    growth > 20
+                      ? "High Growth"
+                      : growth < -20
+                        ? "Declining"
+                        : "Stable";
+
+                  return (
+                    <tr
+                      key={a.feature_name}
+                      className="border-b border-gray-100 bg-yellow-50  hover:bg-yellow-100 transition"
+                    >
+                      {/* Feature */}
+                      <td className="px-6 py-4 font-medium text-gray-900">
+                        {a.feature_name}
+                      </td>
+
+                      {/* Growth with bar */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`font-medium ${growth > 0
+                              ? "text-blue-600"
+                              : growth < 0
+                                ? "text-gray-700"
+                                : "text-gray-500"
+                              }`}
+                          >
+                            {growth > 0 ? `+${growth}%` : `${growth}%`}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Trend */}
+                      <td className="px-6 py-4 text-gray-700">
+                        {trend}
+                      </td>
+
+                      {/* Projection */}
+                      <td className="px-6 py-4 text-gray-900">
+                        {a.projected_next_7d
+                          ? a.projected_next_7d.toLocaleString()
+                          : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Predictions table */}
       <ChartContainer title="Feature Adoption Predictions" id="predictive-table">
-        <div className="overflow-x-auto mt-2">
-          <table className="w-full text-left text-sm text-gray-600">
+        <div className="overflow-x-auto mt-2 scrollbar-thin scrollbar-thumb-gray-300">
+          <table className="min-w-[1200px] w-full text-left text-sm text-gray-600">
             <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
               <tr>
-                <th className="px-4 py-3 font-medium">Feature</th>
-                <th className="px-4 py-3 font-medium">Adoption Score</th>
-                <th className="px-4 py-3 font-medium">Visual</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">7d Trend</th>
-                <th className="px-4 py-3 font-medium text-right">User Reach</th>
-                <th className="px-4 py-3 font-medium text-right">Consistency</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium">Feature</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium">Score</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium">Status</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">Growth</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">Projected 7d</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">User Reach</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">Consistency</th>
               </tr>
             </thead>
             <tbody>
-              {predictions.map((p: any, i: number) => (
-                <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-900">{p.feature_name}</td>
-                  <td className={`px-4 py-3 font-bold text-lg ${getScoreColor(p.score)}`}>{p.score}</td>
-                  <td className="px-4 py-3 w-40">
-                    <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${getScoreBarColor(p.score)}`}
-                        style={{ width: `${Math.min(p.score, 100)}%` }}
-                      ></div>
-                    </div>
+              {predictions.map((p, i) => (
+                <tr key={i} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${p.anomaly ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}>
+                  <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900">
+                    {p.feature_name}
+                    {p.anomaly && <span className="ml-1.5 text-amber-600 text-[10px] font-bold"></span>}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={`px-4 py-3 whitespace-nowrap font-bold text-lg ${getScoreColor(p.score)}`}>{p.score}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getStatusBadge(p.status)}`}>
                       {p.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {p.recent_7d >= p.prev_7d ? (
-                        <TrendingUp className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-red-500" />
-                      )}
-                      <span className="font-mono text-xs">{p.recent_7d} / {p.prev_7d}</span>
+                      {getGrowthIcon(p.growth_rate ?? 0)}
+                      <span className={`font-mono text-xs ${(p.growth_rate ?? 0) > 0 ? 'text-[#1a73e8]' : (p.growth_rate ?? 0) < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                        {(p.growth_rate ?? 0) > 0 ? '+' : ''}{p.growth_rate ?? 0}%
+                      </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs">{p.users_pct}%</td>
-                  <td className="px-4 py-3 text-right font-mono text-xs">{p.frequency_score}%</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono text-xs">{p.projected_next_7d?.toLocaleString() ?? '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono text-xs">{p.users_pct}%</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono text-xs">{p.frequency_score}%</td>
                 </tr>
               ))}
               {predictions.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No prediction data available. Ensure events are being tracked.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No prediction data available. Ensure events are being tracked.</td></tr>
               )}
             </tbody>
           </table>
@@ -124,10 +219,11 @@ export default function PredictivePage() {
       </ChartContainer>
 
       {/* Score Legend */}
-      <div className="flex flex-wrap gap-4 text-xs text-gray-500 p-4 bg-gray-50 rounded-lg border border-gray-100">
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded-full"></div> <strong>70-100:</strong> High Adoption</div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-500 rounded-full"></div> <strong>40-69:</strong> Growing</div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded-full"></div> <strong>0-39:</strong> At Risk</div>
+      <div className="flex items-center justify-evenly flex-wrap gap-4 text-xs text-gray-500 p-4 bg-white rounded-lg border border-gray-200">
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#1a73e8] rounded-full"></div> <strong>70-100:</strong> High Adoption</div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-400 rounded-full"></div> <strong>40-69:</strong> Growing</div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-300 rounded-full"></div> <strong>0-39:</strong> At Risk</div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-yellow-500 rounded-full"></div>Anomaly (&gt;50% change)</div>
       </div>
     </div>
   );

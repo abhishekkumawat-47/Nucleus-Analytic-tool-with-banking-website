@@ -57,8 +57,10 @@ export default function HistoryPage() {
   const { track } = useEventTracker();
 
   useEffect(() => {
-    track('core.transactions.view');
-  }, [track]);
+    track('transactions.page.view');
+    track('transactions.history.view');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -141,6 +143,8 @@ export default function HistoryPage() {
 
   useEffect(() => {
     setCurrentPage(1);
+    if (searchTerm) track('transactions.search_transactions.success', { searchTerm });
+    if (date) track('transactions.filter_by_date.success', { date: String(date) });
   }, [searchTerm, typeFilter, categoryFilter, statusFilter, date]);
 
   const filteredTransactions = allTransactions.filter(
@@ -180,6 +184,7 @@ export default function HistoryPage() {
         toast.error("No active account number found");
         return;
       }
+      track('payments.history.download');
       const response = await fetch(`${API_BASE_URL}/export-pdf/${accNo}`, {
         credentials: "include",
       });

@@ -1,0 +1,59 @@
+﻿src/app/(main)/ai-report/page.tsx(126,17): error TS2352: Conversion of type 'BackendInsight[]' to type 'AIInsight[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'BackendInsight' is missing the following properties from type 'AIInsight': id, title, priority
+src/app/(main)/ai-report/page.tsx(140,17): error TS2352: Conversion of type 'BackendInsight[]' to type 'AIInsight[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'BackendInsight' is missing the following properties from type 'AIInsight': id, title, priority
+src/app/(main)/governance/page.tsx(45,40): error TS2339: Property 'feature_name' does not exist on type '{ feature: string; enabled: boolean; description?: string | undefined; } | { feature_name: string; is_enabled: boolean; changed_by: string; changed_at: string; }'.
+  Property 'feature_name' does not exist on type '{ feature: string; enabled: boolean; description?: string | undefined; }'.
+src/app/(main)/governance/page.tsx(82,38): error TS2339: Property 'feature_name' does not exist on type '{ feature: string; enabled: boolean; description?: string | undefined; } | { feature_name: string; is_enabled: boolean; changed_by: string; changed_at: string; }'.
+  Property 'feature_name' does not exist on type '{ feature: string; enabled: boolean; description?: string | undefined; }'.
+src/app/(main)/license-usage/page.tsx(279,24): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(287,35): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(287,83): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(298,28): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(315,18): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(326,33): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(326,81): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(341,27): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(350,30): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(359,26): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(362,60): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(362,101): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(378,31): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(395,28): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(477,27): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(576,44): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(580,40): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/app/(main)/license-usage/page.tsx(646,29): error TS2322: Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'className' does not exist on type 'IntrinsicAttributes'.
+src/components/FeatureHeatmap.tsx(91,38): error TS2339: Property 'getState' does not exist on type '() => { changeTimeRange: (range: TimeRange) => void; changeTenant: (tenant: string) => void; timeRange: TimeRange; selectedTenant: string; deploymentMode: DeploymentMode; ... 22 more ...; availableTenants: AvailableTenant[]; }'.
+src/components/RealTimeUsers.tsx(192,17): error TS2322: Type '(value: number) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(value: number) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+src/lib/mock-data.ts(198,3): error TS2741: Property 'title' is missing in type '{ id: string; message: string; type: "warning"; priority: "high"; }' but required in type 'AIInsight'.
+src/lib/mock-data.ts(204,3): error TS2741: Property 'title' is missing in type '{ id: string; message: string; type: "success"; priority: "medium"; }' but required in type 'AIInsight'.
+src/lib/mock-data.ts(210,3): error TS2741: Property 'title' is missing in type '{ id: string; message: string; type: "info"; priority: "low"; }' but required in type 'AIInsight'.
+src/lib/mock-data.ts(216,3): error TS2741: Property 'title' is missing in type '{ id: string; message: string; type: "info"; priority: "medium"; }' but required in type 'AIInsight'.
+src/lib/mock-data.ts(222,3): error TS2741: Property 'title' is missing in type '{ id: string; message: string; type: "warning"; priority: "high"; }' but required in type 'AIInsight'.
+src/lib/mock-data.ts(247,5): error TS2353: Object literal may only specify known properties, and 'url' does not exist in type 'TopPage'.
+src/lib/mock-data.ts(248,5): error TS2353: Object literal may only specify known properties, and 'url' does not exist in type 'TopPage'.
+src/lib/mock-data.ts(249,5): error TS2353: Object literal may only specify known properties, and 'url' does not exist in type 'TopPage'.
+src/lib/mock-data.ts(250,5): error TS2353: Object literal may only specify known properties, and 'url' does not exist in type 'TopPage'.

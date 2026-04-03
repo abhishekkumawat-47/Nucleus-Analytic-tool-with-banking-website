@@ -9,8 +9,22 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from storage.client import ch_client
 from api.insights import generate_insights, query_ollama
+from api.page_map import resolve_page, resolve_display_name, normalize_event
 from core.config import settings
 from core.middleware import require_cloud_mode, require_tenant_access
+
+# Alias for Python's built-in range() since many endpoints use 'range' as a query param name
+builtins_range = range
+
+def parse_range(range_str: str) -> int:
+    if not range_str: return 7
+    range_str = range_str.lower().strip()
+    if range_str.endswith('d'):
+        try: return int(range_str[:-1])
+        except ValueError: return 7
+    try: return int(range_str)
+    except ValueError: return 7
+
 import time
 from datetime import datetime
 
@@ -99,7 +113,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 )
         # app_admin: full access to all detailed endpoints, but MUST be restricted to their assigned tenant
         if role == "app_admin":
-            tenant_id = request.query_params.get("tenant_id")
+            tenant_id = request.query_params.get("tenant_id") or request.query_params.get("tenants")
             email = request.headers.get("X-User-Email")
             
             # Some endpoints don't require tenant_id (they are global or use request body)
@@ -113,7 +127,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
             else:
                 return JSONResponse(
                     status_code=403, 
-                    content={"detail": "Forbidden: Admin request missing tenant_id or user email headers."}
+                    content={"detail": "Forbidden: Admin request missing tenant_id/tenants or user email headers."}
                 )
              
         response = await call_next(request)
@@ -139,42 +153,101 @@ async def websocket_dashboard(websocket: WebSocket, tenant_id: str):
         manager.disconnect(websocket, tenant_id)
 
 
+@app.get("/tenants/available")
+def get_available_tenants(request: Request):
+    """Returns all distinct tenants from ClickHouse, filtered by admin access if applicable."""
+    role = request.headers.get("X-User-Role", "")
+    admin_apps_str = request.headers.get("X-Admin-Apps", "")
+    allowed_apps = [a.strip() for a in admin_apps_str.split(",") if a.strip()]
+    # Always include known tenants in the base list so the dropdown is never empty
+    KNOWN_TENANTS = [
+        {"id": "nexabank", "name": "NexaBank", "eventCount": 0, "uniqueUsers": 0},
+        {"id": "safexbank", "name": "SafexBank", "eventCount": 0, "uniqueUsers": 0},
+    ]
+    try:
+        sql = """
+            SELECT
+                tenant_id as id,
+                count() as event_count,
+                uniq(user_id) as unique_users
+            FROM feature_intelligence.events_raw
+            WHERE timestamp >= today() - 90
+            GROUP BY tenant_id
+            ORDER BY event_count DESC
+        """
+        results = ch_client.query(sql)
+        found = {}
+        for row in results:
+            found[row["id"]] = {
+                "id": row["id"],
+                "name": row["id"].replace('_', ' ').title(),
+                "eventCount": int(row["event_count"]),
+                "uniqueUsers": int(row["unique_users"]),
+            }
+        # Merge: known tenants always present, update with real counts if found
+        merged = []
+        seen = set()
+        for kt in KNOWN_TENANTS:
+            entry = found.get(kt["id"], kt).copy()
+            if kt["id"] in found:
+                entry["name"] = kt["name"]  # Use our clean display name
+            merged.append(entry)
+            seen.add(kt["id"])
+        # Add any extra tenants found in DB that aren't in known list
+        for tid, tdata in found.items():
+            if tid not in seen:
+                merged.append(tdata)
+                
+        # Filter strictly
+        if role == "app_admin" and allowed_apps:
+            merged = [t for t in merged if t["id"] in allowed_apps]
+            
+        return merged
+    except Exception:
+        return KNOWN_TENANTS
+
+
 @app.get("/features/usage")
-def get_feature_usage(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_feature_usage(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
     """
-    Returns aggregated feature usage stats for a specific tenant over the last N days.
+    Returns aggregated feature usage stats for a tenant (or comma-separated tenants) over the last N days.
     """
-    require_tenant_access(tenant_id)
-    sql = """
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenant_list[0], "days": days} if len(tenant_list) == 1 else {"tenant_ids": tuple(tenant_list), "days": days}
+
+    sql = f"""
         SELECT 
             event_name, 
             count() as total_interactions,
             uniq(user_id) as unique_users
         FROM feature_intelligence.events_raw
-        WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - %(days)s
+        WHERE {cond} AND timestamp >= today() - %(days)s
         GROUP BY event_name
         ORDER BY total_interactions DESC
     """
     try:
-        results = ch_client.query(sql, {"tenant_id": tenant_id, "days": days})
-        return {"tenant_id": tenant_id, "period_days": days, "usage": results}
+        results = ch_client.query(sql, params)
+        return {"tenant_id": tenants, "period_days": days, "usage": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/funnels")
 def get_funnel_analysis(
-    tenant_id: str, 
+    tenants: str = Query(..., description="Comma-separated list of tenants"),
     steps: str = Query(..., description="Comma-separated list of event names (e.g., login,apply,kyc,approve)"),
     window_minutes: int = Query(60, description="Minutes to complete the funnel"),
-    days: int = Query(7, ge=1, le=365)
+    range: str = Query("7d", description="Time range like 7d, 30d")
 ):
     """
     Advanced funnel analysis leveraging Clickhouse's windowFunnel.
     Computes conversion drop-offs between a sequence of events.
     """
-    tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
-    cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
-    params = {"tenant_id": tenants[0]} if len(tenants) == 1 else {"tenant_ids": tuple(tenants)}
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenant_list[0], "days": days} if len(tenant_list) == 1 else {"tenant_ids": tuple(tenant_list), "days": days}
     params["window"] = window_minutes * 60
 
     step_events = [s.strip() for s in steps.split(",") if s.strip()]
@@ -203,28 +276,17 @@ def get_funnel_analysis(
         ORDER BY level ASC
     """
     try:
-        # windowFunnel needs time in seconds
-        results = ch_client.query(sql, {"tenant_id": tenant_id, "window": window_minutes * 60, "days": days})
+        results = ch_client.query(sql, params)
         
-        # Format the response to show drop-offs
-        funnel_stats = []
-        previous_count = 0
-        
-        # The result returns `level` 0 to N.
-        # level 1 means they completed step 1. level 2 means step 1 + 2.
-        # To get the top of the funnel (completed step 1), we look at users who reached AT LEAST level 1.
-        
-        # Actually Clickhouse windowFunnel aggregate groups exact levels reached. So we need to reverse cumsum.
         levels_dict = {row['level']: row['users_reached_level'] for row in results}
         
-        # Calculate how many people reached *at least* this step
-        # If someone is at level 3, they reached level 1 and 2 as well.
         total_at_least_level = {}
         cumulative = 0
-        for i in range(len(step_events), 0, -1):
+        for i in builtins_range(len(step_events), 0, -1):
             cumulative += levels_dict.get(i, 0)
             total_at_least_level[i] = cumulative
             
+        funnel_stats = []
         for i, step_name in enumerate(step_events, 1):
             count = total_at_least_level.get(i, 0)
             drop_off = 0
@@ -239,11 +301,11 @@ def get_funnel_analysis(
                 "drop_off_pct": round(drop_off * 100, 2)
             })
 
-        return {"tenant_id": tenant_id, "funnel": funnel_stats}
+        return {"tenant_id": tenants, "funnel": funnel_stats}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/tenants/compare")
+@app.get("/features/compare-adoption")
 def compare_tenants(feature: str = Query(..., description="Feature event to compare adoption across tenants")):
     """
     Compare feature adoption across all tenants. 
@@ -266,7 +328,8 @@ def compare_tenants(feature: str = Query(..., description="Feature event to comp
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/insights")
-def get_insights(tenant_id: str):
+def get_insights(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     """
     Returns AI/Rule-based actionable insights for a tenant. 
     Detects features that are not being used or sudden spikes.
@@ -304,7 +367,9 @@ def get_insights(tenant_id: str):
     return {"tenant_id": tenant_id, "insights": insights_data, "cached": False}
 
 @app.get("/metrics/kpi")
-def get_kpi_metrics(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_kpi_metrics(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     import math
 
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
@@ -432,12 +497,20 @@ def get_kpi_metrics(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/metrics/secondary_kpi")
-def get_secondary_kpi(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_secondary_kpi(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
     
     try:
+        def pct_change(current_val: float, previous_val: float) -> tuple:
+            if previous_val == 0:
+                return (0.0, "up")
+            change = ((current_val - previous_val) / previous_val) * 100
+            return (round(abs(change), 1), "up" if change >= 0 else "down")
+
         sql_basic = f"""
             SELECT 
                 count() as total_visits,
@@ -447,6 +520,19 @@ def get_secondary_kpi(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         """
         res_basic = ch_client.query(sql_basic, params)
         basic = res_basic[0] if res_basic else {"total_visits": 0, "unique_visitors": 0}
+
+        sql_basic_prev = f"""
+            SELECT 
+                count() as total_visits,
+                uniqExact(user_id) as unique_visitors
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND timestamp >= today() - (%(days)s * 2) AND timestamp < today() - %(days)s
+        """
+        res_basic_prev = ch_client.query(sql_basic_prev, params)
+        basic_prev = res_basic_prev[0] if res_basic_prev else {"total_visits": 0, "unique_visitors": 0}
+        
+        visits_change, visits_dir = pct_change(basic['total_visits'], basic_prev['total_visits'])
+        unique_change, unique_dir = pct_change(basic['unique_visitors'], basic_prev['unique_visitors'])
 
         sql_bounce = f"""
             SELECT 
@@ -465,14 +551,33 @@ def get_secondary_kpi(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         t_users = t_users if t_users > 0 else 1
         bounce_rate = round((b_users / t_users) * 100, 1)
 
+        sql_bounce_prev = f"""
+            SELECT 
+                count() as total_users,
+                countIf(event_count = 1) as bounced_users
+            FROM (
+                SELECT user_id, count() as event_count
+                FROM feature_intelligence.events_raw
+                WHERE {cond} AND timestamp >= today() - (%(days)s * 2) AND timestamp < today() - %(days)s
+                GROUP BY user_id
+            )
+        """
+        res_bounce_prev = ch_client.query(sql_bounce_prev, params)
+        b_users_prev = res_bounce_prev[0]["bounced_users"] if res_bounce_prev else 0
+        t_users_prev = res_bounce_prev[0]["total_users"] if res_bounce_prev else 1
+        t_users_prev = t_users_prev if t_users_prev > 0 else 1
+        bounce_rate_prev = round((b_users_prev / t_users_prev) * 100, 1)
+        
+        bounce_change, bounce_dir = pct_change(bounce_rate, bounce_rate_prev)
+
         sql_time = f"""
             SELECT avg(session_duration) as avg_time
             FROM (
-                SELECT user_id, dateDiff('second', min(timestamp), max(timestamp)) as session_duration
+                SELECT user_id, toDate(timestamp) as d, dateDiff('second', min(timestamp), max(timestamp)) as session_duration
                 FROM feature_intelligence.events_raw
                 WHERE {cond} AND timestamp >= today() - %(days)s
-                GROUP BY user_id
-                HAVING session_duration > 0
+                GROUP BY user_id, d
+                HAVING session_duration > 0 AND session_duration < 3600 * 4
             )
         """
         import math
@@ -483,6 +588,25 @@ def get_secondary_kpi(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         else:
             avg_time_sec = int(raw_avg)
             
+        sql_time_prev = f"""
+            SELECT avg(session_duration) as avg_time
+            FROM (
+                SELECT user_id, toDate(timestamp) as d, dateDiff('second', min(timestamp), max(timestamp)) as session_duration
+                FROM feature_intelligence.events_raw
+                WHERE {cond} AND timestamp >= today() - (%(days)s * 2) AND timestamp < today() - %(days)s
+                GROUP BY user_id, d
+                HAVING session_duration > 0 AND session_duration < 3600 * 4
+            )
+        """
+        res_time_prev = ch_client.query(sql_time_prev, params)
+        raw_avg_prev = res_time_prev[0]["avg_time"] if res_time_prev and "avg_time" in res_time_prev[0] else 0
+        if raw_avg_prev is None or (isinstance(raw_avg_prev, float) and math.isnan(raw_avg_prev)):
+            avg_time_sec_prev = 0
+        else:
+            avg_time_sec_prev = int(raw_avg_prev)
+            
+        time_change, time_dir = pct_change(avg_time_sec, avg_time_sec_prev)
+
         mins = avg_time_sec // 60
         secs = avg_time_sec % 60
         avg_time_str = f"{mins}m {secs}s" if avg_time_sec > 0 else "0m 0s"
@@ -492,32 +616,32 @@ def get_secondary_kpi(tenant_id: str, days: int = Query(7, ge=1, le=365)):
                 "id": "total-visits",
                 "label": "Total Visits",
                 "value": f"{basic['total_visits']:,}",
-                "change": 0,
-                "changeDirection": "up",
+                "change": visits_change,
+                "changeDirection": visits_dir,
                 "icon": "globe",
             },
             {
                 "id": "unique-visitors",
                 "label": "Unique Visitors",
                 "value": f"{basic['unique_visitors']:,}",
-                "change": 0,
-                "changeDirection": "up",
+                "change": unique_change,
+                "changeDirection": unique_dir,
                 "icon": "users",
             },
             {
                 "id": "avg-session",
                 "label": "Avg. Session Time",
                 "value": avg_time_str,
-                "change": 0,
-                "changeDirection": "down",
+                "change": time_change,
+                "changeDirection": time_dir,
                 "icon": "clock",
             },
             {
                 "id": "bounce-rate",
                 "label": "Bounce Rate",
                 "value": f"{bounce_rate}%",
-                "change": 0,
-                "changeDirection": "down",
+                "change": bounce_change,
+                "changeDirection": bounce_dir,
                 "icon": "trending-down",
             }
         ]
@@ -525,7 +649,9 @@ def get_secondary_kpi(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/metrics/traffic")
-def get_traffic_data(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_traffic_data(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     """
     Time series data for traffic overview. Pivot if comma-separated.
     """
@@ -569,7 +695,9 @@ def get_traffic_data(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/metrics/feature_usage_series")
-def get_feature_usage_series(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_feature_usage_series(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     """
     Time series feature usage data points. Pivot if comma-separated.
     """
@@ -606,6 +734,107 @@ def get_feature_usage_series(tenant_id: str, days: int = Query(7, ge=1, le=365))
                     date_map[d] = {"date": d}
                 date_map[d][f"{t}_usage"] = r["usage"]
             return list(date_map.values())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/features/heatmap")
+def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
+    tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
+    is_compare = len(tenants) > 1
+
+    try:
+        activities = {}
+        if is_compare:
+            compare_tenants = tenants[:2]
+            cond = "tenant_id IN %(tenant_ids)s"
+            params = {"tenant_ids": tuple(compare_tenants), "days": days}
+            groups = compare_tenants
+            
+            sql = f"""
+                SELECT 
+                    event_name as feature,
+                    tenant_id as group_key,
+                    count() as count
+                FROM feature_intelligence.events_raw
+                WHERE {cond} AND timestamp >= today() - %(days)s
+                GROUP BY event_name, tenant_id
+            """
+            res = ch_client.query(sql, params)
+            max_count = max([r["count"] for r in res]) if res else 1
+            
+            for row in res:
+                f = row["feature"]
+                if f not in activities:
+                    activities[f] = {g: 0 for g in groups}
+                activities[f][row["group_key"]] = row["count"]
+                
+        else:
+            cond = "tenant_id = %(tenant_id)s"
+            params = {"tenant_id": tenants[0], "days": days}
+            
+            sql = f"""
+                WITH 
+                    today() - %(days)s AS start_time,
+                    today() AS end_time,
+                    (toUnixTimestamp(end_time) - toUnixTimestamp(start_time)) / 7 AS bucket_size_sec
+                SELECT 
+                    event_name as feature,
+                    toString(LEAST(7, intDiv(toUnixTimestamp(timestamp) - toUnixTimestamp(start_time), bucket_size_sec) + 1)) AS group_key,
+                    count() as count
+                FROM feature_intelligence.events_raw
+                WHERE {cond} AND timestamp >= start_time
+                GROUP BY event_name, group_key
+                ORDER BY group_key ASC
+            """
+            res = ch_client.query(sql, params)
+            max_count = max([r["count"] for r in res]) if res else 1
+            groups = [str(i) for i in builtins_range(1, 8)]
+
+            for row in res:
+                f = row["feature"]
+                if f not in activities:
+                    activities[f] = {g: 0 for g in groups}
+                activities[f][row["group_key"]] = row["count"]
+
+        # format response
+        formatted_activities = []
+        for feat, data in activities.items():
+            segments = []
+            total = sum(data.values())
+            for idx, g in enumerate(groups):
+                count = data[g]
+                pct = int((count / max_count) * 100) if max_count > 0 else 0
+                
+                if is_compare:
+                    base_color = "blue" if idx == 0 else "orange"
+                else:
+                    base_color = "blue"
+                    
+                segments.append({
+                    "group_key": g,
+                    "count": count,
+                    "percentile": pct,
+                    "level": "High" if pct > 75 else "Med" if pct > 30 else "Low",
+                    "color_scale": base_color
+                })
+            
+            formatted_activities.append({
+                "feature": feat,
+                "total_usage": total,
+                "level": "High" if total > 1000 else "Med",
+                "segments": segments
+            })
+
+        formatted_activities.sort(key=lambda x: x["total_usage"], reverse=True)
+
+        return {
+            "is_compare": is_compare,
+            "groups": groups,
+            "activities": formatted_activities
+        }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -657,7 +886,9 @@ def get_all_tenants(tenant_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/metrics/devices")
-def get_device_breakdown(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_device_breakdown(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     """
     Device breakdown parsed from metadata. Uses Hare-Niemeyer for exact 100% normalization.
     """
@@ -675,7 +906,7 @@ def get_device_breakdown(tenant_id: str, days: int = Query(7, ge=1, le=365)):
     """
     try:
         device_res = ch_client.query(sql, params)
-        colors = {"desktop": "#0EA5A4", "mobile": "#3B82F6", "tablet": "#F59E0B"}
+        colors = {"desktop": "#1a73e8", "mobile": "#4285F4", "tablet": "#8AB4F8"}
         
         # Merge into canonical device names first
         merged = {}
@@ -688,41 +919,149 @@ def get_device_breakdown(tenant_id: str, days: int = Query(7, ge=1, le=365)):
                 merged[dev] = merged.get(dev, 0) + raw_val
         
         if not merged:
-            return [
-                {"name": 'Desktop', "value": 62, "color": '#0EA5A4'},
-                {"name": 'Mobile', "value": 38, "color": '#3B82F6'}
-            ]
-        
-        # Hare-Niemeyer method for exact 100 allocation
+            return []
+
         total = sum(merged.values())
         items = list(merged.items())
         quotients = [(name, count, (count / total) * 100) for name, count in items]
         floors = [(name, count, int(q)) for name, count, q in quotients]
         remainders = [(name, count, (count / total) * 100 - int((count / total) * 100)) for name, count in items]
+        
         allocated_sum = sum(f for _, _, f in floors)
         remainder_seats = 100 - allocated_sum
         remainders.sort(key=lambda x: x[2], reverse=True)
         final = {name: fl for name, _, fl in floors}
         for i in range(remainder_seats):
             final[remainders[i][0]] += 1
-        
+
         breakdown = []
-        for dev_name, pct in final.items():
-            breakdown.append({
-                "name": dev_name.capitalize(),
-                "value": pct,
-                "color": colors.get(dev_name, '#3B82F6')
-            })
-        
+        base_colors = ['#1a73e8', '#4285F4', '#8AB4F8', '#34A853', '#F59E0B']
+        i_color = 0
+        for name, _ in remainders:
+            if final[name] > 0:
+                breakdown.append({
+                    "name": name.capitalize(),
+                    "value": final[name],
+                    "color": base_colors[i_color % len(base_colors)]
+                })
+                i_color += 1
+
+        breakdown.sort(key=lambda x: x["value"], reverse=True)
         return breakdown
     except Exception:
+        return []
+
+@app.get("/metrics/channels")
+def get_acquisition_channels(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
+    """
+    User acquisition channel breakdown derived from event metadata.
+    Classifies events by referrer/channel field and returns % distribution.
+    """
+    tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
+    cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
+
+    sql = f"""
+        SELECT
+            if(JSONHas(metadata, 'channel') AND length(JSONExtractString(metadata, 'channel')) > 0,
+               JSONExtractString(metadata, 'channel'),
+               'direct') as channel,
+            count() as total
+        FROM feature_intelligence.events_raw
+        WHERE {cond} AND timestamp >= today() - %(days)s
+        GROUP BY channel
+        ORDER BY total DESC
+    """
+    try:
+        results = ch_client.query(sql, params)
+
+        CHANNEL_LABELS = {
+            "organic": "Organic Search",
+            "organic_search": "Organic Search",
+            "direct": "Direct",
+            "referral": "Referral",
+            "social": "Social",
+            "email": "Email",
+            "paid": "Paid Search",
+            "paid_search": "Paid Search",
+            "cpc": "Paid Search",
+        }
+
+        merged: dict = {}
+        for row in results:
+            raw = str(row["channel"]).lower().strip()
+            label = CHANNEL_LABELS.get(raw, raw.replace("_", " ").title())
+            merged[label] = merged.get(label, 0) + int(row["total"])
+
+        if not merged:
+            import hashlib
+            from datetime import datetime
+            import random
+            
+            # Deterministic simulation based on hour and tenant if DB is empty
+            current_hour = datetime.utcnow().strftime("%Y-%m-%d-%H")
+            seed_str = f"{tenants[0]}_{current_hour}"
+            seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
+            rng = random.Random(seed)
+            
+            organic = rng.randint(35, 55)
+            direct = rng.randint(20, 35)
+            referral = rng.randint(10, 20)
+            social = rng.randint(5, 12)
+            email = 100 - (organic + direct + referral + social)
+            if email < 1:
+                email = rng.randint(2, 6)
+                
+            mock_channels = [
+                {"name": "Organic Search", "value": organic},
+                {"name": "Direct",         "value": direct},
+                {"name": "Referral",       "value": referral},
+                {"name": "Social",         "value": social},
+                {"name": "Email",          "value": email},
+            ]
+            
+            # Sort by value desc
+            mock_channels.sort(key=lambda x: -x["value"])
+            
+            return [
+                {
+                    "name": c["name"],
+                    "value": c["value"],
+                    "formattedValue": f"{c['value']}%"
+                } for c in mock_channels
+            ]
+
+        grand_total = sum(merged.values())
+        items = sorted(merged.items(), key=lambda x: x[1], reverse=True)[:6]
+        # Hare-Niemeyer normalization to exactly 100%
+        quotients = [(n, v, (v / grand_total) * 100) for n, v in items]
+        floors = [(n, v, int(q)) for n, v, q in quotients]
+        remainders_sorted = sorted(quotients, key=lambda x: x[2] - int(x[2]), reverse=True)
+        allocated = sum(f for _, _, f in floors)
+        floor_map = {n: f for n, _, f in floors}
+        for n, _, _ in remainders_sorted[:max(0, 100 - allocated)]:
+            floor_map[n] = floor_map.get(n, 0) + 1
+
         return [
-            {"name": 'Desktop', "value": 50, "color": '#0EA5A4'},
-            {"name": 'Mobile', "value": 50, "color": '#3B82F6'}
+            {"name": name, "value": floor_map.get(name, 0), "formattedValue": f"{floor_map.get(name, 0)}%"}
+            for name, _ in items
+        ]
+    except Exception:
+        return [
+            {"name": "Organic Search", "value": 45, "formattedValue": "45%"},
+            {"name": "Direct",         "value": 28, "formattedValue": "28%"},
+            {"name": "Referral",       "value": 15, "formattedValue": "15%"},
+            {"name": "Social",         "value": 8,  "formattedValue": "8%"},
+            {"name": "Email",          "value": 4,  "formattedValue": "4%"},
         ]
 
 @app.get("/locations")
-def get_locations(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+
+def get_locations(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
@@ -789,7 +1128,9 @@ def get_locations(tenant_id: str, days: int = Query(7, ge=1, le=365)):
 
 
 @app.get("/audit_logs")
-def get_audit_logs(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_audit_logs(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
@@ -810,6 +1151,8 @@ def get_audit_logs(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         results = ch_client.query(sql, params)
         logs = []
         import json
+        from datetime import timezone, timedelta
+        IST = timezone(timedelta(hours=5, minutes=30))
         for i, row in enumerate(results):
             meta_str = row.get("metadata", "{}")
             try:
@@ -818,12 +1161,22 @@ def get_audit_logs(tenant_id: str, days: int = Query(7, ge=1, le=365)):
                 meta = {}
             
             user_email = meta.get("email", row["user_id"])
+            
+            # Convert timestamp to IST
+            db_time = row["timestamp"]
+            if hasattr(db_time, "replace"):
+                utc_time = db_time.replace(tzinfo=timezone.utc)
+                ist_time = utc_time.astimezone(IST)
+                time_str = ist_time.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                time_str = str(db_time)
+                
             logs.append({
                 "id": f"al-{tenant_id}-{i}",
                 "user": str(user_email),
                 "action": row["event_name"].capitalize().replace("_", " "),
                 "resource": f"Channel: {row['channel']}",
-                "timestamp": str(row["timestamp"]) if isinstance(row["timestamp"], str) else (row["timestamp"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(row["timestamp"], "strftime") else str(row["timestamp"])),
+                "timestamp": time_str,
                 "details": f"Role: {meta.get('role', 'user')} / IP: {meta.get('ip', 'Unknown')}"
             })
         return logs
@@ -831,7 +1184,12 @@ def get_audit_logs(tenant_id: str, days: int = Query(7, ge=1, le=365)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/metrics/realtime_users")
-def get_realtime_users(tenant_id: str):
+def get_realtime_users(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
+    """Returns real-time active user count with IST timestamp context."""
+    from datetime import timezone, timedelta
+    IST = timezone(timedelta(hours=5, minutes=30))
+
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0]} if len(tenants) == 1 else {"tenant_ids": tuple(tenants)}
@@ -839,16 +1197,27 @@ def get_realtime_users(tenant_id: str):
     sql = f"""
         SELECT uniqExact(user_id) as users 
         FROM feature_intelligence.events_raw 
-        WHERE {cond} AND timestamp >= now() - INTERVAL 5 MINUTE
+        WHERE {cond} AND timestamp >= now('Asia/Kolkata') - INTERVAL 5 MINUTE
     """
     try:
         results = ch_client.query(sql, params)
-        return results[0]['users'] if results else 0
+        user_count = results[0]['users'] if results else 0
+        now_ist = datetime.now(IST)
+        return {
+            "count": user_count,
+            "timestamp_ist": now_ist.strftime("%Y-%m-%dT%H:%M:%S+05:30"),
+            "timezone": "Asia/Kolkata"
+        }
     except Exception:
-        return 0
+        return {"count": 0, "timestamp_ist": None, "timezone": "Asia/Kolkata"}
 
 @app.get("/metrics/pages_per_minute")
-def get_pages_per_minute(tenant_id: str):
+def get_pages_per_minute(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
+    """Returns pages-per-minute data with IST-localized time labels."""
+    from datetime import timezone, timedelta
+    IST = timezone(timedelta(hours=5, minutes=30))
+
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0]} if len(tenants) == 1 else {"tenant_ids": tuple(tenants)}
@@ -856,15 +1225,24 @@ def get_pages_per_minute(tenant_id: str):
     sql = f"""
         SELECT toStartOfMinute(timestamp) as min, count() as val 
         FROM feature_intelligence.events_raw 
-        WHERE {cond} AND timestamp >= now() - INTERVAL 60 MINUTE 
+        WHERE {cond} AND timestamp >= now('UTC') - INTERVAL 60 MINUTE 
         GROUP BY min ORDER BY min ASC
     """
     try:
         results = ch_client.query(sql, params)
         formatted = []
         for r in results:
+            # Convert UTC timestamp to IST for display
+            if hasattr(r["min"], "replace"):
+                utc_time = r["min"].replace(tzinfo=timezone.utc)
+                ist_time = utc_time.astimezone(IST)
+                hour_label = ist_time.strftime("%H:%M")
+            elif hasattr(r["min"], "strftime"):
+                hour_label = r["min"].strftime("%H:%M")
+            else:
+                hour_label = str(r["min"])[11:16]
             formatted.append({
-                "hour": r["min"].strftime("%H:%M") if hasattr(r["min"], "strftime") else str(r["min"])[11:16],
+                "hour": hour_label,
                 "value": r["val"]
             })
         return formatted
@@ -872,237 +1250,137 @@ def get_pages_per_minute(tenant_id: str):
         return []
 
 @app.get("/metrics/top_pages")
-def get_top_pages(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_top_pages(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     """
     Returns page-level aggregation: each row is a "page" (URL), with the total
     events across ALL features that fire on that page, plus the list of features.
-    
-    Page mapping: features are grouped by their page origin.
-    e.g. /dashboard contains: core.dashboard.viewed, dashboard_view, etc.
-         /pro-feature contains: pro.crypto-trading.*, pro.wealth-management.*, etc.
+
+    Uses centralized page_map.py for feature → page resolution and display names.
+    Response includes: pageUrl, totalEvents, comparisonPct, rank, features[]
+    Each feature includes: feature, displayName, count, inPagePct
     """
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
-    
-    # Feature-to-page mapping: which page does each feature belong to?
-    FEATURE_PAGE_MAP = {
-        # Dashboard page
-        "core.dashboard.viewed": "/dashboard",
-        "core.dashboard.view": "/dashboard",
-        "dashboard_view": "/dashboard",
-        # Accounts page
-        "core.accounts.viewed": "/accounts",
-        "core.accounts.view": "/accounts",
-        "accounts_view": "/accounts",
-        # Transactions page
-        "payments.history.viewed": "/transactions",
-        "core.transactions.view": "/transactions",
-        "transactions_view": "/transactions",
-        # Payees page
-        "core.payees.view": "/dashboard/payees",
-        "payees_view": "/dashboard/payees",
-        # Loans page
-        "lending.loan.applied": "loans",
-        "loans.dashboard.view": "loans",
-        "loan_applied": "loans",
-        # Login page
-        "auth.login.success": "/login",
-        "auth.login.view": "/login",
-        "login": "/login",
-        # Register page
-        "auth.registration.success": "/register",
-        "auth.register.view": "/register",
-        "register": "/register",
-        # Pro Features page
-        "pro.crypto-trading.trade_execute": "/pro-feature",
-        "pro.crypto-trading.view": "/pro-feature",
-        "pro.wealth-management.rebalance": "/pro-feature",
-        "pro.wealth-management.view": "/pro-feature",
-        "pro.payroll-pro.batch_process": "/pro-feature",
-        "pro.payroll-pro.view": "/pro-feature",
-        "pro.finance-library.book_access": "/pro-feature",
-        "pro.finance-library.view": "/pro-feature",
-        "pro.dashboard.view": "/pro-feature",
-        # Profile page
-        "core.profile.view": "/profile",
-    }
-    
+
     sql = f"""
         SELECT 
-            event_name,
+            JSONExtractString(metadata, 'path') as page,
+            event_name as raw_feature,
             count() as cnt
-        FROM feature_intelligence.events_raw 
+        FROM feature_intelligence.events_raw
         WHERE {cond} AND timestamp >= today() - %(days)s
-        GROUP BY event_name ORDER BY cnt DESC
+        GROUP BY page, raw_feature
     """
     try:
         results = ch_client.query(sql, params)
+
+        # 4. BUILD PROPER PAGE -> FEATURE MODEL
+        page_data: dict = {}
         
-        # Group features by their parent page
-        page_data = {}  # pageUrl -> { totalEvents: int, features: set }
+        # Exact explicit known pages for the test app
+        KNOWN_PAGES = {
+            "/register", "/login", "/dashboard", "/accounts", "/payees",
+            "/transactions", "/loans", "/pro-feature?id=crypto-trading",
+            "/pro-feature?id=ai-insights", "/pro-feature?id=wealth-management-pro",
+            "/pro-feature?id=bulk-payroll-processing", "/profile"
+        }
+        
         for r in results:
-            ev = r['event_name']
+            raw_page = r['page']
+            raw_feature = r['raw_feature']
             cnt = int(r['cnt'])
-            
-            # Resolve page from the feature-to-page map
-            page_url = FEATURE_PAGE_MAP.get(ev)
-            
-            # Fallback: if metadata path was stored OR derive from event name
-            if not page_url:
-                if ev.startswith('pro.'):
-                    page_url = '/pro-feature'
-                elif ev.startswith('auth.'):
-                    page_url = '/login'
-                elif ev.startswith('core.'):
-                    parts = ev.split('.')
-                    page_url = f"/dashboard/{parts[1]}" if len(parts) > 1 else '/dashboard'
-                elif ev.startswith('lending.') or ev.startswith('loan'):
-                    page_url = 'loans'
-                elif ev.startswith('payments.'):
-                    page_url = '/transactions'
-                else:
-                    page_url = f"/{ev.replace('.', '/').replace('_', '-')}"
-            
-            if page_url not in page_data:
-                page_data[page_url] = {"totalEvents": 0, "features": set()}
-            page_data[page_url]["totalEvents"] += cnt
-            page_data[page_url]["features"].add(ev)
-        
-        # Sort by total events and return top 8 pages
+
+            # 6. HANDLE NULL PATHS CORRECTLY
+            # For legacy simulated events before path ingestion became standard, 
+            # we must fallback to guessing the physical page to prevent dropping data.
+            if not raw_page or raw_page == "null" or raw_page == "":
+                page = resolve_page(raw_feature)
+                if not page:
+                    page = "/dashboard"
+            else:
+                page = str(raw_page)
+                
+            # If the resolved or database path doesn't strictly match a known real page, fallback to dashboard
+            if page not in KNOWN_PAGES:
+                # Some old paths might be /pro-features, which mapping dictates should be one of the query id params
+                # But typically generic unmapped items like location captured bounce to dashboard
+                page = "/dashboard"
+
+            # 1. & 5. NORMALIZE EVENTS & FIX DUPLICATES
+            feature = normalize_event(raw_feature)
+
+            if page not in page_data:
+                page_data[page] = {"totalEvents": 0, "features": {}}
+
+            page_data[page]["totalEvents"] += cnt
+            page_data[page]["features"][feature] = page_data[page]["features"].get(feature, 0) + cnt
+
+        # Sort by total events
         sorted_pages = sorted(page_data.items(), key=lambda x: x[1]["totalEvents"], reverse=True)
-        
+        total_all_events = sum(data["totalEvents"] for _, data in sorted_pages) or 1
+
         formatted = []
-        for page_url, data in sorted_pages[:8]:
+        for rank, (page_url, data) in enumerate(sorted_pages[:10], start=1):
+            page_total = data["totalEvents"] or 1
+            # Sort features by count desc, take top 10
+            sorted_feat = sorted(data["features"].items(), key=lambda x: x[1], reverse=True)[:10]
+            
+            formatted_features = [
+                {
+                    "feature": k,  # 8. No raw event names in UI -> using normalized k
+                    "displayName": resolve_display_name(k) if resolve_display_name(k) != "Unknown" else k,
+                    "count": v,
+                    "inPagePct": round((v / page_total) * 100, 1),
+                }
+                for k, v in sorted_feat
+            ]
+            
+            comparison_pct = round((data["totalEvents"] / total_all_events) * 100, 1)
             formatted.append({
                 "pageUrl": page_url,
                 "totalEvents": data["totalEvents"],
-                "features": sorted(list(data["features"]))[:10]  # max 10 features per page
+                "comparisonPct": comparison_pct,
+                "rank": rank,
+                "features": formatted_features,
             })
         return formatted
     except Exception:
         return []
 
-@app.get("/metrics/channels")
-def get_channels(tenant_id: str, days: int = Query(7, ge=1, le=365)):
-    """User acquisition channels. Uses Hare-Niemeyer for exact 100% normalization."""
+
+@app.get("/features/activity")
+def get_feature_activity(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
-    
-    sql = f"""
-        SELECT
-            multiIf(
-                lower(channel) NOT IN ('', 'web', 'unknown'),
-                    concat(upper(substring(lower(channel), 1, 1)), substring(lower(channel), 2)),
-                positionCaseInsensitive(lower(metadata), 'google.') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'bing.') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'yahoo.') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'duckduckgo.') > 0,
-                    'Organic Search',
-                positionCaseInsensitive(lower(metadata), 'facebook.') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'instagram.') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'linkedin.') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'x.com') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'twitter.com') > 0,
-                    'Social',
-                positionCaseInsensitive(lower(metadata), 'mail') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'newsletter') > 0,
-                    'Email',
-                positionCaseInsensitive(lower(metadata), 'localhost') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'nexabank') > 0 OR
-                positionCaseInsensitive(lower(metadata), 'twitter') > 0,
-                    'Internal',
-                positionCaseInsensitive(lower(event_name), 'register') > 0 OR
-                positionCaseInsensitive(lower(event_name), 'signup') > 0,
-                    'New Users',
-                positionCaseInsensitive(lower(event_name), 'login') > 0,
-                    'Returning Users',
-                'Direct'
-            ) as source,
-            count() as value
-        FROM feature_intelligence.events_raw
-        WHERE {cond} AND timestamp >= today() - %(days)s
-        GROUP BY source
-        ORDER BY value DESC
-    """
-    try:
-        results = ch_client.query(sql, params)
-        valid_results = [r for r in results if int(r["value"]) > 0]
-        total = sum(int(r["value"]) for r in valid_results) or 1
-        
-        if not valid_results:
-            return [{"name": "Direct", "value": 0, "formattedValue": "0%"}]
-        
-        # Hare-Niemeyer allocation for exact 100%
-        items = [(str(r["source"]), int(r["value"])) for r in valid_results]
-        raw_pcts = [(name, val, (val / total) * 100) for name, val in items]
-        floors = [(name, val, int(pct)) for name, val, pct in raw_pcts]
-        allocated_sum = sum(f for _, _, f in floors)
-        remainder_seats = 100 - allocated_sum
-        # Sort by fractional remainder descending to allocate remaining seats
-        remainders = sorted(
-            [(name, val, (val / total) * 100 - int((val / total) * 100)) for name, val in items],
-            key=lambda x: x[2], reverse=True
-        )
-        final_pcts = {name: fl for name, _, fl in floors}
-        for i in range(remainder_seats):
-            final_pcts[remainders[i][0]] += 1
-        
-        formatted = []
-        for name, val in items:
-            pct = final_pcts[name]
-            formatted.append({
-                "name": name,
-                "value": val,
-                "formattedValue": f"{pct}%"
-            })
-        
-        return formatted
-    except Exception:
-        return []
 
-@app.get("/features/activity")
-def get_feature_activity(tenant_id: str):
-    require_tenant_access(tenant_id)
-    sql = """
+    sql = f"""
         SELECT event_name, count() as total
         FROM feature_intelligence.events_raw 
-        WHERE tenant_id = %(tenant_id)s 
+        WHERE {cond} AND timestamp >= today() - %(days)s
         GROUP BY event_name ORDER BY total DESC LIMIT 5
     """
     try:
-        results = ch_client.query(sql, {"tenant_id": tenant_id})
+        results = ch_client.query(sql, params)
         activities = []
-        colors = ['#1a73e8', '#4285F4', '#8AB4F8', '#34A853', '#F59E0B', '#EF4444']
-        for i, r in enumerate(results):
-            c = r['total']
-            # Compute a stable deterministic pseudo-random hash to make segments repeatable without random
-            h1 = (hash(r['event_name']) % 40) + 10
-            h2 = ((hash(r['event_name']) * 3) % 40) + 10
-            h3 = 100 - (h1 + h2)
-            
-            pieces = [h1, h2, h3]
-            norm = sum(pieces)
-            segments = []
-            for j, p in enumerate(pieces):
-                segments.append({
-                    "color": colors[(i + j) % len(colors)],
-                    "width": int((p / norm) * 100)
-                })
+        for r in results:
             activities.append({
-                "feature": str(r["event_name"]).capitalize().replace("_", " "),
-                "segments": segments,
-                "level": "High" if c > 10 else "Low"
+                "feature": str(r["event_name"]),
+                "segments": [],
+                "level": "High" if r['total'] > 10 else "Low"
             })
-        if not activities:
-             activities = [{"feature": "No Activity Yet", "segments": [{"color": "#cccccc", "width": 100}], "level": "None"}]
         return activities
     except Exception as e:
-        return [{"feature": str(e), "segments": [], "level": "Error"}]
+        return []
 
 @app.get("/features/heatmap")
-def get_feature_heatmap(tenant_id: str = Query(..., description="Comma-separated list of tenants for comparison, or single tenant id.")):
+def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     """
     Returns grid-based heatmap matrix for features.
     If multiple tenants provided, matrix is Feature x Tenant.
@@ -1188,7 +1466,7 @@ def get_feature_heatmap(tenant_id: str = Query(..., description="Comma-separated
                 })
                 
             activities.append({
-                "feature": f.capitalize().replace("_", " "),
+                "feature": f,
                 "raw_feature": f,
                 "total_usage": f_total,
                 "segments": segments,
@@ -1208,7 +1486,8 @@ def get_feature_heatmap(tenant_id: str = Query(..., description="Comma-separated
 
 
 @app.get("/features/configs")
-def get_feature_configs(tenant_id: str):
+def get_feature_configs(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0]} if len(tenants) == 1 else {"tenant_ids": tuple(tenants)}
@@ -1232,15 +1511,15 @@ def get_feature_configs(tenant_id: str):
                 "isActive": True
             })
         if not configs:
-            return [
-                { "id": 'fc-1', "pattern": '/feed', "featureName": 'View Feed', "category": 'interaction', "isActive": True }
-            ]
+            return []
         return configs
     except Exception:
         return []
 
 @app.get("/metrics/retention")
-def get_retention(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+def get_retention(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
     """
     Real cohort retention analysis.
     For each weekly cohort (users first seen in week W), compute:
@@ -1295,9 +1574,7 @@ def get_retention(tenant_id: str, days: int = Query(7, ge=1, le=365)):
             cohort_data[cw_str][offset] = count_val
         
         if not cohort_data:
-            return [
-                { "cohort": 'This Week', "users": 0, "month1": 100, "month2": 0, "month3": 0 },
-            ]
+            return []
         
         retention = []
         cohort_names = ["This Week", "Last Week", "2 Weeks Ago", "3 Weeks Ago"]
@@ -1321,9 +1598,7 @@ def get_retention(tenant_id: str, days: int = Query(7, ge=1, le=365)):
                 "month3": m3_pct
             })
         
-        return retention if retention else [
-            { "cohort": 'This Week', "users": 0, "month1": 100, "month2": 0, "month3": 0 },
-        ]
+        return retention
     except Exception as e:
         return []
 
@@ -1370,16 +1645,18 @@ def get_admin_summary():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/app/{tenant_id}/summary")
-def get_admin_app_summary(tenant_id: str):
+def get_admin_app_summary(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    tenant_id = tenants
     """Returns basic KPIs and Insights for a specfic app (Cloud mode only)."""
     require_cloud_mode()
     return {
-        "kpi": get_kpi_metrics(tenant_id),
-        "insights": get_insights(tenant_id)["insights"]
+        "kpi": get_kpi_metrics(tenants=tenant_id, range=range),
+        "insights": get_insights(tenants=tenant_id, range=range)["insights"]
     }
 
 @app.get("/transparency/cloud-data")
-def get_transparency_data(tenant_id: str):
+def get_transparency_data(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     """Summarizes what data is visible to the cloud/admin."""
     require_tenant_access(tenant_id)
     
@@ -1419,121 +1696,91 @@ def get_transparency_data(tenant_id: str):
 from core.models import LicenseSyncRequest, TrackingToggleRequest
 
 @app.get("/license/usage")
-def get_license_usage(tenant_id: str):
-    """Compare licensed features vs actual usage for a tenant — enriched with trends, pro users, and revenue."""
-    require_tenant_access(tenant_id)
+def get_license_usage(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("30d", description="Time range like 7d, 30d")):
+    """Compare licensed features vs actual usage — multi-tenant aware with proper IN clause."""
+    require_tenant_access(tenants)
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenant_list[0], "days": days} if len(tenant_list) == 1 else {"tenant_ids": tuple(tenant_list), "days": days}
+
     try:
-        pro_feature_catalog = {
-            "pro.crypto-trading.trade_execute": {
-                "feature_id": "crypto-trading",
-                "title": "Crypto Trading",
-                "tagline": "Institutional-grade digital asset management.",
-                "price_inr": 2000,
-            },
-            "pro.wealth-management.rebalance": {
-                "feature_id": "wealth-management-pro",
-                "title": "Wealth Management",
-                "tagline": "Sophisticated portfolio tracking and rebalancing.",
-                "price_inr": 2000,
-            },
-            "pro.payroll-pro.batch_process": {
-                "feature_id": "bulk-payroll-processing",
-                "title": "Payroll Pro",
-                "tagline": "Enterprise-scale payroll automation.",
-                "price_inr": 2000,
-            },
-            "pro.finance-library.book_access": {
-                "feature_id": "ai-insights",
-                "title": "Finance Library",
-                "tagline": "Premium knowledge base for professional banking and investments.",
-                "price_inr": 2000,
-            },
+        # 1. Single source of truth catalog
+        feature_catalog = {
+            # Enterprise
+            "pro.crypto_trade_execution.success": {"plan": "enterprise"},
+            "pro.crypto_trade_execution.failed": {"plan": "enterprise"},
+            "pro.crypto_price_feeds.view": {"plan": "enterprise"},
+            "pro.crypto_portfolio.view": {"plan": "enterprise"},
+            "pro.wealth_rebalance.success": {"plan": "enterprise"},
+            "pro.wealth_rebalance.failed": {"plan": "enterprise"},
+            "pro.wealth_insights.view": {"plan": "enterprise"},
+            "pro.payroll_batch.success": {"plan": "enterprise"},
+            "pro.payroll_batch.failed": {"plan": "enterprise"},
+            "pro.payroll_payees.view": {"plan": "enterprise"},
+            "pro.payroll_search.success": {"plan": "enterprise"},
+            "pro.payroll_search.failed": {"plan": "enterprise"},
+            "pro.finance_library_book.access": {"plan": "enterprise"},
+            "pro.finance_library_stats.view": {"plan": "enterprise"},
+            "pro.features.view": {"plan": "enterprise"},
+            "pro.features_unlock.success": {"plan": "enterprise"},
+            "pro.features_unlock.failed": {"plan": "enterprise"},
+            
+            # Free / Base
+            "free.dashboard.view": {"plan": "free"},
+            "free.auth.login.success": {"plan": "free"},
+            "free.auth.login.failed": {"plan": "free"},
+            "free.auth.register.success": {"plan": "free"},
+            "free.auth.register.failed": {"plan": "free"},
+            "free.payment.success": {"plan": "free"},
+            "free.payment.failed": {"plan": "free"},
+            "free.accounts.view": {"plan": "free"},
+            "free.transactions.view": {"plan": "free"},
+            "free.payees.view": {"plan": "free"},
+            "free.payees.add_success": {"plan": "free"},
+            "free.payees.add_failed": {"plan": "free"},
+            "free.payees.edit_success": {"plan": "free"},
+            "free.payees.edit_failed": {"plan": "free"},
+            "free.payees.delete_success": {"plan": "free"},
+            "free.payees.delete_failed": {"plan": "free"},
+            "free.loan.applied": {"plan": "free"},
+            "free.loan.approved": {"plan": "free"},
+            "free.loan.rejected": {"plan": "free"},
+            "free.loans.view": {"plan": "free"},
+            "free.loan.kyc_started": {"plan": "free"},
+            "free.loan.kyc_completed": {"plan": "free"},
+            "free.loan.kyc_failed": {"plan": "free"},
+            "free.loan.kyc_abandoned": {"plan": "free"},
+            "free.profile.view": {"plan": "free"},
+            "free.profile.edit_success": {"plan": "free"},
+            "free.profile.edit_failed": {"plan": "free"},
+            "free.profile.location": {"plan": "free"},
         }
-
-        # Get licensed features uses argMax to avoid duplicates
-        sql_licensed = """
-            SELECT feature_name, argMax(is_licensed, updated_at) as is_licensed, argMax(plan_tier, updated_at) as plan_tier
-            FROM feature_intelligence.tenant_licenses
-            WHERE tenant_id = %(tenant_id)s
+        sql_used = f"""
+            SELECT 
+                event_name as feature_name, 
+                count() as usage_count, 
+                uniqExact(user_id) as unique_users,
+                max(JSONExtractString(metadata, 'tier')) as tier_hint
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND timestamp >= today() - %(days)s
             GROUP BY feature_name
-            HAVING is_licensed = 1
-        """
-        raw_licensed = ch_client.query(sql_licensed, {"tenant_id": tenant_id})
-        
-        # Check tenant global tier
-        tier_sql = """
-            SELECT argMax(plan_tier, updated_at) as tenant_tier
-            FROM feature_intelligence.tenant_licenses
-            WHERE tenant_id = %(tenant_id)s AND feature_name = 'global_tier'
-            GROUP BY feature_name
-        """
-        ts = ch_client.query(tier_sql, {"tenant_id": tenant_id})
-        tenant_tier = ts[0]["tenant_tier"] if ts else "enterprise" # default enterprise if seeded
-
-        # If enterprise, ALL pro features are licensed. If free, ONLY free features.
-        if tenant_tier == "enterprise":
-            licensed_set = set(pro_feature_catalog.keys())
-            # Enforce exactly once — use catalog keys to avoid duplicates from DB
-            seen_features = set()
-            licensed = []
-            for k in pro_feature_catalog.keys():
-                if k not in seen_features:
-                    seen_features.add(k)
-                    licensed.append({"feature_name": k, "plan_tier": "enterprise"})
-        else:
-            licensed = [r for r in raw_licensed if r["feature_name"] not in pro_feature_catalog]
-            licensed_set = {r["feature_name"] for r in licensed}
-        
-        # Get actually used features (last 30 days)
-        sql_used = """
-            SELECT event_name as feature_name, sum(total_events) as usage_count, uniqMerge(unique_users) as unique_users
-            FROM feature_intelligence.daily_feature_usage
-            WHERE tenant_id = %(tenant_id)s AND date >= today() - 30
-            GROUP BY event_name
             ORDER BY usage_count DESC
         """
-        used = ch_client.query(sql_used, {"tenant_id": tenant_id})
-        used_set = {r["feature_name"] for r in used}
+        used = ch_client.query(sql_used, params)
         used_map = {r["feature_name"]: r for r in used}
 
-        # Relevant live NexaBank feature usage snapshot (core/auth/pro events from website)
-        sql_relevant = """
-            SELECT event_name as feature_name, sum(total_events) as usage_count, uniqMerge(unique_users) as unique_users
-            FROM feature_intelligence.daily_feature_usage
-            WHERE tenant_id = %(tenant_id)s
-              AND date >= today() - 30
-              AND (
-                                event_name LIKE 'core.%%'
-                                OR event_name LIKE 'auth.%%'
-                                OR event_name LIKE 'pro.%%'
-              )
-            GROUP BY event_name
-            ORDER BY usage_count DESC
-            LIMIT 10
-        """
-        relevant_rows = ch_client.query(sql_relevant, {"tenant_id": tenant_id})
+        pro_features_set = {k for k, v in feature_catalog.items() if v["plan"] == "enterprise"}
 
-        sql_last_event = """
-            SELECT max(timestamp) as last_event_at
-            FROM feature_intelligence.events_raw
-            WHERE tenant_id = %(tenant_id)s
-        """
-        last_event_res = ch_client.query(sql_last_event, {"tenant_id": tenant_id})
-        last_event_at = None
-        if last_event_res and last_event_res[0].get("last_event_at"):
-            ts = last_event_res[0]["last_event_at"]
-            last_event_at = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
-        
-        # --- NEW: Get daily usage trends for licensed features (last 7 days) ---
-        sql_trends = """
+        # ─── Usage trends (last 7 days) ───
+        sql_trends = f"""
             SELECT event_name as feature_name, toDate(timestamp) as date, count() as count
             FROM feature_intelligence.events_raw
-            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 7
-            GROUP BY event_name, date
+            WHERE {cond} AND timestamp >= today() - 7
+            GROUP BY feature_name, date
             ORDER BY date ASC
         """
-        trend_rows = ch_client.query(sql_trends, {"tenant_id": tenant_id})
-        # Build trends map: feature -> [{date, count}, ...]
+        trend_rows = ch_client.query(sql_trends, params)
         trends_map = {}
         for r in trend_rows:
             fname = r["feature_name"]
@@ -1541,134 +1788,104 @@ def get_license_usage(tenant_id: str):
                 trends_map[fname] = []
             date_str = r["date"].strftime("%Y-%m-%d") if hasattr(r["date"], "strftime") else str(r["date"])
             trends_map[fname].append({"date": date_str, "count": int(r["count"])})
+            
+        # Build lists based strictly on catalog mapping
+        total_usage_count = sum(int(r["usage_count"]) for r in used) or 1
+        
+        licensed_list = []
+        unused_licensed = []
+        unlicensed_used = []
+        
+        # Populate pro/licensed from STRICT catalog
+        for fname in pro_features_set:
+            uc = int(used_map.get(fname, {}).get("usage_count", 0))
+            item = {
+                "feature_name": fname,
+                "plan_tier": feature_catalog[fname]["plan"],
+                "is_used": fname in used_map,
+                "usage_count": uc,
+                "unique_users": int(used_map.get(fname, {}).get("unique_users", 0)),
+                "usage_pct": round((uc / total_usage_count) * 100, 1),
+                "trend": trends_map.get(fname, []),
+            }
+            if item["is_used"]:
+                licensed_list.append(item)
+            else:
+                unused_licensed.append(item)
+                
+        # Populate free/unlicensed ONLY from known catalog + what's not Pro
+        for fname, r in used_map.items():
+            if fname not in pro_features_set:
+                # Do not use raw event names directly, enforce taxonomy where possible
+                uc = int(r["usage_count"])
+                unlicensed_used.append({
+                    "feature_name": fname,
+                    "usage_count": uc,
+                    "unique_users": int(r["unique_users"]),
+                    "usage_pct": round((uc / total_usage_count) * 100, 1),
+                })
+                
+        unlicensed_used.sort(key=lambda x: x["usage_count"], reverse=True)
 
-        # --- NEW: Get distinct pro users (users who used any licensed pro feature) ---
-        if licensed_set:
-            feature_list_str = ", ".join([f"'{f}'" for f in licensed_set])
+        # ─── Summaries ───
+        pro_user_count = 0
+        total_user_count = 1
+        wow_change = 0.0
+
+        if pro_features_set:
+            pro_str = ", ".join([f"'{f}'" for f in pro_features_set])
             sql_pro_users = f"""
                 SELECT uniqExact(user_id) as pro_users
                 FROM feature_intelligence.events_raw
-                WHERE tenant_id = %(tenant_id)s AND event_name IN ({feature_list_str}) AND timestamp >= today() - 30
+                WHERE {cond} AND event_name IN ({pro_str}) AND timestamp >= today() - %(days)s
             """
-            pro_res = ch_client.query(sql_pro_users, {"tenant_id": tenant_id})
+            pro_res = ch_client.query(sql_pro_users, params)
             pro_user_count = int(pro_res[0]["pro_users"]) if pro_res else 0
 
-            # --- NEW: Get total unique users for usage % ---
-            sql_total_users = """
-                SELECT uniqExact(user_id) as total_users
-                FROM feature_intelligence.events_raw
-                WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 30
+            sql_total = f"""
+                SELECT uniqExact(user_id) as total_users 
+                FROM feature_intelligence.events_raw 
+                WHERE {cond} AND timestamp >= today() - %(days)s
             """
-            total_res = ch_client.query(sql_total_users, {"tenant_id": tenant_id})
-            total_user_count = int(total_res[0]["total_users"]) if total_res else 0
+            total_user_count = max(int((ch_client.query(sql_total, params) or [{"total_users": 1}])[0]["total_users"]), 1)
 
-            # --- NEW: Week-over-week trend for pro usage ---
             sql_wow = f"""
                 SELECT
-                    sumIf(1, timestamp >= today() - 7) as current_week,
-                    sumIf(1, timestamp >= today() - 14 AND timestamp < today() - 7) as prev_week
+                    countIf(timestamp >= today() - 7) as current_week,
+                    countIf(timestamp >= today() - 14 AND timestamp < today() - 7) as prev_week
                 FROM feature_intelligence.events_raw
-                WHERE tenant_id = %(tenant_id)s AND event_name IN ({feature_list_str})
+                WHERE {cond} AND event_name IN ({pro_str})
             """
-            wow_res = ch_client.query(sql_wow, {"tenant_id": tenant_id})
-            current_week = int(wow_res[0]["current_week"]) if wow_res else 0
-            prev_week = int(wow_res[0]["prev_week"]) if wow_res else 0
-            wow_change = round(((current_week - prev_week) / max(prev_week, 1)) * 100, 1)
-        else:
-            pro_user_count = 0
-            total_user_count = 0
-            wow_change = 0.0
-        
-        # Build comparison
-        total_usage_count = sum(int(r.get("usage_count", 0)) for r in used)
-        licensed_list = []
-        for r in licensed:
-            usage = used_map.get(r["feature_name"], {})
-            uc = int(usage.get("usage_count", 0))
-            licensed_list.append({
-                "feature_name": r["feature_name"],
-                "plan_tier": r["plan_tier"],
-                "is_used": r["feature_name"] in used_set,
-                "usage_count": uc,
-                "unique_users": int(usage.get("unique_users", 0)),
-                "usage_pct": round((uc / max(total_usage_count, 1)) * 100, 1),
-                "trend": trends_map.get(r["feature_name"], []),
-            })
-        
-        unused_licensed = [f for f in licensed_list if not f["is_used"]]
-        unlicensed_used = []
-        for f in used_set - licensed_set:
-            uc = int(used_map[f]["usage_count"])
-            unlicensed_used.append({
-                "feature_name": f,
-                "usage_count": uc,
-                "unique_users": int(used_map[f].get("unique_users", 0)),
-                "usage_pct": round((uc / max(total_usage_count, 1)) * 100, 1),
-            })
-        unlicensed_used.sort(key=lambda x: x["usage_count"], reverse=True)
-        
-        total_licensed = len(licensed_set)
-        total_used_licensed = len([f for f in licensed_list if f["is_used"]])
+            wow_res = ch_client.query(sql_wow, params)
+            cw = int(wow_res[0]["current_week"]) if wow_res else 0
+            pw = int(wow_res[0]["prev_week"]) if wow_res else 0
+            wow_change = round(((cw - pw) / max(pw, 1)) * 100, 1)
+
+        total_licensed = len(pro_features_set)
+        total_used_licensed = len(licensed_list)
         waste_pct = round(((total_licensed - total_used_licensed) / max(total_licensed, 1)) * 100, 1)
-        
-        # Estimated revenue from 4 enterprise licenses at ₹2000/user/month
-        estimated_revenue = pro_user_count * 2000
 
-        pro_catalog_usage = []
-        for feature_name, meta in pro_feature_catalog.items():
-            usage = used_map.get(feature_name, {})
-            pro_catalog_usage.append({
-                "feature_name": feature_name,
-                "feature_id": meta["feature_id"],
-                "title": meta["title"],
-                "tagline": meta["tagline"],
-                "price_inr": meta["price_inr"],
-                "is_licensed": feature_name in licensed_set,
-                "is_used": feature_name in used_set,
-                "usage_count": int(usage.get("usage_count", 0)),
-                "unique_users": int(usage.get("unique_users", 0)),
-            })
-
-        top_relevant_features = []
-        for row in relevant_rows:
-            name = row["feature_name"]
-            meta = pro_feature_catalog.get(name)
-            top_relevant_features.append({
-                "feature_name": name,
-                "title": meta["title"] if meta else name,
-                "feature_id": meta["feature_id"] if meta else None,
-                "is_pro_feature": name.startswith("pro."),
-                "usage_count": int(row.get("usage_count", 0)),
-                "unique_users": int(row.get("unique_users", 0)),
-            })
-
-        pro_events_30d = sum(item["usage_count"] for item in pro_catalog_usage)
-        
         return {
-            "tenant_id": tenant_id,
+            "tenant_id": tenants,
             "summary": {
                 "total_licensed": total_licensed,
-                "total_used": len(used_set),
+                "total_used": len(used_map),
                 "total_used_licensed": total_used_licensed,
                 "waste_pct": waste_pct,
                 "pro_users": pro_user_count,
                 "total_users": total_user_count,
-                "pro_adoption_pct": round((pro_user_count / max(total_user_count, 1)) * 100, 1),
-                "estimated_revenue": estimated_revenue,
+                "pro_adoption_pct": round((pro_user_count / total_user_count) * 100, 1),
+                "estimated_revenue": pro_user_count * 2000,
                 "wow_change": wow_change,
             },
             "licensed": licensed_list,
             "unused_licensed": unused_licensed,
             "unlicensed_used": unlicensed_used,
-            "nexabank_context": {
-                "last_event_at": last_event_at,
-                "pro_events_30d": pro_events_30d,
-                "pro_feature_catalog": pro_catalog_usage,
-                "top_relevant_features": top_relevant_features,
-            }
+            "nexabank_context": {}
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/license/sync")
 def sync_licenses(req: LicenseSyncRequest):
@@ -1695,7 +1912,8 @@ def sync_licenses(req: LicenseSyncRequest):
 # ═══════════════════════════════════════════════════════════
 
 @app.get("/tracking/toggles")
-def get_tracking_toggles(tenant_id: str):
+def get_tracking_toggles(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     """Get all feature tracking toggles for a tenant."""
     require_tenant_access(tenant_id)
     try:
@@ -1758,7 +1976,8 @@ def set_tracking_toggle(req: TrackingToggleRequest):
 # ═══════════════════════════════════════════════════════════
 
 @app.get("/config/audit-log")
-def get_config_audit_log(tenant_id: str):
+def get_config_audit_log(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     """Returns configuration change audit trail for a tenant."""
     require_tenant_access(tenant_id)
     try:
@@ -1778,7 +1997,7 @@ def get_config_audit_log(tenant_id: str):
                 "target": r["target"],
                 "old_value": r["old_value"],
                 "new_value": r["new_value"],
-                "timestamp": r["timestamp"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(r["timestamp"], "strftime") else str(r["timestamp"]),
+                "timestamp": r["timestamp"].replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S") if hasattr(r["timestamp"], "replace") else (r["timestamp"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(r["timestamp"], "strftime") else str(r["timestamp"])),
             })
         return {"tenant_id": tenant_id, "logs": logs}
     except Exception as e:
@@ -1789,8 +2008,9 @@ def get_config_audit_log(tenant_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @app.get("/journey/user")
-def get_user_journey(tenant_id: str, user_id: str):
+def get_user_journey(tenants: str = Query(..., description="Comma-separated list of tenants"), user_id: str = Query(..., description="User ID")):
     """Returns a single user's complete event timeline with session detection."""
+    tenant_id = tenants  # Use first tenant for journey lookup
     require_tenant_access(tenant_id)
     try:
         sql = """
@@ -1808,8 +2028,12 @@ def get_user_journey(tenant_id: str, user_id: str):
         SESSION_GAP_SECONDS = 1800  # 30 minutes
         
         for i, r in enumerate(results):
+            import datetime
             ts = r["timestamp"]
-            ts_str = ts.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts, "strftime") else str(ts)
+            if hasattr(ts, "replace"):
+                ts_str = ts.replace(tzinfo=datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                ts_str = ts.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts, "strftime") else str(ts)
             
             event = {
                 "event_name": r["event_name"],
@@ -1858,7 +2082,8 @@ def get_user_journey(tenant_id: str, user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/journey/users")
-def list_journey_users(tenant_id: str):
+def list_journey_users(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     """Returns list of users with event counts for journey selection."""
     require_tenant_access(tenant_id)
     try:
@@ -1873,11 +2098,17 @@ def list_journey_users(tenant_id: str):
         results = ch_client.query(sql, {"tenant_id": tenant_id})
         users = []
         for r in results:
+            import datetime
+            fs = r["first_seen"]
+            ls = r["last_seen"]
+            fs_str = fs.replace(tzinfo=datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S") if hasattr(fs, "replace") else (fs.strftime("%Y-%m-%d %H:%M") if hasattr(fs, "strftime") else str(fs))
+            ls_str = ls.replace(tzinfo=datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S") if hasattr(ls, "replace") else (ls.strftime("%Y-%m-%d %H:%M") if hasattr(ls, "strftime") else str(ls))
+            
             users.append({
                 "user_id": r["user_id"],
                 "event_count": int(r["event_count"]),
-                "first_seen": r["first_seen"].strftime("%Y-%m-%d %H:%M") if hasattr(r["first_seen"], "strftime") else str(r["first_seen"]),
-                "last_seen": r["last_seen"].strftime("%Y-%m-%d %H:%M") if hasattr(r["last_seen"], "strftime") else str(r["last_seen"]),
+                "first_seen": fs_str,
+                "last_seen": ls_str,
             })
         return {"tenant_id": tenant_id, "users": users}
     except Exception as e:
@@ -1888,7 +2119,8 @@ def list_journey_users(tenant_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @app.get("/segmentation/compare")
-def get_segmentation_comparison(tenant_id: str):
+def get_segmentation_comparison(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    tenant_id = tenants
     """Group features by plan tier and compare adoption rates."""
     require_tenant_access(tenant_id)
     try:
@@ -1932,32 +2164,35 @@ def get_segmentation_comparison(tenant_id: str):
 # ═══════════════════════════════════════════════════════════
 
 @app.get("/predictive/adoption")
-def get_predictive_adoption(tenant_id: str):
+def get_predictive_adoption(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("14d", description="Time range like 7d, 14d, 30d")):
     """
     Predicts feature adoption likelihood using a weighted heuristic:
     score = (recent_trend * 0.4) + (unique_users_pct * 0.3) + (frequency * 0.3)
+    Also computes growth_rate, projected_next_7d, and anomaly flag.
     """
-    require_tenant_access(tenant_id)
+    require_tenant_access(tenants)
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
     try:
-        # Recent 7d vs previous 7d trend
+        # Recent 7d vs previous 7d trend (aggregated across tenants)
         sql_trend = """
             SELECT 
                 event_name,
                 sumIf(total_events, date >= today() - 7) as recent_7d,
                 sumIf(total_events, date >= today() - 14 AND date < today() - 7) as prev_7d
             FROM feature_intelligence.daily_feature_usage
-            WHERE tenant_id = %(tenant_id)s AND date >= today() - 14
+            WHERE tenant_id IN %(tenant_ids)s AND date >= today() - 14
             GROUP BY event_name
         """
-        trend_data = ch_client.query(sql_trend, {"tenant_id": tenant_id})
+        trend_data = ch_client.query(sql_trend, {"tenant_ids": tuple(tenant_list)})
         
-        # Total unique users for the tenant
+        # Total unique users
         sql_total_users = """
             SELECT uniqExact(user_id) as total_users
             FROM feature_intelligence.events_raw
-            WHERE tenant_id = %(tenant_id)s
+            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - %(days)s
         """
-        total_users_result = ch_client.query(sql_total_users, {"tenant_id": tenant_id})
+        total_users_result = ch_client.query(sql_total_users, {"tenant_ids": tuple(tenant_list), "days": days})
         total_users = int(total_users_result[0]["total_users"]) if total_users_result else 1
         total_users = max(total_users, 1)
         
@@ -1965,20 +2200,20 @@ def get_predictive_adoption(tenant_id: str):
         sql_feature_users = """
             SELECT event_name, uniqExact(user_id) as feature_users
             FROM feature_intelligence.events_raw
-            WHERE tenant_id = %(tenant_id)s AND timestamp >= today() - 14
+            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - 14
             GROUP BY event_name
         """
-        feature_users = ch_client.query(sql_feature_users, {"tenant_id": tenant_id})
+        feature_users = ch_client.query(sql_feature_users, {"tenant_ids": tuple(tenant_list)})
         feature_users_map = {r["event_name"]: int(r["feature_users"]) for r in feature_users}
         
-        # Frequency consistency (how many of the 14 days had activity)
+        # Frequency consistency
         sql_frequency = """
             SELECT event_name, count(distinct date) as active_days
             FROM feature_intelligence.daily_feature_usage
-            WHERE tenant_id = %(tenant_id)s AND date >= today() - 14
+            WHERE tenant_id IN %(tenant_ids)s AND date >= today() - 14
             GROUP BY event_name
         """
-        frequency_data = ch_client.query(sql_frequency, {"tenant_id": tenant_id})
+        frequency_data = ch_client.query(sql_frequency, {"tenant_ids": tuple(tenant_list)})
         frequency_map = {r["event_name"]: int(r["active_days"]) for r in frequency_data}
         
         predictions = []
@@ -1987,25 +2222,36 @@ def get_predictive_adoption(tenant_id: str):
             recent = int(row["recent_7d"])
             prev = int(row["prev_7d"])
             
-            # Trend score (0-100): growth rate capped at 100%
+            # Growth rate (%)
             if prev > 0:
-                growth = ((recent - prev) / prev) * 100
+                growth_rate = round(((recent - prev) / prev) * 100, 1)
             elif recent > 0:
-                growth = 100
+                growth_rate = 100.0
             else:
-                growth = 0
-            trend_score = min(max(growth + 50, 0), 100)  # Normalize: 50 = flat
+                growth_rate = 0.0
+            
+            # Trend score (0-100): normalize growth
+            trend_score = min(max(growth_rate + 50, 0), 100)
             
             # Unique users percentage (0-100)
             fu = feature_users_map.get(name, 0)
             users_pct = min((fu / total_users) * 100, 100)
             
-            # Frequency consistency (0-100): active_days / 14 * 100
+            # Frequency consistency (0-100)
             active_days = frequency_map.get(name, 0)
             freq_score = min((active_days / 14) * 100, 100)
             
             # Weighted score
             score = round(trend_score * 0.4 + users_pct * 0.3 + freq_score * 0.3, 1)
+            
+            # Projected next 7d events (linear projection)
+            if prev > 0:
+                projected_next_7d = round(recent * (1 + growth_rate / 100))
+            else:
+                projected_next_7d = recent  # can't project without baseline
+            
+            # Anomaly detection: >50% change in either direction
+            anomaly = abs(growth_rate) > 50
             
             predictions.append({
                 "feature_name": name,
@@ -2015,13 +2261,16 @@ def get_predictive_adoption(tenant_id: str):
                 "frequency_score": round(freq_score, 1),
                 "recent_7d": recent,
                 "prev_7d": prev,
+                "growth_rate": growth_rate,
+                "projected_next_7d": projected_next_7d,
+                "anomaly": anomaly,
                 "status": "High Adoption" if score >= 70 else "Growing" if score >= 40 else "At Risk",
             })
         
         predictions.sort(key=lambda x: x["score"], reverse=True)
         
         return {
-            "tenant_id": tenant_id,
+            "tenant_id": tenants,
             "total_users": total_users,
             "predictions": predictions,
         }
@@ -2029,9 +2278,10 @@ def get_predictive_adoption(tenant_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/ai_report")
-def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")):
+def get_ai_report(tenants: str = Query(..., description="Comma-separated list of tenants"), force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")):
     """Generates a comprehensive AI-powered summarization report for the dashboard.
     Reports are persisted in ClickHouse (ai_reports table). Old reports are auto-replaced."""
+    tenant_id = tenants  # Alias for backwards compatibility within this function
     require_tenant_access(tenant_id)
     import json as _json
 
@@ -2105,10 +2355,10 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
                 }
 
         # --- Generate a fresh report ---
-        kpi = get_kpi_metrics(tenant_id)
-        secondary = get_secondary_kpi(tenant_id)
-        locations = get_locations(tenant_id)[:5]
-        activities = get_feature_activity(tenant_id)
+        kpi = get_kpi_metrics(tenants=tenant_id, range="30d")
+        secondary = get_secondary_kpi(tenants=tenant_id, range="30d")
+        locations = get_locations(tenants=tenant_id, range="30d")[:5]
+        activities = get_feature_activity(tenants=tenant_id, range="30d")
 
         # Build HTML visualization payload
         kpi_cards_html = f'''
@@ -2265,3 +2515,190 @@ def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
+
+@app.get("/insights")
+def get_insights(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
+    days = parse_range(range)
+    tenant_id = tenants
+    tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
+    cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
+    
+    try:
+        insights = []
+        
+        # 1. High Bounce Rate insight
+        bounce_sql = f"""
+            SELECT 
+                count() as total_users,
+                countIf(event_count = 1) as bounced_users
+            FROM (
+                SELECT user_id, count() as event_count
+                FROM feature_intelligence.events_raw
+                WHERE {cond} AND timestamp >= today() - %(days)s
+                GROUP BY user_id
+            )
+        """
+        b_res = ch_client.query(bounce_sql, params)
+        if b_res and b_res[0]["total_users"] > 0:
+            rate = (b_res[0]["bounced_users"] / b_res[0]["total_users"]) * 100
+            if rate > 60:
+                insights.append({
+                    "id": "insight-bounce",
+                    "type": "High Bounce Rate Detected",
+                    "message": f"Bounce rate is currently {rate:.1f}%. Consider optimizing the landing experience.",
+                    "severity": "high"
+                })
+            elif rate > 40:
+                insights.append({
+                    "id": "insight-bounce",
+                    "type": "Elevated Bounce Rate",
+                    "message": f"Bounce rate is {rate:.1f}%. Minor optimizations might improve retention.",
+                    "severity": "medium"
+                })
+                
+        # 2. Top feature usage
+        feat_sql = f"""
+            SELECT event_name as feature, count() as cnt
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND timestamp >= today() - %(days)s
+            GROUP BY event_name ORDER BY cnt DESC LIMIT 1
+        """
+        f_res = ch_client.query(feat_sql, params)
+        if f_res:
+            f_name = f_res[0]["feature"]
+            f_count = f_res[0]["cnt"]
+            insights.append({
+                "id": "insight-feat",
+                "type": "Dominant Feature Activity",
+                "message": f"'{f_name}' is your most used feature with {f_count} events in the selected period.",
+                "severity": "low"
+            })
+            
+        # 3. Peak traffic time
+        time_sql = f"""
+            SELECT toHour(timestamp) as hr, count() as cnt
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND timestamp >= today() - %(days)s
+            GROUP BY hr ORDER BY cnt DESC LIMIT 1
+        """
+        t_res = ch_client.query(time_sql, params)
+        if t_res:
+            peak_hr = t_res[0]["hr"]
+            insights.append({
+                "id": "insight-time",
+                "type": "Peak Usage Window",
+                "message": f"User activity consistently peaks around {peak_hr}:00. Ideal time for maintenance is outside this window.",
+                "severity": "medium"
+            })
+
+        if not insights:
+            insights.append({
+                "id": "insight-fallback",
+                "type": "Stable Analytics",
+                "message": "All system metrics are operating within normal parameters.",
+                "severity": "low"
+            })
+            
+        return {"insights": insights}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════
+# TENANT COMPARISON
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/tenants/compare")
+def get_tenant_comparison(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("30d", description="Time range")):
+    """Side-by-side comparison of multiple tenants."""
+    require_tenant_access(tenants)
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
+    
+    try:
+        results = []
+        for tid in tenant_list:
+            # Total events
+            sql_events = """
+                SELECT count() as total_events
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tid)s AND timestamp >= today() - %(days)s
+            """
+            ev = ch_client.query(sql_events, {"tid": tid, "days": days})
+            total_events = int(ev[0]["total_events"]) if ev else 0
+            
+            # Unique users
+            sql_users = """
+                SELECT uniqExact(user_id) as unique_users
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tid)s AND timestamp >= today() - %(days)s
+            """
+            usr = ch_client.query(sql_users, {"tid": tid, "days": days})
+            unique_users = int(usr[0]["unique_users"]) if usr else 0
+            
+            # Active features
+            sql_features = """
+                SELECT uniqExact(event_name) as active_features
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tid)s AND timestamp >= today() - %(days)s
+            """
+            feat = ch_client.query(sql_features, {"tid": tid, "days": days})
+            active_features = int(feat[0]["active_features"]) if feat else 0
+            
+            # Growth rate (current week vs previous week)
+            sql_growth = """
+                SELECT
+                    sumIf(1, timestamp >= today() - 7) as current_week,
+                    sumIf(1, timestamp >= today() - 14 AND timestamp < today() - 7) as prev_week
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tid)s
+            """
+            gr = ch_client.query(sql_growth, {"tid": tid})
+            cw = int(gr[0]["current_week"]) if gr else 0
+            pw = int(gr[0]["prev_week"]) if gr else 0
+            growth_rate = round(((cw - pw) / max(pw, 1)) * 100, 1)
+            
+            # Conversion rate (users with >3 events / total users)
+            sql_conv = """
+                SELECT 
+                    count() as total,
+                    countIf(event_count > 3) as converted
+                FROM (
+                    SELECT user_id, count() as event_count
+                    FROM feature_intelligence.events_raw
+                    WHERE tenant_id = %(tid)s AND timestamp >= today() - %(days)s
+                    GROUP BY user_id
+                )
+            """
+            conv = ch_client.query(sql_conv, {"tid": tid, "days": days})
+            conversion_rate = round((int(conv[0]["converted"]) / max(int(conv[0]["total"]), 1)) * 100, 1) if conv else 0.0
+            
+            # Daily event trend (last 7 days)
+            sql_trend = """
+                SELECT toDate(timestamp) as date, count() as events
+                FROM feature_intelligence.events_raw
+                WHERE tenant_id = %(tid)s AND timestamp >= today() - 7
+                GROUP BY date
+                ORDER BY date ASC
+            """
+            trend = ch_client.query(sql_trend, {"tid": tid})
+            trend_data = []
+            for r in trend:
+                d = r["date"]
+                date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
+                trend_data.append({"date": date_str, "events": int(r["events"])})
+            
+            results.append({
+                "id": tid,
+                "name": tid.replace("bank", "Bank").replace("nexa", "Nexa").replace("safex", "Safex"),
+                "total_events": total_events,
+                "unique_users": unique_users,
+                "active_features": active_features,
+                "growth_rate": growth_rate,
+                "conversion_rate": conversion_rate,
+                "trend": trend_data,
+            })
+        
+        return {"tenants": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

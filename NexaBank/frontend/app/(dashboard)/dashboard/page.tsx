@@ -12,13 +12,21 @@ import axios from "axios"
 import { API_BASE_URL } from "@/lib/api"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useEventTracker } from "@/hooks/useEventTracker"
 
 export default function DashboardPage() {
+  const { track } = useEventTracker();
   const { userId, isAuth, isAuthLoading, globalAccounts, fetchGlobalAccounts } = UserData();
   const router = useRouter()
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview")
   const [transactions, setTransactions] = useState<any[]>([])
+
+  // Track page view on mount
+  useEffect(() => {
+    track('dashboard.page.view');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Accounts are auto-fetched in Auth() — just wait for them and load transactions
   useEffect(() => {
@@ -148,7 +156,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6" onValueChange={setActiveTab}>
+      <Tabs defaultValue="overview" className="space-y-6" onValueChange={(tab) => {
+          setActiveTab(tab);
+          track(tab === 'analytics' ? 'dashboard.analytics_tab.view' : 'dashboard.overview.view');
+        }}>
         <TabsList className="bg-violet-50/50 p-1 border border-violet-100 rounded-lg inline-flex">
           <TabsTrigger value="overview" className="rounded-md cursor-pointer data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-violet-700">Overview</TabsTrigger>
           <TabsTrigger value="analytics" className="rounded-md cursor-pointer data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-violet-700">Analytics</TabsTrigger>

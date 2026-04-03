@@ -43,8 +43,8 @@ export default function SettingsPage() {
                   <td className="px-4 py-3 text-gray-900 font-medium">{config.featureName}</td>
                   <td className="px-4 py-3 capitalize">{config.category}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${config.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${config.isActive ? 'bg-emerald-500' : 'bg-gray-400'}`}></span>
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${config.isActive ? 'bg-white text-gray-700 border border-gray-200' : 'bg-white text-gray-500 border border-gray-200'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${config.isActive ? 'bg-[#1a73e8]' : 'bg-gray-400'}`}></span>
                       {config.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>

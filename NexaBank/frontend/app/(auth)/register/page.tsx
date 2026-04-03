@@ -11,7 +11,7 @@ export default function RegisterPage() {
   const { track } = useEventTracker();
 
   useEffect(() => {
-    track('auth.register.view');
+    track('register.page.view');
   }, [track]);
   return (
     <UserProvider>

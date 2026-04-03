@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import axios from 'axios';
 import { API_BASE_URL } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
+import { useEventTracker } from '@/hooks/useEventTracker';
 
 interface OpenAccountModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface OpenAccountModalProps {
 }
 
 const OpenAccountModal = ({ isOpen, onClose, userId, onSuccess }: OpenAccountModalProps) => {
+  const { measureAndTrack } = useEventTracker();
   const [accountType, setAccountType] = useState('SAVINGS');
   const [ifsc, setIfsc] = useState('SFXB0000123');
   const [initialDeposit, setInitialDeposit] = useState('1000');
@@ -29,16 +31,18 @@ const OpenAccountModal = ({ isOpen, onClose, userId, onSuccess }: OpenAccountMod
     
     setIsLoading(true);
     try {
-      await axios.post(
-        `${API_BASE_URL}/accounts`,
-        {
-          customerId: userId,
-          ifsc: ifsc,
-          accountType: accountType,
-          balance: parseFloat(initialDeposit) || 0
-        },
-        { withCredentials: true }
-      );
+      await measureAndTrack('accounts.open_account', async () => {
+        await axios.post(
+          `${API_BASE_URL}/accounts`,
+          {
+            customerId: userId,
+            ifsc: ifsc,
+            accountType: accountType,
+            balance: parseFloat(initialDeposit) || 0
+          },
+          { withCredentials: true }
+        );
+      });
       
       toast.success('Account created successfully 🎉');
       onSuccess();

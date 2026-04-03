@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { AIInsight } from '@/types';
@@ -43,12 +44,12 @@ type FocusArea = {
 };
 
 const FOCUS_AREAS: FocusArea[] = [
-  { label: 'Onboarding', colorClass: 'bg-sky-500', keywords: ['onboarding', 'signup', 'first session', 'new user'] },
-  { label: 'Activation', colorClass: 'bg-indigo-500', keywords: ['activation', 'first value', 'adoption', 'discoverability'] },
-  { label: 'Engagement', colorClass: 'bg-emerald-500', keywords: ['engagement', 'session', 'feature usage', 'interaction'] },
-  { label: 'Conversion', colorClass: 'bg-amber-500', keywords: ['conversion', 'drop-off', 'funnel', 'completion'] },
-  { label: 'Retention', colorClass: 'bg-rose-500', keywords: ['retention', 'churn', 'stickiness', 'returning users'] },
-  { label: 'Trust', colorClass: 'bg-teal-500', keywords: ['trust', 'transparency', 'security', 'compliance'] },
+  { label: 'Onboarding', colorClass: 'bg-[#1a73e8]', keywords: ['onboarding', 'signup', 'first session', 'new user'] },
+  { label: 'Activation', colorClass: 'bg-[#4285F4]', keywords: ['activation', 'first value', 'adoption', 'discoverability'] },
+  { label: 'Engagement', colorClass: 'bg-gray-400', keywords: ['engagement', 'session', 'feature usage', 'interaction'] },
+  { label: 'Conversion', colorClass: 'bg-gray-500', keywords: ['conversion', 'drop-off', 'funnel', 'completion'] },
+  { label: 'Retention', colorClass: 'bg-gray-600', keywords: ['retention', 'churn', 'stickiness', 'returning users'] },
+  { label: 'Trust', colorClass: 'bg-[#8AB4F8]', keywords: ['trust', 'transparency', 'security', 'compliance'] },
 ];
 
 function countMatches(text: string, keywords: string[]) {
@@ -110,36 +111,24 @@ function extractStrategicBullets(md: string): string[] {
 }
 
 export default function AIReportPage() {
-  const { selectedTenant } = useDashboardData();
-  const tenantId = selectedTenant || 'nexabank';
-  const [report, setReport] = useState<string>('');
-  const [insights, setInsights] = useState<AIInsight[]>([]);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const [cached, setCached] = useState<boolean>(true);
-  const [loading, setLoading] = useState<boolean>(true);
+  const { tenantsParam, selectedTenants } = useDashboardData();
+  const queryClient = useQueryClient();
   const [generating, setGenerating] = useState<boolean>(false);
 
-  const loadLatestReport = useCallback(async () => {
-    setLoading(true);
-    const snapshot = await dashboardAPI.getLatestAIReport(tenantId);
-    setReport(snapshot.report || '');
-    setInsights((snapshot.insights || []) as AIInsight[]);
-    setGeneratedAt(snapshot.generated_at || null);
-    setCached(Boolean(snapshot.cached));
-    setLoading(false);
-  }, [tenantId]);
+  const { data = {} as any, isLoading: loading, refetch } = useQuery({
+    queryKey: ['aiReport', tenantsParam],
+    queryFn: () => dashboardAPI.getLatestAIReport(tenantsParam),
+  });
 
-  useEffect(() => {
-    loadLatestReport();
-  }, [loadLatestReport]);
+  const report = data.report || '';
+  const insights = (data.insights || []) as AIInsight[];
+  const generatedAt = data.generated_at || null;
+  const cached = Boolean(data.cached);
 
   const handleGenerate = async () => {
     setGenerating(true);
-    const snapshot = await dashboardAPI.generateAIReport(tenantId);
-    setReport(snapshot.report || '');
-    setInsights((snapshot.insights || []) as AIInsight[]);
-    setGeneratedAt(snapshot.generated_at || null);
-    setCached(Boolean(snapshot.cached));
+    const snapshot = await dashboardAPI.generateAIReport(tenantsParam);
+    queryClient.setQueryData(['aiReport', tenantsParam], snapshot);
     setGenerating(false);
   };
 
@@ -184,7 +173,7 @@ export default function AIReportPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={loadLatestReport}
+            onClick={() => refetch()}
             className="flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
           >
             <Clock3 className="mr-2 h-4 w-4" />
@@ -208,7 +197,7 @@ export default function AIReportPage() {
         </div>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm print:hidden">
+      <section className="rounded-2xl border-gray-200 border bg-white p-5 shadow-sm print:hidden">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Executive Snapshot</h3>
             <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -232,7 +221,7 @@ export default function AIReportPage() {
             <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                  <TrendingUp className="h-4 w-4 text-[#1a73e8]" />
                   Focus Distribution
                 </div>
                 <div className="space-y-3">
@@ -252,7 +241,7 @@ export default function AIReportPage() {
 
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                  <Lightbulb className="h-4 w-4 text-amber-500" /> Potential Product Ideas
+                  <Lightbulb className="h-4 w-4 text-gray-500" /> Potential Product Ideas
                 </h3>
                 <div className="mt-3 space-y-2">
                   {potentialIdeas.map((idea, index) => (
@@ -276,7 +265,7 @@ export default function AIReportPage() {
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm print:border-0 print:shadow-none w-full min-h-[500px] p-10 print:p-0">
         <div className="mb-8 border-b border-slate-100 pb-5 print:hidden">
           <h2 className="text-2xl font-semibold leading-none tracking-tight">Detailed Analytics Summary</h2>
-          <p className="text-sm text-gray-500 mt-2">Generated for {tenantId.toUpperCase()}</p>
+          <p className="text-sm text-gray-500 mt-2">Generated for {selectedTenants.join(', ').toUpperCase()}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
             <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1">
               {cached ? 'Last saved snapshot' : 'Freshly generated'}
@@ -286,7 +275,7 @@ export default function AIReportPage() {
                 {new Date(generatedAt).toLocaleString()}
               </span>
             )}
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">
+            <span className="rounded-full border border-[#1a73e8]/20 bg-[#1a73e8]/10 px-2.5 py-1 text-[#1a73e8]">
               <ShieldCheck className="mr-1 inline h-3 w-3" /> Product-grade report view
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
@@ -318,23 +307,23 @@ export default function AIReportPage() {
               </section>
 
               <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 not-prose">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <h4 className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Key Takeaways</h4>
-                  <ul className="mt-3 space-y-2 text-sm text-emerald-900">
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm border-t-4 border-t-[#1a73e8]">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-700">Key Takeaways</h4>
+                  <ul className="mt-3 space-y-2 text-sm text-gray-800">
                     {strategicBullets.slice(0, 3).map((item) => (
                       <li key={item} className="flex items-start gap-2">
-                        <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                        <span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#1a73e8]" />
                         <span>{item}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
-                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                  <h4 className="text-sm font-semibold uppercase tracking-wide text-indigo-700">Next 7-Day Action Plan</h4>
-                  <ul className="mt-3 space-y-2 text-sm text-indigo-900">
-                    <li className="flex items-start gap-2"><span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-indigo-600" />Prioritize the single highest-friction funnel stage.</li>
-                    <li className="flex items-start gap-2"><span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-indigo-600" />Ship one onboarding clarity improvement for first-session users.</li>
-                    <li className="flex items-start gap-2"><span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-indigo-600" />Track cohort retention impact and compare week-over-week.</li>
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm border-t-4 border-t-[#1a73e8]">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-700">Next 7-Day Action Plan</h4>
+                  <ul className="mt-3 space-y-2 text-sm text-gray-800">
+                    <li className="flex items-start gap-2"><span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#4285F4]" />Prioritize the single highest-friction funnel stage.</li>
+                    <li className="flex items-start gap-2"><span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#4285F4]" />Ship one onboarding clarity improvement for first-session users.</li>
+                    <li className="flex items-start gap-2"><span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#4285F4]" />Track cohort retention impact and compare week-over-week.</li>
                   </ul>
                 </div>
               </section>
@@ -363,7 +352,7 @@ export default function AIReportPage() {
       <div className="hidden print:block mb-10 border-b-2 border-slate-900 pb-6">
         <h1 className="text-5xl font-black text-black tracking-tight">NexaBank Analytics</h1>
         <h2 className="text-2xl mt-4 font-semibold text-slate-700">Strategic Critical Analysis & Insights</h2>
-        <p className="mt-2 text-base text-slate-600 font-medium">Target Tenant: {tenantId.toUpperCase()}</p>
+        <p className="mt-2 text-base text-slate-600 font-medium">Target Tenant: {selectedTenants.join(', ').toUpperCase()}</p>
         <p className="text-base text-slate-600 font-medium">Generated on: {new Date().toLocaleDateString()}</p>
       </div>
     </div>

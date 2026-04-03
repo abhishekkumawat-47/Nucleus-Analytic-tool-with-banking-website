@@ -26,6 +26,7 @@ import axios from "axios"
 import { API_BASE_URL } from "@/lib/api"
 import { UserData } from "@/components/context/UserContext"
 import { cn } from "@/lib/utils"
+import { useEventTracker } from "@/hooks/useEventTracker"
 
 interface ApplyLoanFormProps {
   userId: string
@@ -42,6 +43,7 @@ const interestRates: Record<string, number> = {
 
 export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" }: ApplyLoanFormProps) {
   const { pan } = UserData()
+  const { track, measureAndTrack } = useEventTracker()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   
@@ -74,6 +76,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
       toast.error("Please fill in all details to proceed.");
       return;
     }
+    if (step === 1) track('loans.proceed_to_kyc.success');
     setStep(s => s + 1)
   }
   
@@ -82,19 +85,21 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
   const handleApply = async () => {
     setLoading(true)
     try {
-      await axios.post(`${API_BASE_URL}/apply`, {
-        customerId: userId,
-        loanType: formData.loanType,
-        principalAmount: Number(formData.amount),
-        term: Number(formData.term),
-        interestRate: interestRates[formData.loanType],
-        kycData: {
-          pan: formData.pan,
-          aadhaar: formData.aadhaar,
-          income: formData.income,
-          employment: formData.employment
-        }
-      }, { withCredentials: true })
+      await measureAndTrack('loans.submit_application', async () => {
+        await axios.post(`${API_BASE_URL}/apply`, {
+          customerId: userId,
+          loanType: formData.loanType,
+          principalAmount: Number(formData.amount),
+          term: Number(formData.term),
+          interestRate: interestRates[formData.loanType],
+          kycData: {
+            pan: formData.pan,
+            aadhaar: formData.aadhaar,
+            income: formData.income,
+            employment: formData.employment
+          }
+        }, { withCredentials: true });
+      });
 
       toast.success("Application submitted! Our team will review it shortly.")
       onSuccess()

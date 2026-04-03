@@ -1,0 +1,32 @@
+154: def get_available_tenants():
+200: def get_feature_usage(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+307: def compare_tenants(feature: str = Query(..., description="Feature event to compare adoption across tenants")):
+329: def get_insights(tenants: str = Query(..., description="Comma-separated list of tenants")):
+368: def get_kpi_metrics(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+496: def get_secondary_kpi(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+646: def get_traffic_data(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+690: def get_feature_usage_series(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+731: def get_feature_heatmap(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+830: def get_all_tenants(tenant_id: Optional[str] = None):
+877: def get_device_breakdown(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+942: def get_acquisition_channels(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+1047: def get_locations(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+1114: def get_audit_logs(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+1168: def get_realtime_users(tenants: str = Query(..., description="Comma-separated list of tenants")):
+1196: def get_pages_per_minute(tenants: str = Query(..., description="Comma-separated list of tenants")):
+1234: def get_top_pages(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+1309: def get_feature_activity(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+1351: def get_feature_heatmap(tenant_id: str = Query(..., description="Comma-separated list of tenants for comparison, or single tenant id.")):
+1457: def get_feature_configs(tenants: str = Query(..., description="Comma-separated list of tenants")):
+1490: def get_retention(tenant_id: str, days: int = Query(7, ge=1, le=365)):
+1620: def get_admin_app_summary(tenants: str = Query(..., description="Comma-separated list of tenants")):
+1630: def get_transparency_data(tenants: str = Query(..., description="Comma-separated list of tenants")):
+1671: def get_license_usage(tenants: str = Query(..., description="Comma-separated list of tenants")):
+1948: def get_tracking_toggles(tenants: str = Query(..., description="Comma-separated list of tenants")):
+2012: def get_config_audit_log(tenants: str = Query(..., description="Comma-separated list of tenants")):
+2044: def get_user_journey(tenant_id: str, user_id: str):
+2117: def list_journey_users(tenants: str = Query(..., description="Comma-separated list of tenants")):
+2154: def get_segmentation_comparison(tenants: str = Query(..., description="Comma-separated list of tenants")):
+2199: def get_predictive_adoption(tenants: str = Query(..., description="Comma-separated list of tenants")):
+2297: def get_ai_report(tenant_id: str, force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")):
+2535: def get_insights(tenant_id: str, days: int = Query(7, ge=1, le=365)):

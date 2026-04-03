@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { Search, User, Clock, ArrowDown, AlertCircle, Loader2 } from 'lucide-react';
@@ -8,37 +9,32 @@ import ChartContainer from '@/components/ChartContainer';
 import { TableSkeleton, ChartSkeleton } from '@/components/Skeletons';
 
 export default function UserJourneyPage() {
-  const { selectedTenant } = useDashboardData();
-  const tenantId = selectedTenant || 'nexabank';
-  const [users, setUsers] = useState<any[]>([]);
+  const { tenantsParam } = useDashboardData();
   const [selectedUser, setSelectedUser] = useState<string>('');
-  const [journey, setJourney] = useState<any>(null);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [loadingJourney, setLoadingJourney] = useState(false);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      setLoadingUsers(true);
-      const result = await dashboardAPI.getJourneyUsers(tenantId);
-      setUsers(result.users || []);
-      setLoadingUsers(false);
-    };
-    fetchUsers();
-  }, [tenantId]);
+  const { data: usersData, isLoading: loadingUsers } = useQuery({
+    queryKey: ['journeyUsers', tenantsParam],
+    queryFn: () => dashboardAPI.getJourneyUsers(tenantsParam),
+  });
 
-  const loadJourney = async (userId: string) => {
+  const { data: journeyData, isLoading: loadingJourney } = useQuery({
+    queryKey: ['userJourney', tenantsParam, selectedUser],
+    queryFn: () => dashboardAPI.getUserJourney(tenantsParam, selectedUser),
+    enabled: !!selectedUser,
+  });
+
+  const users = usersData?.users || [];
+  const journey = journeyData || null;
+
+  const loadJourney = (userId: string) => {
     setSelectedUser(userId);
-    setLoadingJourney(true);
-    const result = await dashboardAPI.getUserJourney(tenantId, userId);
-    setJourney(result);
-    setLoadingJourney(false);
   };
 
   const channelColors: Record<string, string> = {
-    web: 'bg-blue-100 text-blue-700',
-    mobile: 'bg-green-100 text-green-700',
-    api: 'bg-purple-100 text-purple-700',
-    batch: 'bg-gray-100 text-gray-700',
+    web: 'border border-gray-200 bg-white text-gray-700',
+    mobile: 'border border-gray-200 bg-white text-gray-700',
+    api: 'border border-gray-200 bg-white text-gray-700',
+    batch: 'border border-gray-200 bg-white text-gray-700',
   };
 
   return (
@@ -97,14 +93,14 @@ export default function UserJourneyPage() {
               <div className="mt-4">
                 {/* Stats */}
                 <div className="flex gap-4 mb-6">
-                  <div className="px-4 py-2 bg-blue-50 rounded-lg text-sm">
-                    <span className="text-gray-500">Events:</span> <span className="font-bold text-blue-700">{journey?.total_events}</span>
+                  <div className="px-4 py-2 border border-[#1a73e8] bg-[#1a73e8]/5 rounded-lg text-sm">
+                    <span className="text-gray-500">Events:</span> <span className="font-bold text-[#1a73e8]">{journey?.total_events}</span>
                   </div>
-                  <div className="px-4 py-2 bg-green-50 rounded-lg text-sm">
-                    <span className="text-gray-500">Sessions:</span> <span className="font-bold text-green-700">{journey?.total_sessions}</span>
+                  <div className="px-4 py-2 border border-[#1a73e8] bg-[#1a73e8]/5 rounded-lg text-sm">
+                    <span className="text-gray-500">Sessions:</span> <span className="font-bold text-[#1a73e8]">{journey?.total_sessions}</span>
                   </div>
-                  <div className="px-4 py-2 bg-amber-50 rounded-lg text-sm">
-                    <span className="text-gray-500">Last Event:</span> <span className="font-bold text-amber-700">{journey?.last_event || 'N/A'}</span>
+                  <div className="px-4 py-2 border border-blue-200 bg-white rounded-lg text-sm">
+                    <span className="text-gray-500">Last Event:</span> <span className="font-bold text-gray-700">{journey?.last_event || 'N/A'}</span>
                   </div>
                 </div>
 
@@ -114,8 +110,8 @@ export default function UserJourneyPage() {
                     <div key={sIdx}>
                       {/* Session Header */}
                       <div className="relative mb-4 -ml-[25px] flex items-center gap-2">
-                        <div className="w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow z-10"></div>
-                        <span className="text-xs font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded">Session {sIdx + 1}</span>
+                        <div className="w-4 h-4 bg-[#1a73e8] rounded-full border-2 border-white shadow z-10"></div>
+                        <span className="text-xs font-bold text-[#1a73e8] uppercase tracking-wider bg-white border border-[#1a73e8]/30 px-2 py-0.5 rounded">Session {sIdx + 1}</span>
                       </div>
                       
                       {session.map((evt: any, eIdx: number) => (
@@ -139,10 +135,10 @@ export default function UserJourneyPage() {
                       {/* Session Break */}
                       {sIdx < (journey?.sessions || []).length - 1 && (
                         <div className="relative mb-4 -ml-[25px] flex items-center gap-2">
-                          <div className="w-4 h-4 bg-amber-500 rounded-full border-2 border-white shadow z-10 flex items-center justify-center">
+                          <div className="w-4 h-4 bg-gray-500 rounded-full border-2 border-white shadow z-10 flex items-center justify-center">
                             <AlertCircle className="h-3 w-3 text-white" />
                           </div>
-                          <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded">Session Break (30+ min gap)</span>
+                          <span className="text-xs font-medium text-gray-600 border border-gray-200 bg-white px-2 py-0.5 rounded">Session Break (30+ min gap)</span>
                         </div>
                       )}
                     </div>
@@ -151,8 +147,8 @@ export default function UserJourneyPage() {
                   {/* Drop-off */}
                   {journey?.last_event && (
                     <div className="relative -ml-[25px] flex items-center gap-2 mt-2">
-                      <div className="w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow z-10"></div>
-                      <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">
+                      <div className="w-4 h-4 bg-gray-400 rounded-full border-2 border-white shadow z-10"></div>
+                      <span className="text-xs font-bold text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded">
                         Drop-off → Last action: {journey.last_event}
                       </span>
                     </div>

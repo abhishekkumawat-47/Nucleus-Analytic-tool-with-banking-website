@@ -63,10 +63,10 @@ const PayeeCardSkeleton = memo(() => (
 PayeeCardSkeleton.displayName = "PayeeCardSkeleton"
 
 export default function PayeesPage() {
-  const { track } = useEventTracker();
+  const { track, measureAndTrack } = useEventTracker();
   
   useEffect(() => {
-    track('core.payees.view');
+    track('payees.page.view');
   }, [track]);
 
   const [searchTerm, setSearchTerm] = useState("")
@@ -157,6 +157,7 @@ export default function PayeesPage() {
     const delayDebounceFn = setTimeout(() => {
       if (searchQuery.length > 2) {
         setIsSearching(true)
+        track('payees.search_payee.success', { searchQuery });
         axios.get(`${API_BASE_URL}/payees/search?q=${searchQuery}`, { withCredentials: true })
           .then(res => {
             // Filter out user's own accounts
@@ -197,7 +198,9 @@ export default function PayeesPage() {
     if (newPayee.name && newPayee.payeeAccNo && newPayee.ifsc) {
       if (!userId) return toast.error("User context missing");
       try {
-        await AddPayeeById(userId, newPayee.name, newPayee.ifsc, newPayee.payeeAccNo, newPayee.payeeType)
+        await measureAndTrack('payees.add_payee', async () => {
+          await AddPayeeById(userId, newPayee.name, newPayee.ifsc, newPayee.payeeAccNo, newPayee.payeeType);
+        });
         setNewPayee({ name: "", payeeAccNo: "", payeeType: "OTHERS", ifsc: "" })
         setIsAddPayeeOpen(false)
         fetchPayees(userId)
@@ -214,7 +217,9 @@ export default function PayeesPage() {
   const handleEditPayee = async (updatedPayee: { name: string; payeeAccNo: string; ifsc: string; payeeType: string }) => {
     if (!userId) return;
     try {
-      await EditPayee(userId, updatedPayee.name, updatedPayee.ifsc, updatedPayee.payeeAccNo, updatedPayee.payeeType)
+      await measureAndTrack('payees.edit_payee', async () => {
+        await EditPayee(userId, updatedPayee.name, updatedPayee.ifsc, updatedPayee.payeeAccNo, updatedPayee.payeeType);
+      });
       fetchPayees(userId)
       setIsEditPayeeOpen(false)
       toast.success("Payee updated successfully!");
@@ -227,7 +232,9 @@ export default function PayeesPage() {
   const handleDeletePayee = async (delPayeeAccNo: string) => {
     if (!userId) return;
     try {
-      await DeletePayee(userId, delPayeeAccNo)
+      await measureAndTrack('payees.remove_payee', async () => {
+        await DeletePayee(userId, delPayeeAccNo);
+      });
       fetchPayees(userId)
       toast.success("Payee deleted");
     } catch (error) {
@@ -264,7 +271,10 @@ export default function PayeesPage() {
 
   const handleCopyAccNo = (accNo: string) => {
     navigator.clipboard.writeText(accNo).then(
-      () => toast.success("Account number copied to clipboard"),
+      () => {
+        toast.success("Account number copied to clipboard");
+        track('payees.copy_account_number.success');
+      },
       () => toast.error("Failed to copy")
     );
   };

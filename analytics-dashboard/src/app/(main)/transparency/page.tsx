@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
@@ -142,22 +143,23 @@ const dataCategories = [
 ];
 
 const sensitivityConfig = {
-  critical: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500' },
-  high: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-500' },
-  medium: { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500' },
-  low: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  critical: { bg: 'bg-white', text: 'text-gray-800', border: 'border-gray-300', dot: 'bg-gray-500' },
+  high: { bg: 'bg-white', text: 'text-gray-600', border: 'border-gray-300', dot: 'bg-gray-400' },
+  medium: { bg: 'bg-white', text: 'text-gray-500', border: 'border-gray-200', dot: 'bg-gray-300' },
+  low: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' },
 };
 
 export default function TransparencyPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('on-prem');
-  const [rawAdminSummary, setRawAdminSummary] = useState<{
-    total_tenants: number;
-    total_events: number;
-    top_tenants: any[];
-  } | null>(null);
-  const [adminLoading, setAdminLoading] = useState(false);
+  const { data: rawAdminSummaryData, isLoading: adminLoading } = useQuery({
+    queryKey: ['adminSummary'],
+    queryFn: () => dashboardAPI.getAdminSummary(),
+    enabled: viewMode === 'cloud',
+  });
+  
+  const rawAdminSummary = rawAdminSummaryData || null;
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const { selectedTenant } = useAppSelector((state) => state.dashboard);
+  const { selectedTenants, tenantsParam } = useDashboardData();
   const { data: session } = useSession();
 
   const userRole = session?.user?.role || 'user';
@@ -166,20 +168,6 @@ export default function TransparencyPage() {
   // Full dashboard data for on-prem view
   const dashboardData = useDashboardData();
 
-  // Fetch cloud admin summary when switching to cloud mode
-  useEffect(() => {
-    if (viewMode === 'cloud' && !rawAdminSummary) {
-      setAdminLoading(true);
-      dashboardAPI
-        .getAdminSummary()
-        .then((res) => {
-          setRawAdminSummary(res);
-          setAdminLoading(false);
-        })
-        .catch(() => setAdminLoading(false));
-    }
-  }, [viewMode, rawAdminSummary]);
-
   /**
    * For App Admins: filter the admin summary to only show their own tenant.
    * This ensures an App Admin cannot see other tenants' data in the cloud preview.
@@ -187,13 +175,13 @@ export default function TransparencyPage() {
    */
   const adminSummary = useMemo(() => {
     if (!rawAdminSummary) return null;
-    if (!isAppAdmin || !selectedTenant) return rawAdminSummary;
+    if (!isAppAdmin || !selectedTenants || selectedTenants.length === 0) return rawAdminSummary;
 
     const myTenants = rawAdminSummary.top_tenants.filter(
       (t: any) =>
-        t.id === selectedTenant ||
-        t.name?.toLowerCase() === selectedTenant.toLowerCase() ||
-        t.tenant_id === selectedTenant
+        tenantsParam.includes(t.id) ||
+        tenantsParam.some((tid: string) => t.name?.toLowerCase() === tid.toLowerCase()) ||
+        tenantsParam.includes(t.tenant_id)
     );
 
     const myTotalEvents = myTenants.reduce(
@@ -206,7 +194,7 @@ export default function TransparencyPage() {
       total_events: myTotalEvents,
       top_tenants: myTenants,
     };
-  }, [rawAdminSummary, isAppAdmin, selectedTenant]);
+  }, [rawAdminSummary, isAppAdmin, tenantsParam]);
 
   const cloudVisibleCount = dataCategories.filter((c) => c.cloudVisible).length;
   const blockedCount = dataCategories.filter((c) => !c.cloudVisible).length;
@@ -222,14 +210,14 @@ export default function TransparencyPage() {
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
-              <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl text-white shadow-md shadow-blue-200">
+              <div className="p-2 bg-[#1a73e8]/10 rounded-xl text-[#1a73e8] border border-[#1a73e8]/20 shadow-sm">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               Trust & Transparency
             </h1>
             <p className="text-gray-500 text-sm mt-2 max-w-xl leading-relaxed">
                {isAppAdmin
-                 ? `Audit exactly what data the Super Admin can access about your app (${selectedTenant}) vs. what stays private on your infrastructure.`
+                 ? `Audit exactly what data the Super Admin can access about your app (${selectedTenants.join(', ')}) vs. what stays private on your infrastructure.`
                  : 'Audit exactly what data the Super Admin can access vs. what stays private on your infrastructure. Toggle between views to compare.'}
             </p>
           </div>
@@ -245,12 +233,12 @@ export default function TransparencyPage() {
               }`}
               id="toggle-on-prem"
             >
-              <Server className={`w-4 h-4 transition-colors ${viewMode === 'on-prem' ? 'text-emerald-600' : ''}`} />
+              <Server className={`w-4 h-4 transition-colors ${viewMode === 'on-prem' ? 'text-[#1a73e8]' : ''}`} />
               On-Prem
               {viewMode === 'on-prem' && (
                 <span className="flex h-2 w-2 relative ml-1">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1a73e8]"></span>
                 </span>
               )}
             </button>
@@ -278,8 +266,8 @@ export default function TransparencyPage() {
         {/* ═══════════ STATS BAR ═══════════ */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Layers className="w-4 h-4 text-blue-600" />
+            <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
+              <Layers className="w-4 h-4 text-gray-600" />
             </div>
             <div>
               <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Total Categories</p>
@@ -287,61 +275,61 @@ export default function TransparencyPage() {
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className="p-2 bg-emerald-50 rounded-lg">
-              <Eye className="w-4 h-4 text-emerald-600" />
+            <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
+              <Eye className="w-4 h-4 text-gray-600" />
             </div>
             <div>
               <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Cloud Visible</p>
-              <p className="text-lg font-bold text-emerald-700">{cloudVisibleCount}</p>
+              <p className="text-lg font-bold text-gray-900">{cloudVisibleCount}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className="p-2 bg-red-50 rounded-lg">
-              <Lock className="w-4 h-4 text-red-500" />
+            <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
+              <Lock className="w-4 h-4 text-gray-600" />
             </div>
             <div>
               <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Blocked</p>
-              <p className="text-lg font-bold text-red-600">{blockedCount}</p>
+              <p className="text-lg font-bold text-gray-900">{blockedCount}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className="p-2 bg-indigo-50 rounded-lg">
-              <Shield className="w-4 h-4 text-indigo-600" />
+            <div className="p-2 bg-[#1a73e8]/10 border border-[#1a73e8]/20 rounded-lg">
+              <Shield className="w-4 h-4 text-[#1a73e8]" />
             </div>
             <div>
-              <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Privacy Score</p>
-              <p className="text-lg font-bold text-indigo-700">{Math.round((blockedCount / dataCategories.length) * 100)}%</p>
+              <p className="text-[11px] text-[#1a73e8] font-medium uppercase tracking-wider">Privacy Score</p>
+              <p className="text-lg font-bold text-[#1a73e8]">{Math.round((blockedCount / dataCategories.length) * 100)}%</p>
             </div>
           </div>
         </div>
 
         {/* ═══════════ STATUS BANNER ═══════════ */}
         {viewMode === 'on-prem' ? (
-          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4">
-            <div className="p-3 bg-emerald-100 rounded-xl flex-shrink-0">
-              <Lock className="w-5 h-5 text-emerald-700" />
+          <div className="bg-white border-l-4 border-l-[#1a73e8] border border-gray-200 rounded-2xl p-5 flex items-start gap-4">
+            <div className="p-3 bg-[#1a73e8]/10 rounded-xl flex-shrink-0">
+              <Lock className="w-5 h-5 text-[#1a73e8]" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                 On-Premise Mode — Full Data Access
                 <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1a73e8]"></span>
                 </span>
               </h3>
-              <p className="text-xs text-emerald-700 mt-1.5 leading-relaxed">
+              <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
                 You are viewing the <strong>complete analytics dashboard</strong> as it exists on your infrastructure.
                 All data below is stored locally and <strong>never leaves your premises</strong>.
                 The Super Admin has <strong>zero visibility</strong> into any of this data.
               </p>
             </div>
-            <div className="hidden sm:flex items-center gap-2 bg-emerald-100 px-3 py-1.5 rounded-lg flex-shrink-0">
-              <Server className="w-3.5 h-3.5 text-emerald-700" />
-              <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Private</span>
+            <div className="hidden sm:flex items-center gap-2 bg-[#1a73e8]/5 px-3 py-1.5 rounded-lg flex-shrink-0 border border-[#1a73e8]/20">
+              <Server className="w-3.5 h-3.5 text-[#1a73e8]" />
+              <span className="text-[11px] font-bold text-[#1a73e8] uppercase tracking-wider">Private</span>
             </div>
           </div>
         ) : (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 flex items-start gap-4">
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 flex items-start gap-4">
             <div className="p-3 bg-blue-100 rounded-xl flex-shrink-0">
               <Cloud className="w-5 h-5 text-blue-700" />
             </div>
@@ -375,7 +363,7 @@ export default function TransparencyPage() {
           <div className="flex items-center justify-center gap-4 sm:gap-8 flex-wrap">
             {/* Your App */}
             <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <div className="w-16 h-16 bg-[#1a73e8] rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
                 <Database className="w-7 h-7 text-white" />
               </div>
               <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">Your App</span>
@@ -385,36 +373,36 @@ export default function TransparencyPage() {
 
             {/* On-Prem Server */}
             <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
+              <div className="w-16 h-16 bg-gray-700 rounded-2xl flex items-center justify-center shadow-lg shadow-gray-200">
                 <Server className="w-7 h-7 text-white" />
               </div>
               <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">On-Prem</span>
-              <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">All {dataCategories.length} categories</span>
+              <span className="text-[10px] text-gray-600 font-semibold bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full">All {dataCategories.length} categories</span>
             </div>
 
             <div className="flex flex-col items-center gap-1">
               <ArrowRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
-              <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
-                <Shield className="w-3 h-3 text-amber-600" />
-                <span className="text-[9px] font-bold text-amber-700 uppercase">Firewall</span>
+              <div className="flex items-center gap-1 bg-white border border-gray-200 px-2.5 py-1 rounded-full">
+                <Shield className="w-3 h-3 text-gray-500" />
+                <span className="text-[9px] font-bold text-gray-700 uppercase">Firewall</span>
               </div>
             </div>
 
             {/* Cloud */}
             <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
-                <Cloud className="w-7 h-7 text-white" />
+              <div className="w-16 h-16 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
+                <Cloud className="w-7 h-7 text-blue-600" />
               </div>
               <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">Cloud</span>
-              <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">Only {cloudVisibleCount} categories</span>
+              <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 border border-[#1a73e8]/20 px-2 py-0.5 rounded-full">Only {cloudVisibleCount} categories</span>
             </div>
 
             <ArrowRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
 
             {/* Super Admin */}
             <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-gradient-to-br from-gray-700 to-gray-900 rounded-2xl flex items-center justify-center shadow-lg shadow-gray-300">
-                <Users className="w-7 h-7 text-white" />
+              <div className="w-16 h-16 bg-gray-100 border border-gray-200 rounded-2xl flex items-center justify-center shadow-sm">
+                <Users className="w-7 h-7 text-gray-600" />
               </div>
               <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">Super Admin</span>
             </div>
@@ -513,9 +501,9 @@ export default function TransparencyPage() {
         <div className="border-t border-gray-200 pt-6">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2.5">
-              <div className={`p-2 rounded-xl ${viewMode === 'on-prem' ? 'bg-emerald-100' : 'bg-blue-100'}`}>
+              <div className={`p-2 rounded-xl ${viewMode === 'on-prem' ? 'bg-[#1a73e8]/10' : 'bg-blue-100'}`}>
                 {viewMode === 'on-prem' ? (
-                  <Server className="w-4 h-4 text-emerald-700" />
+                  <Server className="w-4 h-4 text-[#1a73e8]" />
                 ) : (
                   <Cloud className="w-4 h-4 text-blue-700" />
                 )}
@@ -525,7 +513,7 @@ export default function TransparencyPage() {
                   {viewMode === 'on-prem'
                     ? 'Your Full Dashboard (On-Prem)'
                     : isAppAdmin
-                      ? `Super Admin's View of ${selectedTenant} (Cloud)`
+                      ? `Super Admin's View of ${selectedTenants.join(', ')} (Cloud)`
                       : "Super Admin's View (Cloud)"}
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
@@ -539,15 +527,15 @@ export default function TransparencyPage() {
             </div>
             <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border ${
               viewMode === 'on-prem'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : 'bg-blue-50 border-blue-200 text-blue-700'
+                ? 'bg-white border-[#1a73e8]/20 text-[#1a73e8]'
+                : 'bg-white border-[#1a73e8]/20 text-blue-700'
             }`}>
               <span className="flex h-2 w-2 relative">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  viewMode === 'on-prem' ? 'bg-emerald-400' : 'bg-blue-400'
+                  viewMode === 'on-prem' ? 'bg-[#1a73e8]' : 'bg-blue-400'
                 }`}></span>
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                  viewMode === 'on-prem' ? 'bg-emerald-500' : 'bg-blue-500'
+                  viewMode === 'on-prem' ? 'bg-[#1a73e8]' : 'bg-blue-500'
                 }`}></span>
               </span>
               <span className="text-[11px] font-bold uppercase tracking-wider">
@@ -562,11 +550,11 @@ export default function TransparencyPage() {
               {dashboardData.isLoading ? (
                 <DashboardSkeleton />
               ) : (
-                <div className="space-y-6 rounded-2xl border-2 border-emerald-200 p-5 bg-gradient-to-b from-emerald-50/30 to-white">
+                <div className="space-y-6 rounded-2xl border-2 border-[#1a73e8]/20 p-5 bg-gradient-to-b from-blue-50/10 to-white">
                   {/* Label */}
-                  <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-100 w-fit">
-                    <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-gray-200 shadow-sm w-fit">
+                    <Lock className="w-3.5 h-3.5 text-[#1a73e8]" />
+                    <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">
                       Private — Never leaves your infrastructure
                     </span>
                   </div>
@@ -594,6 +582,7 @@ export default function TransparencyPage() {
                         <RealTimeUsers
                           activeUsers={dashboardData.realTimeUsers}
                           pagesPerMinute={dashboardData.pagesPerMinute}
+                          timestampIST={dashboardData.realTimeUsersTimestampIST}
                         />
                       </div>
                     </div>
@@ -629,10 +618,10 @@ export default function TransparencyPage() {
                   <section>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                       <TopPages data={dashboardData.topPages} />
-                      <div className="rounded-2xl border border-teal-200 bg-gradient-to-b from-teal-50/60 to-white p-1.5">
+                      <div className="rounded-2xl border-gray-200 border bg-white p-1.5 shadow-sm">
                         <DeviceBreakdownChart data={dashboardData.deviceBreakdown} />
                       </div>
-                      <div className="rounded-2xl border border-indigo-200 bg-gradient-to-b from-indigo-50/60 to-white p-1.5">
+                      <div className="rounded-2xl border-gray-200 border bg-white p-1.5 shadow-sm">
                         <UserAcquisitionChart data={dashboardData.acquisitionChannels} />
                       </div>
                     </div>
@@ -684,7 +673,7 @@ export default function TransparencyPage() {
                           </p>
                           <h2 className="text-3xl font-bold text-gray-900">
                             {isAppAdmin
-                              ? (selectedTenant ? selectedTenant.charAt(0).toUpperCase() + selectedTenant.slice(1) : '—')
+                              ? (selectedTenants.length > 0 ? selectedTenants.map((t: string) => t.charAt(0).toUpperCase() + t.slice(1)).join(', ') : '—')
                               : (adminSummary?.total_tenants || 0)}
                           </h2>
                         </div>
@@ -695,7 +684,7 @@ export default function TransparencyPage() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-500">
-                            {isAppAdmin ? `Events (30d) — ${selectedTenant}` : 'Total Events (30d)'}
+                            {isAppAdmin ? `Events (30d) — ${selectedTenants.join(', ')}` : 'Total Events (30d)'}
                           </p>
                           <h2 className="text-3xl font-bold text-gray-900">
                             {(adminSummary?.total_events || 0).toLocaleString()}

@@ -111,11 +111,12 @@ export default function Register3() {
         setUserId(response.data.id);
         nexaTracker.setUser(response.data.id, user.customerType || 'user', user.email);
       }
-      track('auth.register.success');
+      track('register.auth.success');
       await Auth(); // Refresh global auth state
       router.push("/dashboard");
       
     } catch (error) {
+      track('register.auth.error');
       if (axios.isAxiosError(error)) {
         if (error.code === "ERR_NETWORK") {
           toast.error("Network error: Please check your internet connection.");

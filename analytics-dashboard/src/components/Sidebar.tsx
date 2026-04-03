@@ -132,21 +132,34 @@ function Sidebar(_props: SidebarProps) {
           const isActive = pathname === item.href || (item.id === 'dashboard' && pathname === '/');
 
           return (
-            <a
+            <Link
               key={item.id}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 mx-3 rounded-lg text-[13px] font-medium transition-all duration-200 group ${isActive
-                ? 'bg-[#f1f3f4] text-[#1a73e8]'
-                : 'text-gray-600 px-2 hover:bg-gray-50'
+              className={`flex items-center gap-3 py-2.5 mx-3 rounded-lg text-[13px] font-medium transition-all duration-200 group
+      ${sidebarCollapsed
+                  ? 'justify-center px-0 text-gray-600 bg-transparent hover:bg-transparent'
+                  : isActive
+                    ? 'bg-[#f1f3f4] text-[#1a73e8] px-3'
+                    : 'text-gray-600 px-3 hover:bg-gray-50'
                 }`}
               title={sidebarCollapsed ? item.label : undefined}
             >
               <IconComponent
-                className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isActive ? 'text-[#1a73e8]' : 'text-gray-500 group-hover:text-gray-700'
+                className={`w-[18px] h-[18px] flex-shrink-0 transition-colors
+        ${sidebarCollapsed
+                    ? isActive
+                      ? 'text-[#1a73e8]'
+                      : 'text-gray-500 group-hover:text-gray-700'
+                    : isActive
+                      ? 'text-[#1a73e8]'
+                      : 'text-gray-500 group-hover:text-gray-700'
                   }`}
               />
-              {!sidebarCollapsed && <span>{item.label}</span>}
-            </a>
+
+              {!sidebarCollapsed && (
+                <span className="truncate">{item.label}</span>
+              )}
+            </Link>
           );
         })}
       </nav>
@@ -154,7 +167,7 @@ function Sidebar(_props: SidebarProps) {
       {/* Collapse Toggle */}
       <button
         onClick={() => dispatch(toggleSidebar())}
-        className="mx-3 mb-4  cursor-pointer p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center"
+        className="mx-3 mb-4 cursor-pointer p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {sidebarCollapsed ? (

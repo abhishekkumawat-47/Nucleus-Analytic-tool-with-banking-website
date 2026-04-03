@@ -1,52 +1,139 @@
 'use client';
 
-/**
- * Custom hooks for the analytics dashboard.
- * Provides reusable data-fetching and state management hooks.
- */
-
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
-import { fetchDashboardData, fetchAIInsightsData, setTimeRange, setSelectedTenant, updateRealTimeUsers, updateKPIMetrics } from '@/lib/dashboardSlice';
+import { setTimeRange, setSelectedTenants, updateRealTimeUsers, updateKPIMetrics } from '@/lib/dashboardSlice';
 import { TimeRange } from '@/types';
 import { useSession } from 'next-auth/react';
+import { dashboardAPI } from '@/lib/api';
 
 /**
- * Hook to initialize and access all dashboard data.
- * Dispatches the fetch action on mount and provides typed state access.
- * Auto-sets the tenant to the user's first adminApp.
+ * Converts the human-readable TimeRange into the API range param.
+ */
+function timeRangeToParam(tr: TimeRange): string {
+  switch (tr) {
+    case 'Last 30 Days': return '30d';
+    case 'Last 90 Days': return '90d';
+    default: return '7d';
+  }
+}
+
+/**
+ * Central dashboard hook. Single source of truth for tenants + timeRange.
+ * All pages MUST use this hook — never derive tenant arrays locally.
  */
 export function useDashboardData() {
   const dispatch = useAppDispatch();
   const dashboardState = useAppSelector((state) => state.dashboard);
   const { data: session } = useSession();
 
+  // Auto-pin app_admins to their assigned tenants
   useEffect(() => {
-    // Keep app admins pinned to one of their authorized apps.
     if (session?.user?.role === 'app_admin') {
       const adminApps = (session.user.adminApps || []).filter(Boolean);
-      if (adminApps.length > 0 && !adminApps.includes(dashboardState.selectedTenant)) {
-        dispatch(setSelectedTenant(adminApps[0]));
+      if (adminApps.length > 0 && !adminApps.some(app => dashboardState.selectedTenants.includes(app))) {
+        dispatch(setSelectedTenants([adminApps[0]]));
       }
     }
-  }, [dispatch, session, dashboardState.selectedTenant]);
+  }, [dispatch, session, dashboardState.selectedTenants]);
 
+  // ─── Derived API params (stable references) ───
+  const tenantsParam: string[] = useMemo(() => {
+    return dashboardState.selectedTenants.length > 0
+      ? dashboardState.selectedTenants
+      : ['nexabank'];
+  }, [dashboardState.selectedTenants]);
+
+  const rangeParam: string = useMemo(() => {
+    return timeRangeToParam(dashboardState.timeRange);
+  }, [dashboardState.timeRange]);
+
+  // ─── Core dashboard data (React Query) ───
+  const { data: dashboardData, isLoading, isFetching } = useQuery({
+    queryKey: ['dashboardData', tenantsParam, rangeParam],
+    queryFn: async () => {
+      const [
+        kpiMetrics,
+        secondaryKpiMetrics,
+        trafficData,
+        featureUsageData,
+        topFeatures,
+        funnelData,
+        featureActivity,
+        tenants,
+        realTimeUsersData,
+        pagesPerMinute,
+        topPages,
+        deviceBreakdown,
+        acquisitionChannels,
+        locations,
+        auditLogs,
+        featureConfigs,
+        retentionData,
+      ] = await Promise.all([
+        dashboardAPI.getKPIMetrics(tenantsParam, rangeParam),
+        dashboardAPI.getSecondaryKPIMetrics(tenantsParam, rangeParam),
+        dashboardAPI.getTrafficData(tenantsParam, rangeParam),
+        dashboardAPI.getFeatureUsageData(tenantsParam, rangeParam),
+        dashboardAPI.getTopFeatures(tenantsParam, rangeParam),
+        dashboardAPI.getFunnelData(tenantsParam, rangeParam),
+        dashboardAPI.getFeatureActivity(tenantsParam, rangeParam),
+        dashboardAPI.getTenants(tenantsParam, rangeParam),
+        dashboardAPI.getRealTimeUsers(tenantsParam),
+        dashboardAPI.getPagesPerMinute(tenantsParam),
+        dashboardAPI.getTopPages(tenantsParam, rangeParam),
+        dashboardAPI.getDeviceBreakdown(tenantsParam, rangeParam),
+        dashboardAPI.getAcquisitionChannels(tenantsParam, rangeParam),
+        dashboardAPI.getLocations(tenantsParam, rangeParam),
+        dashboardAPI.getAuditLogs(tenantsParam, rangeParam),
+        dashboardAPI.getFeatureConfigs(tenantsParam, rangeParam),
+        dashboardAPI.getRetentionData(tenantsParam, rangeParam),
+      ]);
+
+      return {
+        kpiMetrics,
+        secondaryKpiMetrics,
+        trafficData,
+        featureUsageData,
+        topFeatures,
+        funnelData,
+        featureActivity,
+        tenants,
+        realTimeUsers: realTimeUsersData.count,
+        realTimeUsersTimestampIST: realTimeUsersData.timestampIST ?? null,
+        pagesPerMinute,
+        topPages,
+        deviceBreakdown,
+        acquisitionChannels,
+        locations,
+        auditLogs,
+        featureConfigs,
+        retentionData,
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
+  const { data: aiInsightsData } = useQuery({
+    queryKey: ['aiInsights', tenantsParam, rangeParam],
+    queryFn: () => dashboardAPI.getAIInsights(tenantsParam, rangeParam),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // ─── WebSocket for real-time metrics ───
   useEffect(() => {
-    dispatch(fetchDashboardData());
-    dispatch(fetchAIInsightsData());
-  }, [dispatch, dashboardState.selectedTenant]);
+    const tenantId =
+      dashboardState.selectedTenants.length > 0
+        ? dashboardState.selectedTenants[0]
+        : 'nexabank';
 
-  // Real-time WebSocket Connection
-  useEffect(() => {
-    const tenantId = dashboardState.selectedTenant;
-    if (!tenantId) return;
-
-    // Use environment variable window or NEXT_PUBLIC_ANALYTICS_API fallback
     const baseUrl = process.env.NEXT_PUBLIC_ANALYTICS_WS_URL || 'ws://localhost:8001';
     const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/ws/dashboard/${tenantId}`;
-    
+
     const ws = new WebSocket(wsUrl);
-    
+
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -54,77 +141,84 @@ export function useDashboardData() {
           if (data.payload.realtimeUsers !== undefined) {
             dispatch(updateRealTimeUsers(data.payload.realtimeUsers));
           }
-          if (data.payload.kpiMetrics && data.payload.kpiMetrics.length) {
+          if (data.payload.kpiMetrics?.length) {
             dispatch(updateKPIMetrics(data.payload.kpiMetrics));
           }
-        } else if (data.type === 'REALTIME_EVENT') {
-          // Additional handling for 1:1 true streaming event payloads!
-          // We can animate dashboard states or flash indicators here
         }
       } catch (e) {
         console.error('Error parsing WebSocket message:', e);
       }
     };
 
-    return () => {
-      ws.close();
-    };
-  }, [dispatch, dashboardState.selectedTenant]);
+    return () => { ws.close(); };
+  }, [dispatch, dashboardState.selectedTenants]);
 
+  // ─── Actions ───
   const changeTimeRange = useCallback(
-    (range: TimeRange) => {
-      dispatch(setTimeRange(range));
-      // Re-fetch data when time range changes
-      dispatch(fetchDashboardData());
-      dispatch(fetchAIInsightsData());
-    },
+    (range: TimeRange) => { dispatch(setTimeRange(range)); },
     [dispatch]
   );
 
-  const changeTenant = useCallback(
-    (tenant: string) => {
-      dispatch(setSelectedTenant(tenant));
-      dispatch(fetchDashboardData());
-      dispatch(fetchAIInsightsData());
-    },
+  const changeTenants = useCallback(
+    (tenants: string[] | string) => { dispatch(setSelectedTenants(tenants)); },
     [dispatch]
   );
 
   return {
-    ...dashboardState,
+    // Redux state (single source of truth)
+    selectedTenants: dashboardState.selectedTenants,
+    timeRange: dashboardState.timeRange,
+    deploymentMode: dashboardState.deploymentMode,
+    sidebarCollapsed: dashboardState.sidebarCollapsed,
+    // Computed API params — pages MUST use these, never derive their own
+    tenantsParam,
+    rangeParam,
+    // React Query data
+    kpiMetrics: dashboardData?.kpiMetrics || [],
+    secondaryKpiMetrics: dashboardData?.secondaryKpiMetrics || [],
+    trafficData: dashboardData?.trafficData || [],
+    featureUsageData: dashboardData?.featureUsageData || [],
+    topFeatures: dashboardData?.topFeatures || [],
+    funnelData: dashboardData?.funnelData || [],
+    featureActivity: dashboardData?.featureActivity || [],
+    tenants: dashboardData?.tenants || [],
+    realTimeUsers: dashboardData?.realTimeUsers || 0,
+    realTimeUsersTimestampIST: dashboardData?.realTimeUsersTimestampIST || null,
+    pagesPerMinute: dashboardData?.pagesPerMinute || [],
+    topPages: dashboardData?.topPages || [],
+    deviceBreakdown: dashboardData?.deviceBreakdown || [],
+    acquisitionChannels: dashboardData?.acquisitionChannels || [],
+    locations: dashboardData?.locations || [],
+    auditLogs: dashboardData?.auditLogs || [],
+    featureConfigs: dashboardData?.featureConfigs || [],
+    retentionData: dashboardData?.retentionData || [],
+    aiInsights: aiInsightsData || [],
+    isLoading,
+    isFetching,
+    // Actions
     changeTimeRange,
-    changeTenant,
+    changeTenant: changeTenants,
   };
 }
 
-/**
- * Hook for generating AI insights based on dashboard data.
- * Uses rule-based logic to produce actionable insights.
- */
 export function useAIInsights() {
-  const { funnelData, featureActivity, topFeatures } = useAppSelector(
-    (state) => state.dashboard
-  );
+  const { funnelData = [], featureActivity = [], topFeatures = [] } = useDashboardData();
 
-  /** Rule-based insight generation */
   const generateInsights = useCallback(() => {
     const insights: string[] = [];
 
-    // Check for high drop-off in funnel
     funnelData.forEach((step) => {
       if (step.dropOff >= 40) {
         insights.push(`${step.dropOff}% drop-off at ${step.label} step`);
       }
     });
 
-    // Check for high-activity features
     featureActivity.forEach((row) => {
       if (row.level === 'High') {
         insights.push(`${row.feature} has high activity - consider scaling resources`);
       }
     });
 
-    // Check for usage trends
     if (topFeatures.length > 0) {
       const topFeature = topFeatures[0];
       insights.push(`${topFeature.name} leads with ${topFeature.value.toLocaleString()} events`);

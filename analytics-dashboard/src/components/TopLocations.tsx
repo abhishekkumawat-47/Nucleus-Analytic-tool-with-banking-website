@@ -37,10 +37,14 @@ function TopLocations({ data }: TopLocationsProps) {
     setPosition((pos) => ({ ...pos, zoom: pos.zoom / 1.5 }));
   }
 
-  function handleMoveEnd(position: { coordinates: [number, number]; zoom: number }) {
-    setPosition(position);
+  function handleMoveEnd(newPosition: { coordinates: [number, number]; zoom: number }) {
+    // Check if state actually changed to avoid render loop
+    if (newPosition.zoom !== position.zoom || 
+        newPosition.coordinates[0] !== position.coordinates[0] || 
+        newPosition.coordinates[1] !== position.coordinates[1]) {
+      setTimeout(() => setPosition(newPosition), 0);
+    }
   }
-
   // Calculate percentages for the table
   const totalVisits = data.reduce((sum, item) => sum + item.visits, 0);
   const maxVisits = data.length > 0 ? Math.max(...data.map(d => d.visits)) : 1;
