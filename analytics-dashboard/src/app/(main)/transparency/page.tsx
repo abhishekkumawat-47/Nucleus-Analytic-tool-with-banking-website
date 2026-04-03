@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
@@ -150,12 +151,13 @@ const sensitivityConfig = {
 
 export default function TransparencyPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('on-prem');
-  const [rawAdminSummary, setRawAdminSummary] = useState<{
-    total_tenants: number;
-    total_events: number;
-    top_tenants: any[];
-  } | null>(null);
-  const [adminLoading, setAdminLoading] = useState(false);
+  const { data: rawAdminSummaryData, isLoading: adminLoading } = useQuery({
+    queryKey: ['adminSummary'],
+    queryFn: () => dashboardAPI.getAdminSummary(),
+    enabled: viewMode === 'cloud',
+  });
+  
+  const rawAdminSummary = rawAdminSummaryData || null;
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const { selectedTenants, tenantsParam } = useDashboardData();
   const { data: session } = useSession();
@@ -165,20 +167,6 @@ export default function TransparencyPage() {
 
   // Full dashboard data for on-prem view
   const dashboardData = useDashboardData();
-
-  // Fetch cloud admin summary when switching to cloud mode
-  useEffect(() => {
-    if (viewMode === 'cloud' && !rawAdminSummary) {
-      setAdminLoading(true);
-      dashboardAPI
-        .getAdminSummary()
-        .then((res) => {
-          setRawAdminSummary(res);
-          setAdminLoading(false);
-        })
-        .catch(() => setAdminLoading(false));
-    }
-  }, [viewMode, rawAdminSummary]);
 
   /**
    * For App Admins: filter the admin summary to only show their own tenant.

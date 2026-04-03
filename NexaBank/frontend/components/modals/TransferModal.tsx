@@ -83,7 +83,7 @@ const TransferModal = ({ isOpen, onClose, accounts, onSuccess }: TransferModalPr
       toast.success(`Transfer of ₹${parsedAmount.toLocaleString('en-IN')} was successful.`);
       onSuccess?.();
       handleClose();
-      
+
       // Update global context directly without harsh browser reload
       if (globalAccounts && fetchGlobalAccounts) {
         await fetchGlobalAccounts();
@@ -177,7 +177,7 @@ const TransferModal = ({ isOpen, onClose, accounts, onSuccess }: TransferModalPr
               />
             </div>
             {selectedFrom && parsedAmount > 0 && parsedAmount > selectedFrom.balance && (
-              <p className="text-xs text-rose-500 font-medium ml-1">⚠ Amount exceeds available balance</p>
+              <p className="text-xs text-rose-500 font-medium ml-1"> Amount exceeds available balance</p>
             )}
           </div>
 

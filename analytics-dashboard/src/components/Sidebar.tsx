@@ -132,7 +132,7 @@ function Sidebar(_props: SidebarProps) {
           const isActive = pathname === item.href || (item.id === 'dashboard' && pathname === '/');
 
           return (
-            <a
+            <Link
               key={item.id}
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 mx-3 rounded-lg text-[13px] font-medium transition-all duration-200 group ${isActive
@@ -146,7 +146,7 @@ function Sidebar(_props: SidebarProps) {
                   }`}
               />
               {!sidebarCollapsed && <span>{item.label}</span>}
-            </a>
+            </Link>
           );
         })}
       </nav>

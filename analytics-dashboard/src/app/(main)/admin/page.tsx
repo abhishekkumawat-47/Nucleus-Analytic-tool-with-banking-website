@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
 import { ShieldAlert, Users, Activity, BarChart3, Database } from 'lucide-react';
@@ -11,19 +12,12 @@ import RBACManager from '@/components/RBACManager';
 
 export default function AdminSummaryPage() {
   const { deploymentMode } = useAppSelector((state) => state.dashboard);
-  const [data, setData] = useState<{ total_tenants: number; total_events: number; top_tenants: any[] } | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (deploymentMode === 'cloud') {
-      dashboardAPI.getAdminSummary().then((res) => {
-        setData(res);
-        setLoading(false);
-      });
-    } else {
-      setLoading(false);
-    }
-  }, [deploymentMode]);
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['adminSummary'],
+    queryFn: () => dashboardAPI.getAdminSummary(),
+    enabled: deploymentMode === 'cloud',
+  });
 
   if (loading) return <DashboardSkeleton />;
 

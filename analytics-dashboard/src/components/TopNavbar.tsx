@@ -59,28 +59,20 @@ function TopNavbar() {
   /**
    * Build the tenant options list:
    *  - "All Tenants" → all tenant IDs
-   *  - Individual tenant entries
-   * For app_admin: constrained to their adminApps.
-   * For super_admin / no session: all tenants from the DB.
    */
   const tenantOptions = useMemo((): AvailableTenant[] => {
-    if (!session?.user || session?.user?.role === 'super_admin') {
-      return availableTenants.length > 0
-        ? availableTenants
-        : [
-          { id: 'nexabank', name: 'NexaBank', eventCount: 0, uniqueUsers: 0 },
-          { id: 'safexbank', name: 'SafexBank', eventCount: 0, uniqueUsers: 0 },
-        ];
-    }
-    const adminAppIds: string[] =
-      session.user.adminApps && session.user.adminApps.length > 0
-        ? session.user.adminApps
-        : ['nexabank'];
-    return adminAppIds.map((id) => {
-      const found = availableTenants.find((t) => t.id === id);
-      return found ?? { id, name: id.charAt(0).toUpperCase() + id.slice(1), eventCount: 0, uniqueUsers: 0 };
-    });
-  }, [session, availableTenants]);
+    return availableTenants.length > 0
+      ? availableTenants
+      : [
+        { id: 'nexabank', name: 'NexaBank', eventCount: 0, uniqueUsers: 0 },
+        { id: 'safexbank', name: 'SafexBank', eventCount: 0, uniqueUsers: 0 },
+      ];
+  }, [availableTenants]);
+
+  // Log for debugging
+  useEffect(() => {
+    console.log("Selected tenant:", selectedTenants);
+  }, [selectedTenants]);
 
   // Ensure the selected tenant is always valid
   useEffect(() => {
@@ -284,13 +276,12 @@ function TopNavbar() {
         </div>
 
         {/* Data Sync & Transparency */}
-        <div className="relative cursor-pointer" ref={transparencyRef}>
+        <div className="relative" ref={transparencyRef}>
           <button
             onClick={handleTransparencyClick}
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-all duration-200 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer rounded-md text-xs font-medium transition-all duration-200 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
           >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Data Sync &amp; Transparency</span>
+            <span className='italic'>Data Sync &amp; Transparency</span>
           </button>
 
           {showTransparency && (
@@ -323,7 +314,7 @@ function TopNavbar() {
                         <div key={ix} className="text-xs">
                           <div className="flex items-center gap-2 mb-1">
                             <span
-                              className={`w-2 h-2 rounded-full ${cat.is_synced ? 'bg-blue-500' : 'bg-gray-300'
+                              className={`w-2 h-2 rounded-full ${cat.is_synced ? 'bg-blue-500' : 'bg-gray-500'
                                 }`}
                             />
                             <strong
