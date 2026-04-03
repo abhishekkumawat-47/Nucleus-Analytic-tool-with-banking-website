@@ -11,10 +11,9 @@
  *            blocked-data placeholders to show what is NOT shared.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
-import { useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { DashboardSkeleton } from '@/components/Skeletons';
@@ -34,11 +33,9 @@ import FeatureHeatmap from '@/components/FeatureHeatmap';
 import {
   Cloud,
   Server,
-  ShieldCheck,
   Lock,
   Eye,
   EyeOff,
-  Info,
   BarChart3,
   Users,
   Activity,
@@ -51,12 +48,24 @@ import {
   ArrowRight,
   CheckCircle2,
   XCircle,
-  Zap,
   Layers,
   Shield,
 } from 'lucide-react';
 
 type ViewMode = 'on-prem' | 'cloud';
+
+interface AdminSummaryTenant {
+  id?: string;
+  name?: string;
+  tenant_id?: string;
+  events?: number;
+}
+
+interface AdminSummary {
+  total_tenants: number;
+  total_events: number;
+  top_tenants: AdminSummaryTenant[];
+}
 
 /** Categories of data and their cloud visibility status */
 const dataCategories = [
@@ -151,7 +160,7 @@ const sensitivityConfig = {
 
 export default function TransparencyPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('on-prem');
-  const { data: rawAdminSummaryData, isLoading: adminLoading } = useQuery({
+  const { data: rawAdminSummaryData, isLoading: adminLoading } = useQuery<AdminSummary>({
     queryKey: ['adminSummary'],
     queryFn: () => dashboardAPI.getAdminSummary(),
     enabled: viewMode === 'cloud',
@@ -178,14 +187,14 @@ export default function TransparencyPage() {
     if (!isAppAdmin || !selectedTenants || selectedTenants.length === 0) return rawAdminSummary;
 
     const myTenants = rawAdminSummary.top_tenants.filter(
-      (t: any) =>
-        tenantsParam.includes(t.id) ||
+      (t: AdminSummaryTenant) =>
+        (t.id ? tenantsParam.includes(t.id) : false) ||
         tenantsParam.some((tid: string) => t.name?.toLowerCase() === tid.toLowerCase()) ||
-        tenantsParam.includes(t.tenant_id)
+        (t.tenant_id ? tenantsParam.includes(t.tenant_id) : false)
     );
 
     const myTotalEvents = myTenants.reduce(
-      (sum: number, t: any) => sum + (t.events || 0),
+      (sum: number, t: AdminSummaryTenant) => sum + (t.events || 0),
       0
     );
 
@@ -530,7 +539,7 @@ export default function TransparencyPage() {
                   {/* KPI Metrics */}
                   <section>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {dashboardData.kpiMetrics.map((metric: any) => (
+                      {dashboardData.kpiMetrics.map((metric) => (
                         <KPICard key={metric.id} metric={metric} />
                       ))}
                     </div>
@@ -593,7 +602,7 @@ export default function TransparencyPage() {
                   {/* Secondary KPIs */}
                   <section>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {dashboardData.secondaryKpiMetrics.map((metric: any) => (
+                      {dashboardData.secondaryKpiMetrics.map((metric) => (
                         <KPICard key={metric.id} metric={metric} />
                       ))}
                     </div>
@@ -677,7 +686,7 @@ export default function TransparencyPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {adminSummary.top_tenants.map((t: any, i: number) => (
+                            {adminSummary.top_tenants.map((t: AdminSummaryTenant, i: number) => (
                               <tr
                                 key={i}
                                 className="border-b last:border-0 hover:bg-gray-50 transition-colors"
