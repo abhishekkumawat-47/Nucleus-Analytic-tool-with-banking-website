@@ -90,9 +90,9 @@ export default function DashboardContent() {
       </section>
 
       {/* ═══════════ TOP PAGES + DEVICE + ACQUISITION ═══════════ */}
-      <section id="detail-section" aria-label="Detailed Analytics">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <TopPages data={topPages} />
+      <section className="flex-col" id="detail-section" aria-label="Detailed Analytics">
+        <TopPages data={topPages} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mt-8">
           <DeviceBreakdownChart data={deviceBreakdown} />
           <UserAcquisitionChart data={acquisitionChannels} />
         </div>

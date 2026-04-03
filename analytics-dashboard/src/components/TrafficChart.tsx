@@ -122,18 +122,20 @@ function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps)
 
             <XAxis
               dataKey="date"
-              axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-              tickLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-              tick={{ fill: '#6B7280', fontSize: 12 }}
+              // label="Date"
+              axisLine={{ stroke: '#cbcdd1ff', strokeWidth: 1 }}
+              tickLine={{ stroke: '#cbcdd1ff', strokeWidth: 1 }}
+              tick={{ fill: '#505660ff', fontSize: 12 }}
               dy={8}
             />
 
             <YAxis
-              axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-              tickLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-              tick={{ fill: '#6B7280', fontSize: 12 }}
+              axisLine={{ stroke: '#cbcdd1ff', strokeWidth: 1 }}
+              tickLine={{ stroke: '#cbcdd1ff', strokeWidth: 1 }}
+              tick={{ fill: '#505660ff', fontSize: 12 }}
               tickFormatter={formatYAxis}
               dx={-8}
+              // label="Count"
               width={55}
             />
 
@@ -174,12 +176,12 @@ function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps)
 
       <div className="flex items-center gap-6 mt-2 px-1">
         <div className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
-          <span className="w-3 h-3 rounded-full bg-[#1a73e8]" />
+          <span className="w-3 h-3 rounded-full bg-[#0c6cdf]" />
           <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">{formatTotal(totalVisitors)}</span>
           <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Total Visitors</span>
         </div>
         <div className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
-          <span className="w-3 h-3 rounded-full bg-[#4285F4]" />
+          <span className="w-3 h-3 rounded-full bg-[#7cadf7]" />
           <span className="text-xs text-gray-500 font-medium group-hover:text-gray-900 transition-colors">{formatTotal(totalPageViews)}</span>
           <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">Total Page Views</span>
         </div>
