@@ -189,12 +189,11 @@ function TopLocations({ data }: TopLocationsProps) {
               [...data].sort((a, b) => b.visits - a.visits).slice(0, 6).map((item, idx) => (
                 <div 
                   key={item.country} 
-                  className="flex flex-col p-2 rounded-lg hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100"
+                  className="flex flex-col p-2 rounded-lg hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100"
                 >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-medium text-gray-700 group-hover:text-blue-600 transition-colors">{item.country}</span>
-                    <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-all" />
                   </div>
                   <span className="text-[12px] font-bold text-gray-900 tabular-nums">
                     {item.visits >= 1000 ? `${(item.visits / 1000).toFixed(1)}k` : item.visits}
@@ -219,21 +218,17 @@ function TopLocations({ data }: TopLocationsProps) {
               continentData.map((item) => (
                 <div 
                   key={item.continent} 
-                  className="flex flex-col p-2.5 rounded-lg hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100"
+                  className="flex flex-col p-2.5 rounded-lg hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      <span 
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: continentColors[item.continent] || '#9CA3AF' }}
-                      />
                       <span className="text-[13px] font-medium text-gray-700 group-hover:text-blue-600 transition-colors">{item.continent}</span>
                     </div>
                     <span className="text-[12px] font-bold text-gray-900 tabular-nums">
                       {item.visits >= 1000 ? `${(item.visits / 1000).toFixed(1)}k` : item.visits}
                     </span>
                   </div>
-                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full rounded-full transition-all duration-1000 ease-out"
                       style={{ 

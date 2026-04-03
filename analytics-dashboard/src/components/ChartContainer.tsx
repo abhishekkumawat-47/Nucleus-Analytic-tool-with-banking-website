@@ -38,7 +38,7 @@ function ChartContainer({
       </div>
 
       {/* Chart Content */}
-      <div className="px-4 pb-4 sm:px-5 sm:pb-5">{children}</div>
+      <div className="px-4 pb-4 sm:px-8 sm:pb-5">{children}</div>
     </div>
   );
 }

@@ -105,6 +105,23 @@ function simulateResponseTime(): number {
 }
 
 /**
+ * Normalizes simulated channel values to the ingestion API enum.
+ */
+function normalizeChannel(channel: unknown): "web" | "mobile" | "api" | "batch" {
+  const value = String(channel || "").trim().toLowerCase();
+
+  if (value === "mobile" || value === "mobile_app" || value === "app") {
+    return "mobile";
+  }
+
+  if (value === "api" || value === "batch") {
+    return value;
+  }
+
+  return "web";
+}
+
+/**
  * Validates and auto-corrects event names to [domain].[feature].[status] taxonomy.
  * Logs a warning when correction happens so developers can fix instrumentation.
  */
@@ -241,7 +258,7 @@ async function forwardToIngestionAPI(
   const geo = selectGeoProfile();
   const deviceType = (metadata.device_type as string) || selectDevice(geo);
   const simTime = simulateResponseTime();
-  const channel = (metadata.channel as string) || geo.channelBias[Math.floor(Math.random() * geo.channelBias.length)];
+  const channel = normalizeChannel((metadata.channel as string) || geo.channelBias[Math.floor(Math.random() * geo.channelBias.length)]);
 
   try {
     const analyticsTenantId = resolveAnalyticsTenantId(tenantId);
