@@ -105,8 +105,8 @@ export default function FunnelPage() {
     const momentum = stageDiagnostics.length > 1
       ? stageDiagnostics.reduce((sum, stage, idx) => {
           if (idx === 0) return sum;
-          const prev = stageDiagnostics[idx - 1].value || 1;
-          return sum + (stage.value / prev) * 100;
+          const prev = stageDiagnostics[idx - 1].step.value || 1;
+          return sum + (stage.step.value / prev) * 100;
         }, 0) / (stageDiagnostics.length - 1)
       : 0;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
@@ -10,7 +10,7 @@ import AIInsightsPanel from '@/components/AIInsightsPanel';
 import { ChartSkeleton } from '@/components/Skeletons';
 
 function simpleMarkdownToHtml(md: string) {
-  let html = md
+  const html = md
     .replace(/^### (.*$)/gim, '<h3 class="text-2xl font-bold mt-8 mb-3 text-slate-800 print:text-black">$1</h3>')
     .replace(/^## (.*$)/gim, '<h2 class="text-3xl font-bold mt-10 mb-4 border-b pb-2 text-slate-900 print:text-black">$1</h2>')
     .replace(/^# (.*$)/gim, '<h1 class="text-4xl font-extrabold mt-12 mb-6 text-slate-900 print:text-black">$1</h1>')
@@ -51,6 +51,13 @@ const FOCUS_AREAS: FocusArea[] = [
   { label: 'Retention', colorClass: 'bg-gray-600', keywords: ['retention', 'churn', 'stickiness', 'returning users'] },
   { label: 'Trust', colorClass: 'bg-[#8AB4F8]', keywords: ['trust', 'transparency', 'security', 'compliance'] },
 ];
+
+type AIReportData = {
+  report?: string;
+  insights?: AIInsight[];
+  generated_at?: string | null;
+  cached?: boolean;
+};
 
 function countMatches(text: string, keywords: string[]) {
   const lower = text.toLowerCase();
@@ -115,7 +122,7 @@ export default function AIReportPage() {
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState<boolean>(false);
 
-  const { data = {} as any, isLoading: loading, refetch } = useQuery({
+  const { data = {} as AIReportData, isLoading: loading, refetch } = useQuery<AIReportData>({
     queryKey: ['aiReport', tenantsParam],
     queryFn: () => dashboardAPI.getLatestAIReport(tenantsParam),
   });
@@ -137,7 +144,7 @@ export default function AIReportPage() {
   };
 
   const reportText = report || '';
-  const focusData = useMemo(() => {
+  const focusData = (() => {
     const raw = FOCUS_AREAS.map((area) => ({
       label: area.label,
       score: countMatches(reportText, area.keywords),
@@ -148,16 +155,13 @@ export default function AIReportPage() {
       ...item,
       normalized: Math.max(8, Math.round((item.score / max) * 100)),
     }));
-  }, [reportText]);
+  })();
 
-  const topFocus = useMemo(
-    () => focusData.slice().sort((a, b) => b.score - a.score).map((x) => x.label),
-    [focusData]
-  );
+  const topFocus = focusData.slice().sort((a, b) => b.score - a.score).map((x) => x.label);
 
-  const potentialIdeas = useMemo(() => buildPotentialIdeas(topFocus), [topFocus]);
-  const reportSections = useMemo(() => extractSectionTitles(reportText), [reportText]);
-  const strategicBullets = useMemo(() => extractStrategicBullets(reportText), [reportText]);
+  const potentialIdeas = buildPotentialIdeas(topFocus);
+  const reportSections = extractSectionTitles(reportText);
+  const strategicBullets = extractStrategicBullets(reportText);
   const sectionCount = (reportText.match(/##\s/g) || []).length;
   const highlightCount = (reportText.match(/\*\*/g) || []).length / 2;
   const reportRichnessScore = Math.min(100, Math.round((Math.min(reportText.length, 5000) / 5000) * 70 + Math.min(sectionCount, 8) * 3 + Math.min(highlightCount, 8) * 2));

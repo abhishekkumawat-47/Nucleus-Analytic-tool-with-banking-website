@@ -176,6 +176,7 @@ services:
       - NEXTAUTH_SECRET=nucleus-analytics-secret-key-2026
       - ANALYTICS_API_HOST=analytics-api
       - INGESTION_API_HOST=ingestion-api
+      - NEXT_PUBLIC_ANALYTICS_WS_URL=ws://analytics-api:8001
     env_file:
       - ./analytics-dashboard/.env.local
     volumes:

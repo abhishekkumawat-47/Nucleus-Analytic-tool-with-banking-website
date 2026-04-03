@@ -14,13 +14,29 @@ const nextConfig: NextConfig = {
           destination: `http://${ingestionApiHost}:8000/:path*`,
         },
       ],
+      // Explicit backend API rewrites avoid regex edge-cases that can accidentally
+      // capture /api/auth/* and break NextAuth client JSON fetches.
       fallback: [
-        {
-          // Proxy /api/* to FastAPI backend as a fallback.
-          // Exclude NextAuth routes so /api/auth/* is always handled by Next.js route handlers.
-          source: '/api/:path((?!auth(?:/|$)).*)',
-          destination: `http://${analyticsApiHost}:8001/:path*`,
-        },
+        { source: '/api/metrics/:path*', destination: `http://${analyticsApiHost}:8001/metrics/:path*` },
+        { source: '/api/features/:path*', destination: `http://${analyticsApiHost}:8001/features/:path*` },
+        { source: '/api/funnels/:path*', destination: `http://${analyticsApiHost}:8001/funnels/:path*` },
+        { source: '/api/insights/:path*', destination: `http://${analyticsApiHost}:8001/insights/:path*` },
+        { source: '/api/tenants/:path*', destination: `http://${analyticsApiHost}:8001/tenants/:path*` },
+        { source: '/api/realtime-users/:path*', destination: `http://${analyticsApiHost}:8001/realtime-users/:path*` },
+        { source: '/api/pages/:path*', destination: `http://${analyticsApiHost}:8001/pages/:path*` },
+        { source: '/api/locations/:path*', destination: `http://${analyticsApiHost}:8001/locations/:path*` },
+        { source: '/api/audit_logs', destination: `http://${analyticsApiHost}:8001/audit_logs` },
+        { source: '/api/audit/:path*', destination: `http://${analyticsApiHost}:8001/audit/:path*` },
+        { source: '/api/configs/:path*', destination: `http://${analyticsApiHost}:8001/configs/:path*` },
+        { source: '/api/retention/:path*', destination: `http://${analyticsApiHost}:8001/retention/:path*` },
+        { source: '/api/deployment/:path*', destination: `http://${analyticsApiHost}:8001/deployment/:path*` },
+        { source: '/api/admin/:path*', destination: `http://${analyticsApiHost}:8001/admin/:path*` },
+        { source: '/api/ai/:path*', destination: `http://${analyticsApiHost}:8001/ai/:path*` },
+        { source: '/api/license/:path*', destination: `http://${analyticsApiHost}:8001/license/:path*` },
+        { source: '/api/transparency/:path*', destination: `http://${analyticsApiHost}:8001/transparency/:path*` },
+        { source: '/api/journey/:path*', destination: `http://${analyticsApiHost}:8001/journey/:path*` },
+        { source: '/api/segmentation/:path*', destination: `http://${analyticsApiHost}:8001/segmentation/:path*` },
+        { source: '/api/predictive/:path*', destination: `http://${analyticsApiHost}:8001/predictive/:path*` },
       ],
     };
   },

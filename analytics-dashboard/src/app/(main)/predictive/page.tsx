@@ -1,12 +1,13 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
+import { TrendingUp, TrendingDown, Minus, Activity, Radar } from 'lucide-react';
 import ChartContainer from '@/components/ChartContainer';
-import { TableSkeleton } from '@/components/Skeletons';
+import { PredictivePageSkeleton } from '@/components/Skeletons';
 
 interface Prediction {
   feature_name: string;
@@ -24,12 +25,61 @@ interface Prediction {
 
 export default function PredictivePage() {
   const { tenantsParam, rangeParam, selectedTenants, timeRange } = useDashboardData();
+  const { lastEvent, isConnected } = useRealtimeEvents({ maxEvents: 1 });
+  const lastRealtimeRefetchAt = useRef(0);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['predictiveAdoption', tenantsParam, rangeParam],
     queryFn: () => dashboardAPI.getPredictiveAdoption(tenantsParam, rangeParam),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 20 * 1000,
+    refetchInterval: 20 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    retry: 1,
   });
+
+  useEffect(() => {
+    if (!lastEvent) return;
+    const now = Date.now();
+    if (now - lastRealtimeRefetchAt.current < 5000) return;
+    lastRealtimeRefetchAt.current = now;
+    void refetch();
+  }, [lastEvent, refetch]);
+
+  const predictions: Prediction[] = useMemo(() => data?.predictions || [], [data?.predictions]);
+  const anomalies = useMemo(() => predictions.filter((p) => p.anomaly), [predictions]);
+
+  const sortedPredictions = useMemo(
+    () => predictions.slice().sort((a, b) => b.score - a.score),
+    [predictions]
+  );
+
+  const summary = useMemo(() => {
+    const total = sortedPredictions.length;
+    const highAdoption = sortedPredictions.filter((p) => p.score >= 70).length;
+    const atRisk = sortedPredictions.filter((p) => p.score < 40).length;
+    const avgScore = total > 0 ? sortedPredictions.reduce((sum, p) => sum + p.score, 0) / total : 0;
+    const avgGrowth = total > 0
+      ? sortedPredictions.reduce((sum, p) => sum + (p.growth_rate ?? 0), 0) / total
+      : 0;
+    const projectedTotal7d = sortedPredictions.reduce((sum, p) => sum + (p.projected_next_7d ?? 0), 0);
+
+    return {
+      total,
+      highAdoption,
+      atRisk,
+      avgScore,
+      avgGrowth,
+      projectedTotal7d,
+    };
+  }, [sortedPredictions]);
+
+  const topUpside = useMemo(
+    () => sortedPredictions
+      .filter((p) => p.status === 'Growing' || p.score < 70)
+      .slice(0, 3),
+    [sortedPredictions]
+  );
 
   const getScoreColor = (score: number) => {
     if (score >= 70) return 'text-[#1a73e8]';
@@ -39,14 +89,14 @@ export default function PredictivePage() {
 
   const getScoreBarColor = (score: number) => {
     if (score >= 70) return 'bg-[#1a73e8]';
-    if (score >= 40) return 'bg-gray-400';
+    if (score >= 40) return 'bg-blue-400';
     return 'bg-gray-300';
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'High Adoption': return 'bg-white text-[#1a73e8] border border-[#1a73e8]/30';
-      case 'Growing': return 'bg-white text-gray-600 border border-gray-300';
+      case 'Growing': return 'bg-white text-blue-600 border border-blue -300';
       default: return 'bg-white text-gray-500 border border-gray-200';
     }
   };
@@ -58,16 +108,8 @@ export default function PredictivePage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="animate-in fade-in duration-500 space-y-6">
-        <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">Predictive Adoption Insights</h1>
-        <TableSkeleton rows={6} />
-      </div>
-    );
+    return <PredictivePageSkeleton />;
   }
-
-  const predictions: Prediction[] = data?.predictions || [];
-  const anomalies = predictions.filter((p) => p.anomaly);
 
   return (
     <div className="animate-in fade-in duration-500 space-y-6">
@@ -81,10 +123,96 @@ export default function PredictivePage() {
             Score = Trend(40%) + Users(30%) + Frequency(30%)
           </p>
         </div>
-        <div className="px-4 py-2 border border-[#1a73e8] bg-[#1a73e8]/5 rounded-lg text-sm">
-          <span className="text-gray-500">Total Users:</span> <span className="font-bold text-[#1a73e8]">{data?.total_users?.toLocaleString() || 0}</span>
+        <div className="px-4 py-2 border border-[#1a73e8] bg-[#1a73e8]/5 rounded-lg text-sm flex items-center gap-3">
+          <div>
+            <span className="text-gray-500">Total Users:</span>{' '}
+            <span className="font-bold text-[#1a73e8]">{data?.total_users?.toLocaleString() || 0}</span>
+          </div>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] border ${isConnected ? 'text-[#1a73e8] border-[#1a73e8]/30 bg-white' : 'text-gray-500 border-gray-300 bg-white'}`}>
+            <Activity className="h-3 w-3" />
+            {isConnected ? 'Realtime on' : 'Realtime off'}
+          </span>
+          {isFetching && <span className="text-[11px] text-gray-500">Refreshing...</span>}
         </div>
       </div>
+
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <article className="rounded-xl border border-gray-200 border-t-4 border-t-[#1a73e8] bg-blue-50 p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Features Modeled</p>
+          <p className="mt-2 text-2xl font-semibold text-gray-900">{summary.total}</p>
+        </article>
+        <article className="rounded-xl border border-gray-200 border-t-4 border-t-[#1a73e8] bg-blue-50 p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Average Score</p>
+          <p className="mt-2 text-2xl font-semibold text-[#1a73e8]">{summary.avgScore.toFixed(1)}</p>
+        </article>
+        <article className="rounded-xl border border-gray-200 border-t-4 border-t-[#1a73e8] bg-blue-50 p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-gray-500">High Adoption</p>
+          <p className="mt-2 text-2xl font-semibold text-gray-900">{summary.highAdoption}</p>
+        </article>
+        <article className="rounded-xl border border-gray-200 border-t-4 border-t-[#1a73e8] bg-blue-50 p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-gray-500">At Risk</p>
+          <p className="mt-2 text-2xl font-semibold text-gray-900">{summary.atRisk}</p>
+        </article>
+        <article className="rounded-xl border border-gray-200 border-t-4 border-t-[#1a73e8] bg-blue-50 p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Projected 7d Volume</p>
+          <p className="mt-2 text-2xl font-semibold text-gray-900">{summary.projectedTotal7d.toLocaleString()}</p>
+        </article>
+      </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm xl:col-span-2">
+          <h2 className="text-lg font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+            <Radar className="h-4 w-4 text-[#1a73e8]" />
+            Opportunity Radar
+          </h2>
+          <p className="text-xs text-gray-500 mt-1">Top features with expansion headroom based on current score and trend.</p>
+
+          <div className="mt-4 space-y-3">
+            {topUpside.length > 0 ? topUpside.map((p) => (
+              <div key={p.feature_name} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-gray-900">{p.feature_name}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${getStatusBadge(p.status)}`}>
+                    {p.status}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-gray-200">
+                  <div className={`h-2 rounded-full ${getScoreBarColor(p.score)}`} style={{ width: `${Math.max(8, Math.min(p.score, 100))}%` }} />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                  <span>Score {p.score}</span>
+                  <span>Growth {(p.growth_rate ?? 0) > 0 ? '+' : ''}{p.growth_rate ?? 0}%</span>
+                </div>
+              </div>
+            )) : (
+              <p className="text-sm text-gray-500">No opportunity rows available yet. Send more events to improve forecast depth.</p>
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900 tracking-tight">Model Pulse</h2>
+          <div className="mt-4 space-y-3">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Average Growth</p>
+              <p className={`mt-1 text-lg font-semibold ${summary.avgGrowth >= 0 ? 'text-[#1a73e8]' : 'text-gray-700'}`}>
+                {summary.avgGrowth >= 0 ? '+' : ''}{summary.avgGrowth.toFixed(1)}%
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Anomalies</p>
+              <p className="mt-1 text-lg font-semibold text-gray-900">{anomalies.length}</p>
+              <p className="mt-1 text-xs text-gray-500">Spikes or dips beyond normal feature trend bands.</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Confidence Notes</p>
+              <p className="mt-1 text-xs text-gray-600 leading-5">
+                Forecast stability increases with steady event cadence. Realtime refresh keeps this view aligned with newly ingested behavior.
+              </p>
+            </div>
+          </div>
+        </article>
+      </section>
 
       {/* Anomaly alerts */}
       {anomalies.length > 0 && (
@@ -185,8 +313,8 @@ export default function PredictivePage() {
               </tr>
             </thead>
             <tbody>
-              {predictions.map((p, i) => (
-                <tr key={i} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${p.anomaly ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}>
+              {sortedPredictions.map((p) => (
+                <tr key={p.feature_name} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${p.anomaly ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}>
                   <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900">
                     {p.feature_name}
                     {p.anomaly && <span className="ml-1.5 text-amber-600 text-[10px] font-bold"></span>}
@@ -221,7 +349,7 @@ export default function PredictivePage() {
       {/* Score Legend */}
       <div className="flex items-center justify-evenly flex-wrap gap-4 text-xs text-gray-500 p-4 bg-white rounded-lg border border-gray-200">
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#1a73e8] rounded-full"></div> <strong>70-100:</strong> High Adoption</div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-400 rounded-full"></div> <strong>40-69:</strong> Growing</div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-400 rounded-full"></div> <strong>40-69:</strong> Growing</div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-300 rounded-full"></div> <strong>0-39:</strong> At Risk</div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-yellow-500 rounded-full"></div>Anomaly (&gt;50% change)</div>
       </div>
