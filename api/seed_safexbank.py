@@ -24,7 +24,7 @@ def generate_events():
     # 4 Pro features and some basic features
     features = [
         "login", "transfer_funds", "view_dashboard", 
-        "crypto_trade_execution", "wealth_rebalance", "payroll_batch_processed", "pro_book_download"
+        "pro-feature?id=crypto-trading", "wealth_rebalance", "pro-feature?id=bulk-payroll-processing", "pro_book_download"
     ]
     
     for tenant in TENANTS:

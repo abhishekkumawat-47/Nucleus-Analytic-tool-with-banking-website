@@ -8,13 +8,13 @@ client = get_client(host='localhost', username='default', password='clickhouse')
 now = datetime.now()
 
 events = [
-    ('nexabank', 'crypto_trade_execution', 'user1', 'WEB', now, '{}'),
-    ('nexabank', 'crypto_trade_execution', 'user2', 'MOBILE', now, '{}'),
-    ('nexabank', 'crypto_trade_execution', 'user3', 'WEB', now, '{}'),
-    ('nexabank', 'crypto_trade_execution', 'user3', 'WEB', now, '{}'),
+    ('nexabank', 'pro-feature?id=crypto-trading', 'user1', 'WEB', now, '{}'),
+    ('nexabank', 'pro-feature?id=crypto-trading', 'user2', 'MOBILE', now, '{}'),
+    ('nexabank', 'pro-feature?id=crypto-trading', 'user3', 'WEB', now, '{}'),
+    ('nexabank', 'pro-feature?id=crypto-trading', 'user3', 'WEB', now, '{}'),
     ('nexabank', 'wealth_rebalance', 'user1', 'WEB', now, '{}'),
     ('nexabank', 'wealth_rebalance', 'user4', 'WEB', now, '{}'),
-    ('nexabank', 'payroll_batch_processed', 'user5', 'WEB', now, '{}'),
+    ('nexabank', 'pro-feature?id=bulk-payroll-processing', 'user5', 'WEB', now, '{}'),
     ('nexabank', 'ai_insight_download', 'user1', 'WEB', now, '{}'),
     ('nexabank', 'pro_unlocked', 'user1', 'WEB', now, '{}'),
 ]

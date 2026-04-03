@@ -91,6 +91,11 @@ async function main() {
     { key: "kyc", tenantId: "bank_a" },
     { key: "loan_module", tenantId: "bank_a" },
     { key: "pro_features", tenantId: "bank_a" },
+    // SafeX Bank toggles for multi-tenant comparison
+    { key: "emi_calculator", tenantId: "bank_b" },
+    { key: "kyc", tenantId: "bank_b" },
+    { key: "loan_module", tenantId: "bank_b" },
+    { key: "pro_features", tenantId: "bank_b" },
   ];
 
   for (const toggle of defaultToggles) {
