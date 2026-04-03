@@ -111,10 +111,11 @@ export interface AcquisitionChannel {
   formattedValue: string;
 }
 
-/** Top page entry */
+/** Top page entry — matches backend /metrics/top_pages response */
 export interface TopPage {
-  url: string;
-  visits: string;
+  pageUrl: string;
+  totalEvents: number;
+  features: string[];
 }
 
 /** Location data for geography section */
@@ -128,9 +129,12 @@ export interface LocationData {
 /** AI-generated insight */
 export interface AIInsight {
   id: string;
+  title: string;
   message: string;
   type: 'warning' | 'info' | 'success';
   priority: 'high' | 'medium' | 'low';
+  impact?: string;
+  actionRequired?: boolean;
 }
 
 /* ─────────────── Configuration & Governance ─────────────── */
