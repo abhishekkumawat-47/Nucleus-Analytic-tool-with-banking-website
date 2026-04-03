@@ -2,14 +2,14 @@
 
 import React from 'react';
 import { useDashboardData } from '@/hooks/useDashboard';
-import { DashboardSkeleton } from '@/components/Skeletons';
+import { TenantsPageSkeleton } from '@/components/Skeletons';
 import TenantTable from '@/components/TenantTable';
 
 export default function TenantsPage() {
   const { isLoading, tenants } = useDashboardData();
 
-  if (isLoading && tenants.length === 0) {
-    return <DashboardSkeleton />;
+  if (isLoading) {
+    return <TenantsPageSkeleton />;
   }
 
   return (

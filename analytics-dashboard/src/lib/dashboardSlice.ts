@@ -1,254 +1,75 @@
 /**
  * Dashboard Redux slice.
- * Manages all dashboard state including filters, data, and UI state.
- * Uses createAsyncThunk for API calls with proper loading/error handling.
+ * Single source of truth for: selectedTenants, timeRange, deploymentMode.
+ * Data fetching is handled entirely by React Query — not Redux.
  */
 
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import {
-  DashboardState,
-  TimeRange,
-  DeploymentMode,
-  KPIMetric,
-  TimeSeriesDataPoint,
-  FeatureUsageDataPoint,
-  BarDataPoint,
-  FunnelStep,
-  FeatureActivityRow,
-  Tenant,
-  PagesPerMinuteDataPoint,
-  TopPage,
-  DeviceBreakdown,
-  AcquisitionChannel,
-  LocationData,
-  AuditLog,
-  FeatureConfig,
-  RetentionData,
-} from '@/types';
-import { dashboardAPI } from './api';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { TimeRange, DeploymentMode, KPIMetric } from '@/types';
 
-/** Explicitly typed payload from the fetchDashboardData thunk */
-interface DashboardDataPayload {
-  kpiMetrics: KPIMetric[];
-  secondaryKpiMetrics: KPIMetric[];
-  trafficData: TimeSeriesDataPoint[];
-  featureUsageData: FeatureUsageDataPoint[];
-  topFeatures: BarDataPoint[];
-  funnelData: FunnelStep[];
-  featureActivity: FeatureActivityRow[];
-  tenants: Tenant[];
+export interface DashboardState {
+  timeRange: TimeRange;
+  selectedTenants: string[];
+  deploymentMode: DeploymentMode;
+  sidebarCollapsed: boolean;
   realTimeUsers: number;
-  pagesPerMinute: PagesPerMinuteDataPoint[];
-  topPages: TopPage[];
-  deviceBreakdown: DeviceBreakdown[];
-  acquisitionChannels: AcquisitionChannel[];
-  locations: LocationData[];
-  auditLogs: AuditLog[];
-  featureConfigs: FeatureConfig[];
-  retentionData: RetentionData[];
+  realTimeUsersTimestampIST: string | null;
+  kpiMetrics: KPIMetric[];
 }
 
-interface DeploymentInfoPayload {
-  mode: string;
-  is_cloud: boolean;
-  is_on_prem: boolean;
-  local_tenant: string | null;
-}
-
-/** Initial state with empty arrays - data loads via async thunks */
 const initialState: DashboardState = {
   timeRange: 'Last 7 Days',
-  selectedTenant: 'nexabank',
+  selectedTenants: ['nexabank'],
   deploymentMode: 'cloud',
-  isLoading: true,
-  isFetching: false,
   sidebarCollapsed: false,
-  kpiMetrics: [],
-  secondaryKpiMetrics: [],
-  trafficData: [],
-  featureUsageData: [],
-  topFeatures: [],
-  funnelData: [],
-  featureActivity: [],
-  tenants: [],
-  aiInsights: [],
   realTimeUsers: 0,
-  pagesPerMinute: [],
-  topPages: [],
-  deviceBreakdown: [],
-  acquisitionChannels: [],
-  locations: [],
-  auditLogs: [],
-  featureConfigs: [],
-  retentionData: [],
+  realTimeUsersTimestampIST: null,
+  kpiMetrics: [],
 };
-
-/* ─────────────── Async Thunks ─────────────── */
-
-export const fetchDashboardData = createAsyncThunk<DashboardDataPayload, void, { state: { dashboard: DashboardState } }>(
-  'dashboard/fetchAll',
-  async (_, { getState }) => {
-    const state = getState();
-    const selected = state.dashboard.selectedTenant;
-    const tenantId = selected === 'All Tenants' ? 'nexabank,safexbank' : selected;
-    const range = state.dashboard.timeRange;
-    const days = range === 'Last 30 Days' ? 30 : range === 'Last 90 Days' ? 90 : 7;
-
-    const [
-      kpiMetrics,
-      secondaryKpiMetrics,
-      trafficData,
-      featureUsageData,
-      topFeatures,
-      funnelData,
-      featureActivity,
-      tenants,
-      realTimeUsers,
-      pagesPerMinute,
-      topPages,
-      deviceBreakdown,
-      acquisitionChannels,
-      locations,
-      auditLogs,
-      featureConfigs,
-      retentionData,
-    ] = await Promise.all([
-      dashboardAPI.getKPIMetrics(tenantId, days),
-      dashboardAPI.getSecondaryKPIMetrics(tenantId, days),
-      dashboardAPI.getTrafficData(tenantId, days),
-      dashboardAPI.getFeatureUsageData(tenantId, days),
-      dashboardAPI.getTopFeatures(tenantId, days),
-      dashboardAPI.getFunnelData(tenantId),
-      dashboardAPI.getFeatureActivity(tenantId, days),
-      dashboardAPI.getTenants(tenantId, days),
-      dashboardAPI.getRealTimeUsers(tenantId),
-      dashboardAPI.getPagesPerMinute(tenantId),
-      dashboardAPI.getTopPages(tenantId, days),
-      dashboardAPI.getDeviceBreakdown(tenantId, days),
-      dashboardAPI.getAcquisitionChannels(tenantId, days),
-      dashboardAPI.getLocations(tenantId, days),
-      dashboardAPI.getAuditLogs(tenantId),
-      dashboardAPI.getFeatureConfigs(tenantId),
-      dashboardAPI.getRetentionData(tenantId),
-    ]);
-
-    return {
-      kpiMetrics,
-      secondaryKpiMetrics,
-      trafficData,
-      featureUsageData,
-      topFeatures,
-      funnelData,
-      featureActivity,
-      tenants,
-      realTimeUsers,
-      pagesPerMinute,
-      topPages,
-      deviceBreakdown,
-      acquisitionChannels,
-      locations,
-      auditLogs,
-      featureConfigs,
-      retentionData,
-    };
-  }
-);
-
-export const fetchAIInsightsData = createAsyncThunk<ReturnType<typeof dashboardAPI.getAIInsights> extends Promise<infer T> ? T : never, void, { state: { dashboard: DashboardState } }>(
-  'dashboard/fetchAIInsights',
-  async (_, { getState }) => {
-    const state = getState();
-    const tenantId = state.dashboard.selectedTenant;
-    return await dashboardAPI.getAIInsights(tenantId);
-  }
-);
-
-export const fetchDeploymentInfo = createAsyncThunk<DeploymentInfoPayload>(
-  'dashboard/fetchDeploymentInfo',
-  async () => {
-    return await dashboardAPI.getDeploymentInfo();
-  }
-);
-
-/* ─────────────── Slice Definition ─────────────── */
 
 const dashboardSlice = createSlice({
   name: 'dashboard',
   initialState,
   reducers: {
-    /** Updates the selected time range filter */
     setTimeRange(state, action: PayloadAction<TimeRange>) {
       state.timeRange = action.payload;
     },
-    /** Updates the selected tenant filter */
-    setSelectedTenant(state, action: PayloadAction<string>) {
-      state.selectedTenant = action.payload;
+    setSelectedTenants(state, action: PayloadAction<string[] | string>) {
+      if (Array.isArray(action.payload)) {
+        state.selectedTenants = action.payload;
+      } else {
+        state.selectedTenants = [action.payload];
+      }
     },
-    /** Toggles between cloud and on-prem deployment mode */
     setDeploymentMode(state, action: PayloadAction<DeploymentMode>) {
       state.deploymentMode = action.payload;
     },
-    /** Toggles sidebar collapsed state */
     toggleSidebar(state) {
       state.sidebarCollapsed = !state.sidebarCollapsed;
     },
-    /** Updates real-time user count (for live updates) */
     updateRealTimeUsers(state, action: PayloadAction<number>) {
       state.realTimeUsers = action.payload;
+      const now = new Date();
+      state.realTimeUsersTimestampIST = now.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
     },
-    /** Updates KPI metrics dynamically from WebSockets */
     updateKPIMetrics(state, action: PayloadAction<KPIMetric[]>) {
       state.kpiMetrics = action.payload;
     },
-  },
-  extraReducers: (builder) => {
-    builder
-      .addCase(fetchDashboardData.pending, (state) => {
-        if (state.kpiMetrics.length === 0) {
-          state.isLoading = true;
-        }
-        state.isFetching = true;
-      })
-      .addCase(fetchDashboardData.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isFetching = false;
-        state.kpiMetrics = action.payload.kpiMetrics;
-        state.secondaryKpiMetrics = action.payload.secondaryKpiMetrics;
-        state.trafficData = action.payload.trafficData;
-        state.featureUsageData = action.payload.featureUsageData;
-        state.topFeatures = action.payload.topFeatures;
-        state.funnelData = action.payload.funnelData;
-        state.featureActivity = action.payload.featureActivity;
-        state.tenants = action.payload.tenants;
-        state.realTimeUsers = action.payload.realTimeUsers;
-        state.pagesPerMinute = action.payload.pagesPerMinute;
-        state.topPages = action.payload.topPages;
-        state.deviceBreakdown = action.payload.deviceBreakdown;
-        state.acquisitionChannels = action.payload.acquisitionChannels;
-        state.locations = action.payload.locations;
-        state.auditLogs = action.payload.auditLogs;
-        state.featureConfigs = action.payload.featureConfigs;
-        state.retentionData = action.payload.retentionData;
-      })
-      .addCase(fetchAIInsightsData.fulfilled, (state, action) => {
-        state.aiInsights = action.payload;
-      })
-      .addCase(fetchDashboardData.rejected, (state) => {
-        state.isLoading = false;
-        state.isFetching = false;
-      })
-      .addCase(fetchDeploymentInfo.fulfilled, (state, action) => {
-        state.deploymentMode = action.payload.mode.toLowerCase() as DeploymentMode;
-        if (action.payload.is_on_prem && action.payload.local_tenant) {
-          state.selectedTenant = action.payload.local_tenant;
-        }
-      });
   },
 });
 
 export const {
   setTimeRange,
-  setSelectedTenant,
+  setSelectedTenants,
   setDeploymentMode,
   toggleSidebar,
   updateRealTimeUsers,

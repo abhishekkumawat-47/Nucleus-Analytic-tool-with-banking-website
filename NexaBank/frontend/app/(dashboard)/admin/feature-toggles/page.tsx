@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { useEventTracker } from "@/hooks/useEventTracker"
 
 interface Toggle {
   key: string
@@ -51,9 +52,12 @@ export default function AdminFeatureToggles() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
 
+  const { track, measureAndTrack } = useEventTracker()
+
   useEffect(() => {
+    track('admin_feature_toggles.page.view')
     fetchAllToggles()
-  }, [])
+  }, [track])
 
   const fetchAllToggles = async () => {
     setLoading(true)
@@ -98,7 +102,9 @@ export default function AdminFeatureToggles() {
   const handleToggle = async (tenantId: string, key: string, enabled: boolean) => {
     setSaving(`${tenantId}-${key}`)
     try {
-      await axios.put(`${API_BASE_URL}/events/toggles/${key}`, { tenantId, enabled }, { withCredentials: true })
+      await measureAndTrack('admin_feature_toggles.toggle_feature', async () => {
+        await axios.put(`${API_BASE_URL}/events/toggles/${key}`, { tenantId, enabled }, { withCredentials: true })
+      })
       setToggles(prev => ({
         ...prev,
         [tenantId]: {

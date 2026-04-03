@@ -1,31 +1,33 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
-import { TableSkeleton, KPICardSkeleton, ChartSkeleton } from '@/components/Skeletons';
+import { TableSkeleton, KPICardSkeleton, ChartSkeleton, LicensePageSkeleton } from '@/components/Skeletons';
 
-const DummyIcon = () => null;
-const Key = DummyIcon;
-const AlertTriangle = DummyIcon;
-const CheckCircle = DummyIcon;
-const XCircle = DummyIcon;
-const Loader2 = () => <span className="animate-pulse">...</span>;
-const Users = DummyIcon;
-const DollarSign = DummyIcon;
-const Shield = DummyIcon;
-const Zap = DummyIcon;
-const BarChart3 = DummyIcon;
-const ArrowUpRight = DummyIcon;
-const ArrowDownRight = DummyIcon;
-const Crown = DummyIcon;
-const RefreshCw = DummyIcon;
-const Sparkles = DummyIcon;
-const Activity = DummyIcon;
-const Bitcoin = DummyIcon;
-const Scale = DummyIcon;
-const Briefcase = DummyIcon;
-const FileText = DummyIcon;
+import {
+  Key,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Users,
+  DollarSign,
+  Shield,
+  Zap,
+  BarChart3,
+  ArrowUpRight,
+  ArrowDownRight,
+  Crown,
+  RefreshCw,
+  Sparkles,
+  Activity,
+  Bitcoin,
+  Scale,
+  Briefcase,
+  FileText
+} from 'lucide-react';
 
 
 import ChartContainer from '@/components/ChartContainer';
@@ -180,32 +182,26 @@ function UsageBar({ pct, color }: { pct: number; color: string }) {
 /* ═══════════════════════════ MAIN PAGE ═══════════════════════════ */
 
 export default function LicenseUsagePage() {
-  const { selectedTenant } = useDashboardData();
-  const tenantId = selectedTenant || 'nexabank';
-  const [data, setData] = useState<LicenseData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { tenantsParam, rangeParam, selectedTenants, timeRange } = useDashboardData();
   const [seeding, setSeeding] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'licensed' | 'free'>('overview');
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const result = await dashboardAPI.getLicenseUsage(tenantId);
-      setData(result as LicenseData);
-    } catch {
-      setData(null);
-      toast.error('Failed to fetch license usage data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, isLoading: loading, refetch: fetchData } = useQuery({
+    queryKey: ['licenseUsage', tenantsParam, rangeParam],
+    queryFn: () => dashboardAPI.getLicenseUsage(tenantsParam, rangeParam),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => { fetchData(); }, [tenantId]);
-
-  const summary = data?.summary;
+  const summary = (data as LicenseData | undefined)?.summary;
   const hasWastedLicenses = (summary?.waste_pct || 0) > 20;
-  const licensedFeatures = [ ...(data?.licensed || []), ...(data?.unused_licensed || []) ];
-  const unlicensedFeatures = data?.unlicensed_used || [];
+  // Use canonical licensed list — deduplicated by feature_name
+  const seenFeatures = new Set<string>();
+  const licensedFeatures = [...((data as LicenseData | undefined)?.licensed || []), ...((data as LicenseData | undefined)?.unused_licensed || [])].filter(f => {
+    if (seenFeatures.has(f.feature_name)) return false;
+    seenFeatures.add(f.feature_name);
+    return true;
+  });
+  const unlicensedFeatures = (data as LicenseData | undefined)?.unlicensed_used || [];
   const hasData = licensedFeatures.length > 0;
 
   /* ─── Seed Handler ─── */
@@ -218,7 +214,7 @@ export default function LicenseUsagePage() {
         { feature_name: "pro.payroll-pro.batch_process", is_licensed: true, plan_tier: "enterprise" },
         { feature_name: "pro.finance-library.book_access", is_licensed: true, plan_tier: "enterprise" },
       ];
-      await dashboardAPI.syncLicenses(tenantId, features);
+      await dashboardAPI.syncLicenses(tenantsParam, features);
       await fetchData();
       toast.success('Enterprise licenses synced successfully');
     } catch {
@@ -267,13 +263,12 @@ export default function LicenseUsagePage() {
             </h1>
           </div>
           <p className="text-sm text-gray-500 mt-1.5 ml-[42px]">
-            Track paid Pro features vs actual usage across <strong className="text-gray-700">{tenantId}</strong> tenant.
+            Track paid Pro features vs actual usage across <strong className="text-gray-700">{selectedTenants.join(', ')}</strong> &middot; {timeRange}
           </p>
         </div>
         <div className="flex items-center gap-2 ml-[42px] sm:ml-0">
           <button
-            onClick={fetchData}
-            disabled={loading}
+            onClick={() => fetchData()}
             className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
@@ -293,15 +288,15 @@ export default function LicenseUsagePage() {
 
       {/* ─── Alert ─── */}
       {hasData && summary && hasWastedLicenses && (
-        <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-red-800 rounded-xl p-4 flex items-start gap-3 shadow-sm">
-          <div className="p-2 bg-red-100 rounded-full flex-shrink-0">
-            <AlertTriangle className="h-4 w-4 text-red-600" />
+        <div className="bg-white border border-[#1a73e8] border-l-4 text-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm">
+          <div className="p-2 bg-[#1a73e8]/10 rounded-full flex-shrink-0">
+            <AlertTriangle className="h-4 w-4 text-[#1a73e8]" />
           </div>
           <div>
             <h3 className="text-sm font-semibold">License Optimization Alert</h3>
-            <p className="text-sm mt-0.5 text-red-700">
-              <strong>{data.unused_licensed.length}</strong> enterprise licenses are inactive.
-              You could save up to <strong>{formatCurrency(data.unused_licensed.length * summary.pro_users * 500)}</strong>/month
+            <p className="text-sm mt-0.5 text-gray-700">
+              <strong>{(data as LicenseData | undefined)?.unused_licensed?.length ?? 0}</strong> enterprise licenses are inactive.
+              You could save up to <strong>{formatCurrency(((data as LicenseData | undefined)?.unused_licensed?.length ?? 0) * (summary?.pro_users ?? 0) * 500)}</strong>/month
               by reviewing your plan — current waste is at <strong>{summary.waste_pct}%</strong>.
             </p>
           </div>
@@ -335,12 +330,12 @@ export default function LicenseUsagePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
 
             {/* Enterprise Licensed */}
-            <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-white border-gray-200 border-t-4 border-t-[#1a73e8] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-violet-50 rounded-lg">
-                  <Shield className="h-4 w-4 text-violet-600" />
+                <div className="p-2 border border-gray-200 bg-white rounded-lg">
+                  <Shield className="h-4 w-4 text-gray-700" />
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-violet-100 text-violet-600">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-gray-200 text-gray-700">
                   Licensed
                 </span>
               </div>
@@ -353,12 +348,12 @@ export default function LicenseUsagePage() {
             </div>
 
             {/* Pro Users */}
-            <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-white border-gray-200 border-t-4 border-t-[#1a73e8] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Users className="h-4 w-4 text-blue-600" />
+                <div className="p-2 border border-gray-200 bg-white rounded-lg">
+                  <Users className="h-4 w-4 text-gray-700" />
                 </div>
-                <span className={`flex items-center gap-0.5 text-xs font-medium ${summary.wow_change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                <span className={`flex items-center gap-0.5 text-xs font-medium ${summary.wow_change >= 0 ? 'text-gray-600' : 'text-gray-500'}`}>
                   {summary.wow_change >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                   {Math.abs(summary.wow_change)}% WoW
                 </span>
@@ -366,18 +361,18 @@ export default function LicenseUsagePage() {
               <p className="text-3xl font-bold text-gray-900">{summary.pro_users}</p>
               <p className="text-xs text-gray-500 mt-1">Pro users in last 30 days</p>
               <div className="mt-3 pt-3 border-t border-gray-50">
-                <UsageBar pct={summary.pro_adoption_pct} color="#3B82F6" />
+                <UsageBar pct={summary.pro_adoption_pct} color="#1a73e8" />
                 <p className="text-[10px] text-gray-400 mt-1">{summary.pro_adoption_pct}% of {summary.total_users} total users</p>
               </div>
             </div>
 
             {/* Est. Revenue */}
-            <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-white border-gray-200 border-t-4 border-t-[#1a73e8] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-emerald-50 rounded-lg">
-                  <DollarSign className="h-4 w-4 text-emerald-600" />
+                <div className="p-2 border border-gray-200 bg-white rounded-lg">
+                  <DollarSign className="h-4 w-4 text-gray-700" />
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-600">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-gray-200 text-gray-700">
                   Revenue
                 </span>
               </div>
@@ -389,23 +384,21 @@ export default function LicenseUsagePage() {
             </div>
 
             {/* License Waste */}
-            <div className={`border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow ${summary.waste_pct > 20 ? 'bg-red-50/50 border-red-100' : 'bg-white border-gray-100'}`}>
+            <div className="bg-white border-gray-200 border-t-4 border-t-[#1a73e8] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
-                <div className={`p-2 rounded-lg ${summary.waste_pct > 20 ? 'bg-red-100' : 'bg-green-50'}`}>
-                  <XCircle className={`h-4 w-4 ${summary.waste_pct > 20 ? 'text-red-500' : 'text-green-600'}`} />
+                <div className="p-2 border border-gray-200 bg-white rounded-lg">
+                  <XCircle className="h-4 w-4 text-gray-700" />
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                  summary.waste_pct > 20 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                }`}>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-gray-200 text-gray-700">
                   {summary.waste_pct > 20 ? 'ALERT' : 'OPTIMAL'}
                 </span>
               </div>
-              <p className={`text-3xl font-bold ${summary.waste_pct > 20 ? 'text-red-600' : 'text-green-600'}`}>
+              <p className="text-3xl font-bold text-gray-900">
                 {summary.waste_pct}%
               </p>
               <p className="text-xs text-gray-500 mt-1">License waste rate</p>
               <div className="mt-3 pt-3 border-t border-gray-50">
-                <UsageBar pct={100 - summary.waste_pct} color={summary.waste_pct > 20 ? '#EF4444' : '#10B981'} />
+                <UsageBar pct={100 - summary.waste_pct} color={summary.waste_pct > 20 ? '#1a73e8' : '#1a73e8'} />
                 <p className="text-[10px] text-gray-400 mt-1">{summary.total_used_licensed}/{summary.total_licensed} licenses active</p>
               </div>
             </div>
@@ -419,19 +412,19 @@ export default function LicenseUsagePage() {
                   value={summary.total_used_licensed}
                   max={summary.total_licensed}
                   label="Licenses Used"
-                  color="#7C3AED"
+                  color="#1a73e8"
                 />
                 <DonutChart
                   value={summary.pro_users}
                   max={summary.total_users}
                   label="Pro Adoption"
-                  color="#3B82F6"
+                  color="#4285F4"
                 />
                 <DonutChart
                   value={summary.total_used_licensed}
                   max={Math.max(summary.total_used, 1)}
                   label="Licensed Share"
-                  color="#10B981"
+                  color="#8AB4F8"
                 />
               </div>
             </ChartContainer>
@@ -447,7 +440,7 @@ export default function LicenseUsagePage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
-                          <UsageBar pct={f.usage_pct} color={f.is_used ? '#7C3AED' : '#EF4444'} />
+                          <UsageBar pct={f.usage_pct} color={f.is_used ? '#1a73e8' : '#9ca3af'} />
                         </div>
                         <span className="text-[10px] font-medium text-gray-400 w-10 text-right">{f.usage_pct}%</span>
                       </div>
@@ -499,8 +492,8 @@ export default function LicenseUsagePage() {
                       </div>
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         f.is_used
-                          ? 'bg-green-100 text-green-700 border border-green-200'
-                          : 'bg-red-100 text-red-600 border border-red-200'
+                          ? 'bg-white border border-gray-200 text-gray-700'
+                          : 'bg-white border border-gray-200 text-gray-500'
                       }`}>
                         {f.is_used ? 'Active' : 'Unused'}
                       </span>
@@ -518,7 +511,7 @@ export default function LicenseUsagePage() {
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">7d Trend</p>
                         <div className="mt-1">
-                          <Sparkline data={f.trend} color={f.is_used ? '#7C3AED' : '#EF4444'} height={28} />
+                          <Sparkline data={f.trend} color={f.is_used ? '#1a73e8' : '#9ca3af'} height={28} />
                         </div>
                       </div>
                     </div>
@@ -528,7 +521,7 @@ export default function LicenseUsagePage() {
                       <span className="text-[10px] font-medium text-gray-400">
                         {f.usage_pct}% of total platform usage
                       </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-gray-200 text-gray-600">
                         {f.plan_tier}
                       </span>
                     </div>
@@ -566,17 +559,17 @@ export default function LicenseUsagePage() {
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-violet-100 text-violet-700 border border-violet-200">
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white text-gray-600 border border-gray-200">
                             Enterprise
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
                           {f.is_used ? (
-                            <span className="flex items-center gap-1.5 text-green-600 font-medium text-sm">
+                            <span className="flex items-center gap-1.5 text-gray-700 font-medium text-sm">
                               <CheckCircle className="h-4 w-4" /> Active
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1.5 text-red-500 font-medium text-sm">
+                            <span className="flex items-center gap-1.5 text-gray-400 font-medium text-sm">
                               <XCircle className="h-4 w-4" /> Unused
                             </span>
                           )}
@@ -587,7 +580,7 @@ export default function LicenseUsagePage() {
                           <span className="font-medium text-violet-600">{f.usage_pct}%</span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <Sparkline data={f.trend} color={f.is_used ? '#7C3AED' : '#EF4444'} height={24} />
+                          <Sparkline data={f.trend} color={f.is_used ? '#1a73e8' : '#9ca3af'} height={24} />
                         </td>
                       </tr>
                     ))}
@@ -603,7 +596,7 @@ export default function LicenseUsagePage() {
               {unlicensedFeatures.length > 0 ? (
                 <div className="overflow-x-auto mt-2">
                   <table className="w-full text-left text-sm text-gray-600">
-                    <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-amber-50/50">
+                    <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
                       <tr>
                         <th className="px-4 py-3 font-medium">Feature</th>
                         <th className="px-4 py-3 font-medium">Tier</th>
@@ -634,7 +627,7 @@ export default function LicenseUsagePage() {
                             <span className="font-medium text-amber-600">{f.usage_pct}%</span>
                           </td>
                           <td className="px-4 py-3.5 w-32">
-                            <UsageBar pct={f.usage_pct} color="#F59E0B" />
+                            <UsageBar pct={f.usage_pct} color="#1a73e8" />
                           </td>
                         </tr>
                       ))}

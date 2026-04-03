@@ -16,7 +16,7 @@ export default function AppOverviewPage({ params }: { params: { appId: string } 
   useEffect(() => {
     if (appId) {
       // Super admins are allowed to call /metrics/kpi for a specific tenant (app)
-      dashboardAPI.getKPIMetrics(appId).then((res) => {
+      dashboardAPI.getKPIMetrics([appId], '7d').then((res) => {
         setKpi(res);
         setLoading(false);
       }).catch(() => {

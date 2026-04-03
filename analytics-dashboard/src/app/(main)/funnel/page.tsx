@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useDashboardData } from '@/hooks/useDashboard';
-import { DashboardSkeleton } from '@/components/Skeletons';
+import { FunnelPageSkeleton } from '@/components/Skeletons';
 import { FunnelStep } from '@/types';
 
 function formatPercent(value: number) {
@@ -39,10 +39,10 @@ function buildStageDiagnostics(funnelData: FunnelStep[]) {
 }
 
 export default function FunnelPage() {
-  const { isLoading, funnelData, selectedTenant, timeRange } = useDashboardData();
+  const { isLoading, funnelData, selectedTenants , timeRange } = useDashboardData();
 
-  if (isLoading && funnelData.length === 0) {
-    return <DashboardSkeleton />;
+  if (isLoading) {
+    return <FunnelPageSkeleton />;
   }
 
   const entryCount = funnelData[0]?.value || 0;
@@ -74,22 +74,22 @@ export default function FunnelPage() {
       label: 'Entry Users',
       value: entryCount.toLocaleString(),
       note: `${funnelData.length}-step journey`,
-      color: 'from-sky-50 to-blue-100',
-      border: 'border-sky-200',
+      color: 'bg-white',
+      border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
       label: 'Overall Conversion',
       value: formatPercent(overallConversion),
       note: `${completedCount.toLocaleString()} users reached final step`,
-      color: 'from-emerald-50 to-lime-100',
-      border: 'border-emerald-200',
+      color: 'bg-white',
+      border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
       label: 'Biggest Leak',
       value: `${toTitleCase(largestLeak.step.label)} (${largestLeak.step.dropOff}%)`,
       note: `${largestLeak.usersLostToNext.toLocaleString()} users lost to next stage`,
-      color: 'from-rose-50 to-orange-100',
-      border: 'border-rose-200',
+      color: 'bg-white',
+      border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
       label: 'Funnel Health Score',
@@ -100,8 +100,8 @@ export default function FunnelPage() {
           : funnelHealthScore >= 60
             ? 'Stable but with clear optimization headroom'
             : 'Urgent intervention needed at critical leaks',
-      color: 'from-violet-50 to-indigo-100',
-      border: 'border-indigo-200',
+      color: 'bg-white',
+      border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
   ];
 
@@ -116,7 +116,7 @@ export default function FunnelPage() {
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-gray-500">Tenant</p>
-            <p className="text-sm font-semibold text-gray-900 mt-1">{toTitleCase(selectedTenant)}</p>
+            <p className="text-sm font-semibold text-gray-900 mt-1">{selectedTenants.map(t => toTitleCase(t)).join(', ')}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-gray-500">Time Window</p>
@@ -129,7 +129,7 @@ export default function FunnelPage() {
         {metricCards.map((card) => (
           <article
             key={card.label}
-            className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+            className={`rounded-xl border bg-white p-4 shadow-sm ${card.border}`}
           >
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{card.label}</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">{card.value}</p>
@@ -185,15 +185,7 @@ export default function FunnelPage() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-gray-900">{toTitleCase(stage.step.label)}</p>
                     <span
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        stage.lossSeverity === 'Critical'
-                          ? 'bg-rose-100 text-rose-700'
-                          : stage.lossSeverity === 'High'
-                            ? 'bg-orange-100 text-orange-700'
-                            : stage.lossSeverity === 'Medium'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-emerald-100 text-emerald-700'
-                      }`}
+                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold border border-gray-200 bg-white text-gray-700"
                     >
                       {stage.lossSeverity}
                     </span>
@@ -221,9 +213,9 @@ export default function FunnelPage() {
             recovered users and a potential conversion lift to <span className="font-semibold text-emerald-700">{formatPercent(projectedConversion)}</span>.
           </p>
 
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Estimated opportunity</p>
-            <p className="mt-1 text-sm text-emerald-900">
+          <div className="mt-4 rounded-lg border border-[#1a73e8] bg-[#1a73e8]/5 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#1a73e8]">Estimated opportunity</p>
+            <p className="mt-1 text-sm text-gray-900">
               Recovering leakage at the primary bottleneck can improve completion volume by approximately{' '}
               <span className="font-semibold">{Math.max(projectedConversion - overallConversion, 0).toFixed(1)} percentage points</span>.
             </p>

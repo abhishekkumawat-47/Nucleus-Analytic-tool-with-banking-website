@@ -65,7 +65,7 @@ function KPICard({ metric }: KPICardProps) {
         </span>
         <div
           className={`flex items-center gap-1 text-[13px] font-medium ${
-            displayTrendGood ? 'text-emerald-600' : 'text-red-600'
+            displayTrendGood ? 'text-[#1a73e8]' : 'text-gray-500'
           }`}
         >
           {isPositive ? (

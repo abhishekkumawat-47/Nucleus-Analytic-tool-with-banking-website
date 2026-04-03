@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { UserData } from "@/components/context/UserContext"
+import { useEventTracker } from "@/hooks/useEventTracker"
 
 export default function AdminSimulatePage() {
   const [count, setCount] = useState(20)
@@ -31,7 +32,10 @@ export default function AdminSimulatePage() {
 
   const { isAuth } = UserData()
 
+  const { track, measureAndTrack } = useEventTracker()
+
   useEffect(() => {
+    track('admin_simulate.page.view')
     const fetchBanks = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/tenants/ifsc-list`, { withCredentials: true });
@@ -44,14 +48,16 @@ export default function AdminSimulatePage() {
       }
     };
     if (isAuth) fetchBanks();
-  }, [isAuth]);
+  }, [isAuth, track]);
 
   const handleSimulate = async () => {
     setLoading(true)
     setResult(null)
     try {
-      const res = await axios.post(`${API_BASE_URL}/events/simulate`, { count, tenantId }, { withCredentials: true })
-      setResult(res.data)
+      await measureAndTrack('admin_simulate.run_simulation', async () => {
+        const res = await axios.post(`${API_BASE_URL}/events/simulate`, { count, tenantId }, { withCredentials: true })
+        setResult(res.data)
+      })
       toast.success("Simulation complete!")
     } catch (err: any) {
       console.error("Simulation failed:", err)
@@ -171,8 +177,8 @@ export default function AdminSimulatePage() {
                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                        {[
-                         { label: 'Identities', value: result.usersCreated, color: 'text-violet-700', icon: UserPlus },
-                         { label: 'Applications', value: result.loansApplied, color: 'text-violet-700', icon: Database },
+                         { label: 'Total Users', value: result.totalUsers || result.usersCreated, color: 'text-violet-700', icon: UserPlus },
+                         { label: 'Applications', value: result.loansApplied || result.usersCreated, color: 'text-violet-700', icon: Database },
                          { label: 'Compliant', value: result.kycCompleted, color: 'text-violet-700', icon: CheckCircle2 },
                          { label: 'Analytics Opt-in', value: result.fullyCompleted, color: 'text-violet-700', icon: TrendingUp }
                        ].map((stat, i) => (

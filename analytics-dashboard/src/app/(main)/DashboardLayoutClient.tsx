@@ -4,6 +4,7 @@
  * Dashboard layout component.
  * Wraps dashboard pages with sidebar and top navbar.
  * Handles responsive sidebar behavior.
+ * Pages manage their own loading states — no global overlay.
  */
 
 import { ReactNode } from 'react';
@@ -12,7 +13,7 @@ import TopNavbar from '@/components/TopNavbar';
 import { useAppSelector, RootState } from '@/lib/store';
 import AuthGuard from '@/components/AuthGuard';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
-import { Activity, Wifi } from 'lucide-react';
+import { Activity } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -20,7 +21,7 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayoutClient({ children }: DashboardLayoutProps) {
   const { sidebarCollapsed } = useAppSelector((state: RootState) => state.dashboard);
-  const { isConnected, lastEvent } = useRealtimeEvents();
+  const { lastEvent } = useRealtimeEvents();
 
   return (
     <AuthGuard>
@@ -49,7 +50,10 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
         <div className="print:hidden">
           <TopNavbar />
         </div>
-        <main className="p-4 lg:p-6 max-w-[1600px] mx-auto print:p-0 print:max-w-none">{children}</main>
+
+        <main className="p-4 lg:p-6 max-w-[1600px] mx-auto print:p-0 print:max-w-none min-h-[calc(100vh-64px)]">
+          {children}
+        </main>
       </div>
 
       {/* Realtime Event Feed Overlay */}

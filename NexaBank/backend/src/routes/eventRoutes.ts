@@ -497,8 +497,8 @@ router.post(
         }
 
         // Track registration with worldwide location
-        await trackEvent("register", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs);
-        await trackEvent("login", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs + 60);
+        await trackEvent("auth.register.success", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs);
+        await trackEvent("auth.login.success", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs + 60);
         eventsCreated += 2;
 
         // ─── 6. Initial salary deposit ──────────────────────
@@ -563,7 +563,7 @@ router.post(
 
           // User logged in today
           const channel = Math.random() < 0.6 ? persona.preferredChannel : pick(CHANNELS);
-          await trackEvent("login", customer.id, tenantId, { channel, ...lMeta, day }, dayTs);
+          await trackEvent("auth.login.success", customer.id, tenantId, { channel, ...lMeta, day }, dayTs);
           eventsCreated++;
 
           // Update lastLogin
@@ -579,24 +579,32 @@ router.post(
 
           // Flow 1: Dashboard → View Accounts → View Transactions
           if (Math.random() < 0.7) {
-            await trackEvent("dashboard_view", customer.id, tenantId, { channel, ...lMeta }, dayTs + 200);
+            await trackEvent("core.dashboard.viewed", customer.id, tenantId, { channel, ...lMeta }, dayTs + 200);
             eventsCreated++;
           }
           if (Math.random() < 0.4) {
-            await trackEvent("accounts_view", customer.id, tenantId, { ...lMeta }, dayTs + 400);
+            await trackEvent("core.accounts.viewed", customer.id, tenantId, { ...lMeta }, dayTs + 400);
             eventsCreated++;
           }
           if (Math.random() < 0.3) {
-            await trackEvent("transactions_view", customer.id, tenantId, { ...lMeta }, dayTs + 800);
+            await trackEvent("payments.history.viewed", customer.id, tenantId, { ...lMeta }, dayTs + 800);
             eventsCreated++;
           }
 
           // Flow 2: Payee Management → Transfer
           if (Math.random() < 0.15) {
-            await trackEvent("payees_view", customer.id, tenantId, { ...lMeta }, dayTs + 1000);
+            await trackEvent("core.payees.viewed", customer.id, tenantId, { ...lMeta }, dayTs + 1000);
             eventsCreated++;
             if (Math.random() < 0.3) {
-              await trackEvent("payee_added", customer.id, tenantId, { ...lMeta }, dayTs + 1100);
+              await trackEvent("core.payees.add_success", customer.id, tenantId, { ...lMeta }, dayTs + 1100);
+              eventsCreated++;
+            }
+            if (Math.random() < 0.2) {
+              await trackEvent("core.payees.search", customer.id, tenantId, { ...lMeta }, dayTs + 1050);
+              eventsCreated++;
+            }
+            if (Math.random() < 0.25) {
+              await trackEvent("core.payees.pay_success", customer.id, tenantId, { ...lMeta }, dayTs + 1150);
               eventsCreated++;
             }
           }
@@ -605,7 +613,7 @@ router.post(
           if (kycState === "NOT_STARTED" && day > 2 && Math.random() < 0.25) {
             kycState = "PENDING";
             await prisma.customer.update({ where: { id: customer.id }, data: { kycStatus: "PENDING" } });
-            await trackEvent("kyc_started", customer.id, tenantId, { ...lMeta }, dayTs + 200);
+            await trackEvent("lending.loan.kyc_started", customer.id, tenantId, { ...lMeta }, dayTs + 200);
             eventsCreated++;
           }
           if (kycState === "PENDING" && Math.random() < persona.kycCompletionRate * 0.3) {
@@ -615,11 +623,11 @@ router.post(
                 where: { id: customer.id },
                 data: { kycStatus: "VERIFIED", kycCompletedAt: new Date((dayTs + 500) * 1000) }
               });
-              await trackEvent("kyc_completed", customer.id, tenantId, { ...lMeta }, dayTs + 500);
+              await trackEvent("lending.loan.kyc_completed", customer.id, tenantId, { ...lMeta }, dayTs + 500);
             } else {
               kycState = "REJECTED";
               await prisma.customer.update({ where: { id: customer.id }, data: { kycStatus: "REJECTED" } });
-              await trackEvent("kyc_failed", customer.id, tenantId, { reason: pick(["Document Mismatch", "Expired ID", "Blurry Photo", "Name Mismatch"]), ...lMeta }, dayTs + 500);
+              await trackEvent("lending.loan.kyc_failed", customer.id, tenantId, { reason: pick(["Document Mismatch", "Expired ID", "Blurry Photo", "Name Mismatch"]), ...lMeta }, dayTs + 500);
             }
             eventsCreated++;
           }
@@ -649,9 +657,9 @@ router.post(
               if (success) {
                 currentBalance -= clampedAmount;
                 await prisma.account.update({ where: { accNo }, data: { balance: currentBalance } });
-                await trackEvent("payment_completed", customer.id, tenantId, { amount: clampedAmount, category, channel: txChannel, ...lMeta }, dayTs + 1205);
+                await trackEvent("core.payees.pay_success", customer.id, tenantId, { amount: clampedAmount, category, channel: txChannel, ...lMeta }, dayTs + 1205);
               } else {
-                await trackEvent("payment_failed", customer.id, tenantId, { amount: clampedAmount, reason: "Transaction Error", ...lMeta }, dayTs + 1205);
+                await trackEvent("payment.failed", customer.id, tenantId, { amount: clampedAmount, reason: "Transaction Error", ...lMeta }, dayTs + 1205);
               }
               eventsCreated++;
             }
@@ -715,7 +723,7 @@ router.post(
             const kycComplete = Math.random() < persona.kycCompletionRate;
 
             // Track full loan journey flow
-            await trackEvent("loans_page_view", customer.id, tenantId, { ...lMeta }, dayTs + 2800);
+            await trackEvent("lending.loans.viewed", customer.id, tenantId, { ...lMeta }, dayTs + 2800);
             eventsCreated++;
 
             await prisma.loanApplication.create({
@@ -732,11 +740,11 @@ router.post(
             });
             hasAppliedLoan = true;
 
-            await trackEvent("loan_applied", customer.id, tenantId, { loanType, amount: principalAmount, term, ...lMeta }, dayTs + 3000);
+            await trackEvent("lending.loan.applied", customer.id, tenantId, { loanType, amount: principalAmount, term, ...lMeta }, dayTs + 3000);
             if (kycComplete) {
-              await trackEvent("kyc_completed", customer.id, tenantId, { context: "loan", ...lMeta }, dayTs + 3500);
+              await trackEvent("lending.loan.kyc_completed", customer.id, tenantId, { context: "loan", ...lMeta }, dayTs + 3500);
             } else {
-              await trackEvent("kyc_abandoned", customer.id, tenantId, { step: 1, context: "loan", ...lMeta }, dayTs + 3500);
+              await trackEvent("lending.loan.kyc_abandoned", customer.id, tenantId, { step: 1, context: "loan", ...lMeta }, dayTs + 3500);
             }
             eventsCreated += 2;
           }
@@ -744,7 +752,7 @@ router.post(
           // ── Pro Feature Exploration & Conversion ──────────
           if (!isPro && Math.random() < 0.12) {
             const featureId = pick(PRO_FEATURES);
-            await trackEvent("feature_view", customer.id, tenantId, { featureId, ...lMeta }, dayTs + 4000);
+            await trackEvent("pro.features.view", customer.id, tenantId, { featureId, ...lMeta }, dayTs + 4000);
             eventsCreated++;
 
             // Whale users (high balance) are 5x more likely to convert
@@ -768,7 +776,7 @@ router.post(
                 });
                 currentBalance -= 2000;
                 await prisma.account.update({ where: { accNo }, data: { balance: currentBalance } });
-                await trackEvent("pro_unlocked", customer.id, tenantId, { featureId, ...lMeta }, dayTs + 4505);
+                await trackEvent("pro.features.unlock_success", customer.id, tenantId, { featureId, ...lMeta }, dayTs + 4505);
                 isPro = true;
                 unlockedFeature = featureId;
                 transactionsCreated++;
@@ -870,15 +878,19 @@ router.post(
               eventsCreated++;
             }
 
-            // Also fire legacy events for backward compat
-            await trackEvent("pro_feature_usage", customer.id, tenantId, { day, featureId: unlockedFeature, ...lMeta }, dayTs + 6800);
-            await trackEvent(unlockedFeature || pick(PRO_FEATURES), customer.id, tenantId, { ...lMeta }, dayTs + 6805);
-            eventsCreated += 2;
+            // Pro dashboard view each time
+            await trackEvent("pro.dashboard.view", customer.id, tenantId, { day, featureId: unlockedFeature, ...lMeta }, dayTs + 6800);
+            eventsCreated++;
           }
 
           // ── Profile View (occasional) ─────────────────────
           if (Math.random() < 0.08) {
-            await trackEvent("profile_view", customer.id, tenantId, { ...lMeta }, dayTs + 7000);
+            await trackEvent("core.profile.viewed", customer.id, tenantId, { ...lMeta }, dayTs + 7000);
+            eventsCreated++;
+          }
+          // Occasional transactions page visit
+          if (Math.random() < 0.12) {
+            await trackEvent("payments.history.viewed", customer.id, tenantId, { ...lMeta }, dayTs + 7200);
             eventsCreated++;
           }
         }
@@ -949,6 +961,7 @@ router.post(
       res.status(200).json({
         message: "Stochastic worldwide simulation complete",
         usersCreated,
+        totalUsers: await prisma.customer.count({ where: { tenantId } }),
         transactionsCreated,
         eventsCreated,
         payeesCreated,

@@ -3,7 +3,8 @@
 /**
  * Main Dashboard page component.
  * Assembles all dashboard widgets in a responsive grid layout.
- * Uses Redux for state management and displays loading skeletons.
+ * Shows full skeleton only on first load (no data yet).
+ * Background refreshes show a thin progress bar via isFetching.
  */
 
 import React from 'react';
@@ -21,11 +22,13 @@ import TopLocations from '@/components/TopLocations';
 export default function DashboardContent() {
   const {
     isLoading,
+    isFetching,
     kpiMetrics,
     secondaryKpiMetrics,
     trafficData,
     aiInsights,
     realTimeUsers,
+    realTimeUsersTimestampIST,
     pagesPerMinute,
     topPages,
     deviceBreakdown,
@@ -35,12 +38,18 @@ export default function DashboardContent() {
     changeTimeRange,
   } = useDashboardData();
 
-  if (isLoading) {
+  // Show full skeleton only on the very first load when no data exists yet
+  if (isLoading && kpiMetrics.length === 0) {
     return <DashboardSkeleton />;
   }
 
   return (
-    <div className="animate-in fade-in duration-500 space-y-6">
+    <div className="animate-in fade-in duration-500 space-y-6 relative">
+      {/* Thin progress bar for background refreshes — non-blocking */}
+      {isFetching && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-300 via-blue-500 to-blue-300 animate-pulse rounded-full z-10" />
+      )}
+
       {/* ═══════════ KPI METRICS ROW ═══════════ */}
       <section id="kpi-section" aria-label="Key Performance Indicators">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -64,26 +73,23 @@ export default function DashboardContent() {
             <RealTimeUsers
               activeUsers={realTimeUsers}
               pagesPerMinute={pagesPerMinute}
+              timestampIST={realTimeUsersTimestampIST}
             />
           </div>
         </div>
       </section>
 
-      {/* ═══════════ AI INSIGHTS ROW ═══════════ */}
+      {/* ═══════════ AI INSIGHTS ═══════════ */}
       <section id="insights-section" aria-label="AI Insights">
-        <div className="grid grid-cols-1 gap-4">
-          <AIInsightsPanel insights={aiInsights} />
-        </div>
+        <AIInsightsPanel insights={aiInsights} />
       </section>
 
-      {/* ═══════════ LOCATIONS (MAP) FULL WIDTH ═══════════ */}
+      {/* ═══════════ LOCATIONS (WORLD MAP) ═══════════ */}
       <section id="locations-section" aria-label="Geographic Distribution">
-        <div className="grid grid-cols-1 gap-4">
-          <TopLocations data={locations} />
-        </div>
+        <TopLocations data={locations} />
       </section>
 
-      {/* ═══════════ BOTTOM ROW: PAGES + DEVICE + ACQUISITION ═══════════ */}
+      {/* ═══════════ TOP PAGES + DEVICE + ACQUISITION ═══════════ */}
       <section id="detail-section" aria-label="Detailed Analytics">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <TopPages data={topPages} />
@@ -91,8 +97,6 @@ export default function DashboardContent() {
           <UserAcquisitionChart data={acquisitionChannels} />
         </div>
       </section>
-
-
 
       {/* ═══════════ SECONDARY KPI METRICS ROW ═══════════ */}
       <section id="secondary-kpi-section" aria-label="Secondary Metrics">

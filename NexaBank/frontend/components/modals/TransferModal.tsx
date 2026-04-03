@@ -10,6 +10,7 @@ import { Loader2, ArrowRightLeft, IndianRupee } from 'lucide-react';
 import axios from 'axios';
 import { API_BASE_URL } from '@/lib/api';
 import { UserData } from '../context/UserContext';
+import { useEventTracker } from '@/hooks/useEventTracker';
 
 interface RawAccount {
   accNo: string;
@@ -28,6 +29,7 @@ interface TransferModalProps {
 
 const TransferModal = ({ isOpen, onClose, accounts, onSuccess }: TransferModalProps) => {
   const { globalAccounts, fetchGlobalAccounts } = UserData();
+  const { measureAndTrack } = useEventTracker();
   const [fromAccount, setFromAccount] = useState('');
   const [toAccount, setToAccount] = useState('');
   const [amount, setAmount] = useState('');
@@ -65,16 +67,18 @@ const TransferModal = ({ isOpen, onClose, accounts, onSuccess }: TransferModalPr
 
     setLoading(true);
     try {
-      await axios.post(
-        `${API_BASE_URL}/accounts/transfer`,
-        {
-          fromAccountNo: fromAccount,
-          toAccountNo: toAccount,
-          amount: parsedAmount,
-          description: description || 'Self Transfer',
-        },
-        { withCredentials: true }
-      );
+      await measureAndTrack('accounts.transfer_money', async () => {
+        await axios.post(
+          `${API_BASE_URL}/accounts/transfer`,
+          {
+            fromAccountNo: fromAccount,
+            toAccountNo: toAccount,
+            amount: parsedAmount,
+            description: description || 'Self Transfer',
+          },
+          { withCredentials: true }
+        );
+      });
 
       toast.success(`Transfer of ₹${parsedAmount.toLocaleString('en-IN')} was successful.`);
       onSuccess?.();

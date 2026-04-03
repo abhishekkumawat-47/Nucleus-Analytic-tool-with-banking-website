@@ -72,6 +72,25 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
       { pattern: '/admin*',           featureName: 'admin.dashboard.view',         category: 'system' },
     ],
   },
+  safexbank: {
+    appId: 'safexbank',
+    displayName: 'SafexBank',
+    description: 'Secure digital banking platform',
+    tenantId: 'safexbank',
+    icon: 'shield',
+    color: '#3B82F6',
+    appUrl: process.env.NEXT_PUBLIC_SAFEXBANK_URL || 'http://localhost:3003',
+    funnelSteps: ['login', 'dashboard_view', 'transfer_started', 'authorizer_approved', 'transfer_completed'],
+    routes: [
+      { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
+      { pattern: '/dashboard',        featureName: 'core.dashboard.view',          category: 'navigation',    funnel: 2 },
+      { pattern: '/accounts',         featureName: 'core.accounts.view',           category: 'navigation' },
+      { pattern: '/transfers',        featureName: 'core.transfers.view',          category: 'navigation',    funnel: 3 },
+      { pattern: '/approvals',        featureName: 'core.approvals.view',          category: 'navigation',    funnel: 4 },
+      { pattern: '/cards',            featureName: 'core.cards.view',              category: 'navigation' },
+      { pattern: '/pro-feature',      featureName: 'pro.dashboard.view',           category: 'navigation' },
+    ],
+  },
 };
 
 /**

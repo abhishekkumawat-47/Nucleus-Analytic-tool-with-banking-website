@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useMemo, memo } from "react"
 import axios from "axios"
 import { API_BASE_URL } from "@/lib/api"
 import { AdminGuard } from "@/components/AdminGuard"
+import { UserData } from "@/components/context/UserContext"
+import { useEventTracker } from "@/hooks/useEventTracker"
 import {
   Table,
   TableBody,
@@ -78,10 +80,14 @@ export default function AdminLoansPage() {
   const [targetAccNo, setTargetAccNo] = useState("")
 
   const { isAuth } = UserData()
+  const { track, measureAndTrack } = useEventTracker()
 
   useEffect(() => {
-    if (isAuth) fetchApplications()
-  }, [isAuth])
+    if (isAuth) {
+      track('admin_loans.page.view')
+      fetchApplications()
+    }
+  }, [isAuth, track])
 
   const fetchApplications = useCallback(async () => {
     setLoading(true)
@@ -133,10 +139,14 @@ export default function AdminLoansPage() {
       }
 
       if (action === "approve") {
-        await axios.post(`${API_BASE_URL}/approve/${id}`, { accNo: disbursalAcc }, { withCredentials: true })
+        await measureAndTrack('admin_loans.approve', async () => {
+          await axios.post(`${API_BASE_URL}/approve/${id}`, { accNo: disbursalAcc }, { withCredentials: true })
+        })
         toast.success("Application approved and funds disbursed!")
       } else {
-        await axios.post(`${API_BASE_URL}/reject/${id}`, {}, { withCredentials: true })
+        await measureAndTrack('admin_loans.reject', async () => {
+          await axios.post(`${API_BASE_URL}/reject/${id}`, {}, { withCredentials: true })
+        })
         toast.success("Application rejected")
       }
       setIsDialogOpen(false)

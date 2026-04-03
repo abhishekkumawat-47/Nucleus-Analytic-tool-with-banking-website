@@ -112,7 +112,7 @@ function ProFeatureContent() {
   const { track } = useEventTracker()
 
   useEffect(() => {
-    track(`pro.${featureId}.view`)
+    track(`pro-feature.${featureId}.view`)
   }, [featureId, track])
 
   useEffect(() => {
@@ -244,7 +244,7 @@ function ProFeatureContent() {
 function FinanceLibraryModule() {
   const [bookCounts, setBookCounts] = useState<Record<string, number>>({})
   const [loadingStats, setLoadingStats] = useState(true)
-  const { track } = useEventTracker()
+  const { track, measureAndTrack } = useEventTracker()
 
   const books = [
     {
@@ -308,10 +308,12 @@ function FinanceLibraryModule() {
 
   const handleAccessBook = async (book: typeof books[0]) => {
     try {
-      await axios.post(`${API_BASE_URL}/pro/access_book`, {
-        title: book.title,
-        url: book.url,
-      }, { withCredentials: true })
+      await measureAndTrack("pro-feature.ai-insights.read_online", async () => {
+        await axios.post(`${API_BASE_URL}/pro/access_book`, {
+          title: book.title,
+          url: book.url,
+        }, { withCredentials: true })
+      })
 
       // Update local count
       setBookCounts(prev => ({
@@ -406,7 +408,7 @@ function CryptoTradingModule() {
   const [loadingPrices, setLoadingPrices] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<string>("")
   const [portfolio, setPortfolio] = useState<{ holdings: any[], balance: number }>({ holdings: [], balance: 0 })
-  const { track } = useEventTracker()
+  const { track, measureAndTrack } = useEventTracker()
 
   const fetchPrices = useCallback(async () => {
     try {
@@ -443,12 +445,14 @@ function CryptoTradingModule() {
 
     setTrading(true)
     try {
-      await axios.post(`${API_BASE_URL}/pro/trade`, {
-        asset: selectedAsset,
-        amount: parseFloat(amount),
-        price: currentAsset.price,
-        type
-      }, { withCredentials: true })
+      await measureAndTrack(`pro-feature.crypto-trading.${type.toLowerCase()}`, async () => {
+        await axios.post(`${API_BASE_URL}/pro/trade`, {
+          asset: selectedAsset,
+          amount: parseFloat(amount),
+          price: currentAsset.price,
+          type
+        }, { withCredentials: true })
+      })
 
       toast.success(`${type} Successful! ${amount} ${selectedAsset} at ₹${currentAsset.price.toLocaleString('en-IN')}`)
       setAmount("")
@@ -489,7 +493,7 @@ function CryptoTradingModule() {
           <Card
             key={a.id}
             className={`cursor-pointer transition-all duration-200 hover:shadow-md ${selectedAsset === a.id ? 'border-2 border-violet-500 shadow-lg shadow-violet-100' : 'border-zinc-100'}`}
-            onClick={() => { setSelectedAsset(a.id); track(`pro.crypto.select_${a.id.toLowerCase()}`) }}
+            onClick={() => { setSelectedAsset(a.id); track(`pro-feature.crypto-trading.select_${a.id.toLowerCase()}`) }}
           >
             <CardContent className="p-4 space-y-1">
               <div className="flex items-center justify-between">
@@ -606,13 +610,14 @@ function WealthManagementModule() {
   const [insights, setInsights] = useState<any>(null)
   const [loadingInsights, setLoadingInsights] = useState(true)
   const [rebalancing, setRebalancing] = useState(false)
-  const { track } = useEventTracker()
+  const { track, measureAndTrack } = useEventTracker()
 
   const CHART_COLORS = ["#7c3aed", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"]
 
   useEffect(() => {
     fetchInsights()
-  }, [])
+    track('pro-feature.wealth-management-pro.insights_view');
+  }, [track])
 
   const fetchInsights = async () => {
     try {
@@ -629,7 +634,9 @@ function WealthManagementModule() {
   const handleRebalance = async () => {
     setRebalancing(true)
     try {
-      await axios.post(`${API_BASE_URL}/pro/rebalance_wealth`, {}, { withCredentials: true })
+      await measureAndTrack("pro-feature.wealth-management-pro.rebalance", async () => {
+        await axios.post(`${API_BASE_URL}/pro/rebalance_wealth`, {}, { withCredentials: true })
+      })
       toast.success("Portfolio successfully rebalanced!")
       fetchInsights()
     } catch (err: any) {
@@ -837,11 +844,12 @@ function PayrollModule() {
   const [processing, setProcessing] = useState(false)
   const [loadingPayees, setLoadingPayees] = useState(true)
   const [existingPayees, setExistingPayees] = useState<any[]>([])
-  const { track } = useEventTracker()
+  const { track, measureAndTrack } = useEventTracker()
 
   useEffect(() => {
     fetchExistingPayees()
-  }, [])
+    track('pro-feature.bulk-payroll-processing.payroll_view');
+  }, [track])
 
   const fetchExistingPayees = async () => {
     try {
@@ -860,10 +868,14 @@ function PayrollModule() {
       if (searchQuery.length >= 2) {
         setIsSearching(true)
         try {
-          const res = await axios.post(`${API_BASE_URL}/pro/search_payees`, {
-            query: searchQuery
-          }, { withCredentials: true })
-          setSearchResults(res.data || [])
+          let results: any[] = []
+          await measureAndTrack("pro-feature.bulk-payroll-processing.search_by_name", async () => {
+            const res = await axios.post(`${API_BASE_URL}/pro/search_payees`, {
+              query: searchQuery
+            }, { withCredentials: true })
+            results = res.data || []
+          })
+          setSearchResults(results)
         } catch (err) {
           console.error("Search failed:", err)
         } finally {
@@ -888,7 +900,7 @@ function PayrollModule() {
     setSelectedPayees(prev => [...prev, payee])
     setSearchQuery("")
     setSearchResults([])
-    track("pro.payroll.payee_added")
+    track("pro-feature.bulk-payroll-processing.add_payee.success")
   }
 
   const removePayee = (accNo: string) => {
@@ -914,10 +926,13 @@ function PayrollModule() {
 
     setProcessing(true)
     try {
-      const res = await axios.post(`${API_BASE_URL}/pro/process_payroll`, {
-        payees: selectedPayees.map(p => ({ accNo: p.accNo, name: p.name })),
-        amountPerPayee: amt,
-      }, { withCredentials: true })
+      let res: any;
+      await measureAndTrack("pro-feature.bulk-payroll-processing.pay_all", async () => {
+        res = await axios.post(`${API_BASE_URL}/pro/process_payroll`, {
+          payees: selectedPayees.map(p => ({ accNo: p.accNo, name: p.name })),
+          amountPerPayee: amt,
+        }, { withCredentials: true })
+      })
 
       toast.success(res.data.message || "Payroll processed successfully!")
       setSelectedPayees([])

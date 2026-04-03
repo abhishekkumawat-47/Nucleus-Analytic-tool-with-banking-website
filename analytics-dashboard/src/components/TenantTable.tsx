@@ -107,7 +107,7 @@ function TenantTable({ data }: TenantTableProps) {
 
                   {/* Plan */}
                   <td className="py-4 text-center">
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-violet-100 text-violet-700 border border-violet-200">
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white text-gray-600 border border-gray-300">
                       {tenant.plan || 'enterprise'}
                     </span>
                   </td>

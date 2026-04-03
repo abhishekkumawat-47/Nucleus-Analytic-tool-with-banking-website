@@ -50,7 +50,7 @@ export default function LoginPage() {
   const { track } = useEventTracker();
 
   useEffect(() => {
-    track('auth.login.view');
+    track('login.page.view');
   }, [track]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,14 +74,16 @@ export default function LoginPage() {
         setUserId(result.userId);
         // Track the login event to the analytics pipeline
         nexaTracker.setUser(result.userId, result.role || 'user', email);
-        track('auth.login.success');
+        track('login.auth.success');
         await Auth(); // Refresh auth state in context
         toast.success("Login successful");
         router.push("/dashboard");
       } else {
+        track('login.auth.error');
         toast.error(result?.error || "Login failed. Please check your credentials.");
       }
     } catch (error) {
+      track('login.auth.error');
       toast.error("An unexpected error occurred");
     } finally {
       setIsLoading(false);
