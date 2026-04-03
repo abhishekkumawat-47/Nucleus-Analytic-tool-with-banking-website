@@ -197,30 +197,35 @@ export const tenants: Tenant[] = [
 export const aiInsights: AIInsight[] = [
   {
     id: 'ai-1',
+    title: 'High Drop-off Rate',
     message: '40% drop-off at Submit Form step',
     type: 'warning',
     priority: 'high',
   },
   {
     id: 'ai-2',
+    title: 'KYC Verification Surge',
     message: 'KYC Verification usage up by 20%',
     type: 'success',
     priority: 'medium',
   },
   {
     id: 'ai-3',
+    title: 'Unused Feature Detected',
     message: 'Feature X not used in last 30 days',
     type: 'info',
     priority: 'low',
   },
   {
     id: 'ai-4',
+    title: 'Peak Usage Times',
     message: 'Peak usage detected on Fridays between 2-4 PM',
     type: 'info',
     priority: 'medium',
   },
   {
     id: 'ai-5',
+    title: 'Error Rate Spike',
     message: 'Error rate spike correlates with Payment Gateway usage',
     type: 'warning',
     priority: 'high',
@@ -244,10 +249,10 @@ export const pagesPerMinute: PagesPerMinuteDataPoint[] = [
 /* ─────────────── Top Pages ─────────────── */
 
 export const topPages: TopPage[] = [
-  { url: '/home', visits: '24.5K' },
-  { url: '/product', visits: '18.3K' },
-  { url: '/blog', visits: '12.9K' },
-  { url: '/contact', visits: '8.4K' },
+  { pageUrl: '/home', totalEvents: 24500, features: [], comparisonPct: 100, rank: 1 },
+  { pageUrl: '/product', totalEvents: 18300, features: [], comparisonPct: 75, rank: 2 },
+  { pageUrl: '/blog', totalEvents: 12900, features: [], comparisonPct: 53, rank: 3 },
+  { pageUrl: '/contact', totalEvents: 8400, features: [], comparisonPct: 35, rank: 4 },
 ];
 
 /* ─────────────── Device Breakdown ─────────────── */
@@ -258,14 +263,6 @@ export const deviceBreakdown: DeviceBreakdown[] = [
   { name: 'Tablet', value: 10, color: '#8AB4F8' },
 ];
 
-/* ─────────────── User Acquisition ─────────────── */
-
-export const acquisitionChannels: AcquisitionChannel[] = [
-  { name: 'Organic', value: 24600, formattedValue: '24.6K' },
-  { name: 'Paid Search', value: 13900, formattedValue: '13.9K' },
-  { name: 'Social', value: 10700, formattedValue: '10.7K' },
-  { name: 'Referral', value: 6500, formattedValue: '6.5K' },
-];
 
 /* ─────────────── Top Locations ─────────────── */
 

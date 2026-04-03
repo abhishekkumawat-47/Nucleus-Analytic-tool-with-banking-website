@@ -10,6 +10,7 @@ import { Loader2, SendHorizontal, IndianRupee } from 'lucide-react';
 import axios from 'axios';
 import { API_BASE_URL } from '@/lib/api';
 import { UserData } from '../context/UserContext';
+import { useEventTracker } from '@/hooks/useEventTracker';
 
 interface RawAccount {
   accNo: string;
@@ -29,6 +30,7 @@ interface PaymentModalProps {
 
 const PaymentModal = ({ isOpen, onClose, accounts, payeeAccNo, payeeName, onSuccess }: PaymentModalProps) => {
   const { globalAccounts, fetchGlobalAccounts } = UserData();
+  const { measureAndTrack } = useEventTracker();
   const [fromAccount, setFromAccount] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -60,16 +62,18 @@ const PaymentModal = ({ isOpen, onClose, accounts, payeeAccNo, payeeName, onSucc
 
     setLoading(true);
     try {
-      await axios.post(
-        `${API_BASE_URL}/accounts/pay`,
-        {
-          fromAccountNo: fromAccount,
-          toAccountNo: payeeAccNo,
-          amount: parsedAmount,
-          description: description || `Payment to ${payeeName || payeeAccNo}`,
-        },
-        { withCredentials: true }
-      );
+      await measureAndTrack('payees.pay_now', async () => {
+        await axios.post(
+          `${API_BASE_URL}/accounts/pay`,
+          {
+            fromAccountNo: fromAccount,
+            toAccountNo: payeeAccNo,
+            amount: parsedAmount,
+            description: description || `Payment to ${payeeName || payeeAccNo}`,
+          },
+          { withCredentials: true }
+        );
+      });
 
       toast.success(`Payment of ₹${parsedAmount.toLocaleString('en-IN')} was successful.`);
       onSuccess?.();

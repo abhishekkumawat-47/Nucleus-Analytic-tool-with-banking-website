@@ -2,8 +2,9 @@
 
 /**
  * Top navigation bar component.
- * Contains tenant selector, time range filter, search, notifications, and profile.
- * Matches the FinInsight design with clean, minimal styling.
+ * Contains tenant selector (all tenants from DB), time range filter,
+ * search, Data Sync transparency panel, and profile dropdown.
+ * Shows a loading spinner in the tenant selector while switching tenants.
  */
 
 import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
@@ -11,66 +12,99 @@ import {
   Search,
   ChevronDown,
   Calendar,
-  Cloud,
-  Server,
   Menu,
   ShieldAlert,
-  X
+  Loader2,
 } from 'lucide-react';
 import Image from 'next/image';
+import { useQuery } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
 import { useSession, signOut } from 'next-auth/react';
 import {
   setTimeRange,
-  setSelectedTenant,
+  setSelectedTenants,
   toggleSidebar,
-  fetchDashboardData,
 } from '@/lib/dashboardSlice';
-import { TimeRange } from '@/types';
+import type { TimeRange, AvailableTenant } from '@/types';
 
 const timeRanges: TimeRange[] = ['Last 7 Days', 'Last 30 Days', 'Last 90 Days'];
 
+interface TransparencyCategory {
+  category: string;
+  is_synced: boolean;
+  details: string;
+}
+
+interface TransparencyData {
+  message: string;
+  visible_categories: TransparencyCategory[];
+}
+
 function TopNavbar() {
   const dispatch = useAppDispatch();
-  const { timeRange, selectedTenant, deploymentMode } = useAppSelector(
-    (state) => state.dashboard
-  );
+  const {
+    timeRange,
+    selectedTenants,
+    deploymentMode,
+  } = useAppSelector((state) => state.dashboard);
   const { data: session } = useSession();
 
-  const tenantOptions = useMemo(() => {
-    if (!session?.user) {
-      return selectedTenant ? [selectedTenant] : ['nexabank'];
+  const { data: availableTenants = [], isFetching } = useQuery({
+    queryKey: ['availableTenants'],
+    queryFn: async () => await dashboardAPI.getAvailableTenants(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  /**
+   * Build the tenant options list:
+   *  - "All Tenants" → all tenant IDs
+   *  - Individual tenant entries
+   * For app_admin: constrained to their adminApps.
+   * For super_admin / no session: all tenants from the DB.
+   */
+  const tenantOptions = useMemo((): AvailableTenant[] => {
+    if (!session?.user || session?.user?.role === 'super_admin') {
+      return availableTenants.length > 0
+        ? availableTenants
+        : [
+          { id: 'nexabank', name: 'NexaBank', eventCount: 0, uniqueUsers: 0 },
+          { id: 'safexbank', name: 'SafexBank', eventCount: 0, uniqueUsers: 0 },
+        ];
     }
-    if (session.user.role === 'super_admin') {
-      return ['All Tenants', 'nexabank', 'safexbank'];
+    const adminAppIds: string[] =
+      session.user.adminApps && session.user.adminApps.length > 0
+        ? session.user.adminApps
+        : ['nexabank'];
+    return adminAppIds.map((id) => {
+      const found = availableTenants.find((t) => t.id === id);
+      return found ?? { id, name: id.charAt(0).toUpperCase() + id.slice(1), eventCount: 0, uniqueUsers: 0 };
+    });
+  }, [session, availableTenants]);
+
+  // Ensure the selected tenant is always valid
+  useEffect(() => {
+    if (!selectedTenants || selectedTenants.length === 0) return;
+    const allValidIds = tenantOptions.map((t) => t.id);
+    const valid = selectedTenants.every((t) => allValidIds.includes(t));
+    if (!valid && tenantOptions.length > 0) {
+      dispatch(setSelectedTenants([tenantOptions[0].id]));
     }
-    return session.user.adminApps && session.user.adminApps.length > 0
-      ? session.user.adminApps
-      : ['nexabank'];
-  }, [session, selectedTenant]);
+  }, [tenantOptions, selectedTenants, dispatch]);
 
   const [showTenantDropdown, setShowTenantDropdown] = useState(false);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  
   const [showTransparency, setShowTransparency] = useState(false);
-  const [transparencyData, setTransparencyData] = useState<any>(null);
+  const [transparencyData, setTransparencyData] = useState<TransparencyData | null>(null);
   const [transparencyLoading, setTransparencyLoading] = useState(false);
-
-  // Force reset the tenant if current selection is not authorized
-  useEffect(() => {
-    if (selectedTenant && tenantOptions.length > 0 && !tenantOptions.includes(selectedTenant)) {
-      dispatch(setSelectedTenant(tenantOptions[0]));
-    }
-  }, [tenantOptions, selectedTenant, dispatch]);
 
   const tenantRef = useRef<HTMLDivElement>(null);
   const timeRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const transparencyRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdowns when clicking outside
+  // Close all dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (tenantRef.current && !tenantRef.current.contains(event.target as Node)) {
@@ -94,11 +128,27 @@ function TopNavbar() {
     setShowTransparency(!showTransparency);
     if (!showTransparency && !transparencyData) {
       setTransparencyLoading(true);
-      const data = await dashboardAPI.getTransparencyInfo(selectedTenant || tenantOptions[0] || 'nexabank');
-      setTransparencyData(data);
+      const activeTenant =
+        selectedTenants.length > 0 ? selectedTenants.join(',') : 'nexabank';
+      const data = await dashboardAPI.getTransparencyInfo(activeTenant);
+      setTransparencyData(data as TransparencyData | null);
       setTransparencyLoading(false);
     }
   };
+
+  const isAllTenantsSelected = selectedTenants.length === tenantOptions.length && tenantOptions.length > 0;
+
+  /** Compute display label for the currently-selected tenant */
+  const selectedLabel = useMemo(() => {
+    if (!selectedTenants || selectedTenants.length === 0) return 'Select Tenant';
+    if (isAllTenantsSelected) return 'All Tenants';
+    if (selectedTenants.length > 1) return `${selectedTenants.length} Tenants`;
+    const singleTenantId = selectedTenants[0];
+    const found = availableTenants.find((t) => t.id === singleTenantId);
+    return found
+      ? found.name
+      : singleTenantId.charAt(0).toUpperCase() + singleTenantId.slice(1);
+  }, [selectedTenants, availableTenants, isAllTenantsSelected]);
 
   return (
     <header className="sticky top-0 z-20 bg-white border-b border-gray-200">
@@ -114,12 +164,12 @@ function TopNavbar() {
             <Menu className="w-5 h-5" />
           </button>
 
-          {/* Logo Branding (Mobile/Small screens) */}
+          {/* Logo (mobile only) */}
           <div className="flex items-center gap-2 lg:hidden">
             <div className="relative w-7 h-7">
               <Image
                 src="/logo1.png"
-                alt="FinInsight Logo"
+                alt="Nucleus Logo"
                 fill
                 className="object-contain"
                 sizes="28px"
@@ -128,43 +178,77 @@ function TopNavbar() {
             <span className="text-base font-semibold text-gray-900 tracking-tight">Nucleus</span>
           </div>
 
-          {/* Tenant Selector Dropdown */}
+          {/* ── Tenant Selector Dropdown ── */}
           <div ref={tenantRef} className="relative">
             <button
               onClick={() => setShowTenantDropdown(!showTenantDropdown)}
-              className="flex items-center cursor-pointer gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-300 transition-colors"
+              className="flex items-center cursor-pointer gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-300 transition-colors min-w-[130px]"
               id="tenant-selector"
             >
-              {selectedTenant}
-              <ChevronDown className="w-4 h-4 text-gray-400" />
+              {isFetching ? (
+                <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin flex-shrink-0" />
+              ) : null}
+              <span className="flex-1 text-left truncate">{selectedLabel}</span>
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </button>
 
             {showTenantDropdown && (
-              <div className="absolute cursor-pointer top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                {tenantOptions.map((tenant) => (
-                  <button
-                    key={tenant}
-                    onClick={() => {
-                      dispatch(setSelectedTenant(tenant));
-                      setShowTenantDropdown(false);
-                      setTimeout(() => dispatch(fetchDashboardData()), 0);
-                    }}
-                    className={`w-full cursor-pointer text-left px-4 py-2 text-sm transition-colors ${
-                      tenant === selectedTenant
-                        ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
+              <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                {/* All Tenants option */}
+                <button
+                  onClick={() => {
+                    dispatch(setSelectedTenants(tenantOptions.map(t => t.id)));
+                    setShowTenantDropdown(false);
+                  }}
+                  className={`w-full cursor-pointer text-left px-4 py-2.5 text-sm transition-colors ${isAllTenantsSelected
+                      ? 'bg-blue-50 text-blue-600 font-semibold'
+                      : 'text-gray-700 hover:bg-gray-50'
                     }`}
-                  >
-                    {tenant}
-                  </button>
-                ))}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full ${isAllTenantsSelected ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                    All Tenants
+                  </span>
+                </button>
+
+                <div className="border-t border-gray-100 my-1" />
+
+                {/* Individual tenant options */}
+                {tenantOptions.map((tenant) => {
+                  const isSelected = selectedTenants.includes(tenant.id) && !isAllTenantsSelected;
+                  return (
+                    <button
+                      key={tenant.id}
+                      onClick={() => {
+                        dispatch(setSelectedTenants([tenant.id]));
+                        setShowTenantDropdown(false);
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${isSelected
+                          ? 'bg-blue-50 text-blue-600 font-semibold'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      <span className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <span className={`inline-block w-2 h-2 rounded-full ${isSelected ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                          {tenant.name}
+                        </span>
+                        {tenant.eventCount > 0 && (
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            {tenant.eventCount.toLocaleString()}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        {/* Center Section: Time Range + Deployment Toggle */}
-        <div className="hidden md:flex items-center gap-3">
+        {/* Center Section: Time Range + Transparency */}
+        <div className="hidden md:flex items-center">
           {/* Time Range Selector */}
           <div ref={timeRef} className="relative">
             <button
@@ -178,7 +262,7 @@ function TopNavbar() {
             </button>
 
             {showTimeDropdown && (
-              <div className="absolute cursor-pointer top-full right-0 mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="absolute top-full right-0 mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
                 {timeRanges.map((range) => (
                   <button
                     key={range}
@@ -186,11 +270,10 @@ function TopNavbar() {
                       dispatch(setTimeRange(range));
                       setShowTimeDropdown(false);
                     }}
-                    className={`w-full cursor-pointer text-left px-4 py-2 text-sm transition-colors ${
-                      range === timeRange
+                    className={`w-full cursor-pointer text-left px-4 py-2 text-sm transition-colors ${range === timeRange
                         ? 'bg-blue-50 text-blue-600 font-medium'
                         : 'text-gray-700 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     {range}
                   </button>
@@ -198,69 +281,72 @@ function TopNavbar() {
               </div>
             )}
           </div>
-
-          {/* Transparency Info Button */}
-          <div className="relative" ref={transparencyRef}>
-            <button
-              onClick={handleTransparencyClick}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm`}
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Data Sync & Transparency</span>
-            </button>
-
-            {showTransparency && (
-              <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-gray-900">Cloud Sync Status</h3>
-                  <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${deploymentMode === 'cloud' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>
-                    {deploymentMode === 'cloud' ? 'Cloud Mode' : 'On-Prem Mode'}
-                  </div>
-                </div>
-
-                <div className="p-4">
-                  {transparencyLoading ? (
-                    <div className="text-sm text-center py-4 text-gray-500">Loading transparency boundaries...</div>
-                  ) : transparencyData ? (
-                    <div className="space-y-4">
-                      <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 font-medium">
-                        {transparencyData.message}
-                      </p>
-                      
-                      <div className="space-y-3">
-                        {transparencyData.visible_categories.map((cat: any, ix: number) => (
-                          <div key={ix} className="text-xs">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`w-2 h-2 rounded-full ${cat.is_synced ? 'bg-blue-500' : 'bg-gray-300'}`}></span>
-                              <strong className={cat.is_synced ? 'text-blue-900' : 'text-gray-500'}>{cat.category}</strong>
-                            </div>
-                            <p className="text-gray-500 line-clamp-2 pl-4">{cat.details}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-center py-4 text-gray-500">Data unavailable.</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Right Section: Search, Notifications, Profile */}
-        {/* Right Section: Search, Notifications, Profile */}
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 bg-[#f1f3f4] px-3 py-2 rounded-lg border border-transparent focus-within:bg-white focus-within:shadow-[0_1px_2px_rgba(0,0,0,0.1)] focus-within:border-gray-300 transition-all duration-200">
-            <Search className="w-4 h-4 text-gray-500" />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="bg-transparent text-[14px] text-gray-700 placeholder-gray-500 outline-none focus:ring-0 focus:outline-none w-32 md:w-48 lg:w-64 border-none"
-              id="global-search"
-            />
-          </div>
+        {/* Data Sync & Transparency */}
+        <div className="relative cursor-pointer" ref={transparencyRef}>
+          <button
+            onClick={handleTransparencyClick}
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-all duration-200 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Data Sync &amp; Transparency</span>
+          </button>
 
+          {showTransparency && (
+            <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="text-sm font-bold text-gray-900">Cloud Sync Status</h3>
+                <div
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${deploymentMode === 'cloud'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-orange-100 text-orange-800'
+                    }`}
+                >
+                  {deploymentMode === 'cloud' ? 'Cloud Mode' : 'On-Prem Mode'}
+                </div>
+              </div>
+
+              <div className="p-4">
+                {transparencyLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading transparency data…
+                  </div>
+                ) : transparencyData ? (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 font-medium">
+                      {transparencyData.message}
+                    </p>
+                    <div className="space-y-3">
+                      {transparencyData.visible_categories.map((cat, ix) => (
+                        <div key={ix} className="text-xs">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span
+                              className={`w-2 h-2 rounded-full ${cat.is_synced ? 'bg-blue-500' : 'bg-gray-300'
+                                }`}
+                            />
+                            <strong
+                              className={cat.is_synced ? 'text-blue-900' : 'text-gray-500'}
+                            >
+                              {cat.category}
+                            </strong>
+                          </div>
+                          <p className="text-gray-500 line-clamp-2 pl-4">{cat.details}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-center py-4 text-gray-500">Data unavailable.</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Section: Search + Profile */}
+        <div className="flex items-center gap-4">
           {/* Profile Avatar with Dropdown */}
           <div ref={profileRef} className="relative">
             <button
@@ -268,19 +354,29 @@ function TopNavbar() {
               className="w-8 h-8 cursor-pointer rounded-full bg-[#1a73e8] flex items-center justify-center text-white text-[13px] font-medium hover:bg-blue-700 transition-colors duration-200 uppercase"
               id="profile-btn"
             >
-              {session?.user?.name ? session.user.name.charAt(0) : session?.user?.email?.charAt(0) || 'U'}
+              {session?.user?.name
+                ? session.user.name.charAt(0)
+                : session?.user?.email?.charAt(0) ?? 'U'}
             </button>
+
             {showProfileDropdown && (
               <div className="absolute cursor-pointer right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-left">
-                <div className="px-4 py-3 cursor-pointer border-b border-gray-100">
-                  <p className="text-sm font-medium text-gray-900">{session?.user?.name || 'Admin User'}</p>
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-medium text-gray-900">
+                    {session?.user?.name ?? 'Admin User'}
+                  </p>
                   <p className="text-xs text-gray-500 truncate">{session?.user?.email}</p>
                   <span className="inline-block mt-1 px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded uppercase tracking-wide">
                     {session?.user?.role?.replace('_', ' ')}
                   </span>
                 </div>
-                <div className="border-t cursor-pointer border-gray-100 py-1">
-                  <button onClick={() => signOut()} className="w-full cursor-pointer text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50">Sign Out</button>
+                <div className="border-t border-gray-100 py-1">
+                  <button
+                    onClick={() => signOut()}
+                    className="w-full cursor-pointer text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50"
+                  >
+                    Sign Out
+                  </button>
                 </div>
               </div>
             )}

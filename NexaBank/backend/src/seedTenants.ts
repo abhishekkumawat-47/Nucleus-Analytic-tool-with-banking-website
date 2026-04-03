@@ -65,6 +65,7 @@ async function main() {
     { accNo: "EXTERNAL-BANK", label: "External Bank Inflows" },
     { accNo: "MERCHANT-ID", label: "Merchant Payments" },
     { accNo: "CRYPTO-EXCHANGE", label: "Crypto Exchange" },
+    { accNo: "WEALTH-REBALANCE-SYS", label: "Wealth Rebalance System" },
   ];
 
   for (const sa of systemAccounts) {

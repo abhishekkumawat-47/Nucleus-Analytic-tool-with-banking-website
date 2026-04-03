@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { APP_REGISTRY } from '@/lib/feature-map';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
-import { fetchDeploymentInfo, setSelectedTenant } from '@/lib/dashboardSlice';
+import { setSelectedTenants } from '@/lib/dashboardSlice';
 import { useSession } from 'next-auth/react';
 import AuthGuard from '@/components/AuthGuard';
 
@@ -35,12 +35,10 @@ export default function AppSelectorPage() {
   const { data: session } = useSession();
   const router = useRouter();
 
-  useEffect(() => {
-    dispatch(fetchDeploymentInfo());
-  }, [dispatch]);
+  // Deployment info is now fetched via React Query / API — no thunk needed
 
   const handleViewDashboard = (appId: string) => {
-    dispatch(setSelectedTenant(appId));
+    dispatch(setSelectedTenants([appId]));
     router.push('/dashboard');
   };
 

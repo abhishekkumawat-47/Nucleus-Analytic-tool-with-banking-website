@@ -18,7 +18,7 @@ interface HeatmapSegment {
   count: number;
   percentile: number;
   level: string;
-  color: string;
+  color_scale: string;
 }
 
 interface HeatmapActivity {
@@ -38,8 +38,14 @@ interface HeatmapData {
  * Returns a background color based on percentile using a sequential blue scale.
  * 0 = light gray (no usage), 100 = deep navy (max usage).
  */
-function getIntensityColor(pct: number): string {
+function getIntensityColor(pct: number, scale: string = 'blue'): string {
   if (pct <= 0) return '#f3f4f6';        // gray-100, no activity
+  
+  if (scale === 'orange') {
+    // Overridden to use blue scale as per design guidelines
+  }
+
+  // Default blue
   if (pct <= 15) return '#dbeafe';        // blue-100
   if (pct <= 30) return '#bfdbfe';        // blue-200
   if (pct <= 45) return '#93c5fd';        // blue-300
@@ -54,7 +60,7 @@ function getTextColor(pct: number): string {
 }
 
 function FeatureHeatmap() {
-  const { selectedTenant } = useDashboardData();
+  const { selectedTenants, timeRange } = useDashboardData();
   const { data: session } = useSession();
 
   const [data, setData] = useState<HeatmapData | null>(null);
@@ -68,12 +74,14 @@ function FeatureHeatmap() {
     let isMounted = true;
     const fetchHeatmap = async () => {
       setLoading(true);
-      let targetTenants = selectedTenant || 'nexabank';
+      let targetTenants = selectedTenants.length > 0 ? selectedTenants : ['nexabank'];
       if (compareMode && session?.user?.adminApps) {
-        targetTenants = session.user.adminApps.join(',');
+        targetTenants = session.user.adminApps;
       }
 
-      const result = await dashboardAPI.getFeatureHeatmap(targetTenants);
+      const rangeStr = timeRange === 'Last 30 Days' ? '30d' : timeRange === 'Last 90 Days' ? '90d' : '7d';
+      
+      const result = await dashboardAPI.getFeatureHeatmap(targetTenants, rangeStr);
       if (isMounted) {
         setData(result as HeatmapData);
         setLoading(false);
@@ -82,7 +90,7 @@ function FeatureHeatmap() {
 
     fetchHeatmap();
     return () => { isMounted = false; };
-  }, [selectedTenant, compareMode, session]);
+  }, [selectedTenants, timeRange, compareMode, session]);
 
   const activities = data?.activities || [];
   const groups = data?.groups || [];
@@ -214,7 +222,7 @@ function FeatureHeatmap() {
 
                   {row.segments.map((segment, index) => {
                     const pct = segment.percentile;
-                    const bgColor = getIntensityColor(pct);
+                    const bgColor = getIntensityColor(pct, segment.color_scale);
                     const textColor = getTextColor(pct);
 
                     return (
