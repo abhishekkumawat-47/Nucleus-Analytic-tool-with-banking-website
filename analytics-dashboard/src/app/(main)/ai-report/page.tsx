@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { AIInsight } from '@/types';
@@ -111,34 +112,23 @@ function extractStrategicBullets(md: string): string[] {
 
 export default function AIReportPage() {
   const { tenantsParam, selectedTenants } = useDashboardData();
-  const [report, setReport] = useState<string>('');
-  const [insights, setInsights] = useState<AIInsight[]>([]);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const [cached, setCached] = useState<boolean>(true);
-  const [loading, setLoading] = useState<boolean>(true);
+  const queryClient = useQueryClient();
   const [generating, setGenerating] = useState<boolean>(false);
 
-  const loadLatestReport = useCallback(async () => {
-    setLoading(true);
-    const snapshot = await dashboardAPI.getLatestAIReport(tenantsParam);
-    setReport(snapshot.report || '');
-    setInsights((snapshot.insights || []) as AIInsight[]);
-    setGeneratedAt(snapshot.generated_at || null);
-    setCached(Boolean(snapshot.cached));
-    setLoading(false);
-  }, [tenantsParam]);
+  const { data = {} as any, isLoading: loading, refetch } = useQuery({
+    queryKey: ['aiReport', tenantsParam],
+    queryFn: () => dashboardAPI.getLatestAIReport(tenantsParam),
+  });
 
-  useEffect(() => {
-    loadLatestReport();
-  }, [loadLatestReport]);
+  const report = data.report || '';
+  const insights = (data.insights || []) as AIInsight[];
+  const generatedAt = data.generated_at || null;
+  const cached = Boolean(data.cached);
 
   const handleGenerate = async () => {
     setGenerating(true);
     const snapshot = await dashboardAPI.generateAIReport(tenantsParam);
-    setReport(snapshot.report || '');
-    setInsights((snapshot.insights || []) as AIInsight[]);
-    setGeneratedAt(snapshot.generated_at || null);
-    setCached(Boolean(snapshot.cached));
+    queryClient.setQueryData(['aiReport', tenantsParam], snapshot);
     setGenerating(false);
   };
 
@@ -183,7 +173,7 @@ export default function AIReportPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={loadLatestReport}
+            onClick={() => refetch()}
             className="flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
           >
             <Clock3 className="mr-2 h-4 w-4" />

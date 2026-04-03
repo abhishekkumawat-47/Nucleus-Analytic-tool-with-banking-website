@@ -49,6 +49,9 @@ apiClient.interceptors.request.use(
         if (session.user.role) {
           config.headers.set('X-User-Role', session.user.role);
         }
+        if (session.user.adminApps) {
+          config.headers.set('X-Admin-Apps', (session.user.adminApps as string[]).join(','));
+        }
       }
     } catch {
       // Ignore if called in non-browser context
@@ -167,7 +170,7 @@ export interface DeploymentInfoResponse {
 interface AdminSummaryResponse {
   total_tenants: number;
   total_events: number;
-  top_tenants: Tenant[];
+  top_tenants: Array<{ id: string; name: string; events: number }>;
 }
 
 interface AdminAppSummaryResponse {

@@ -599,11 +599,9 @@ export default function LicenseUsagePage() {
                     <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
                       <tr>
                         <th className="px-4 py-3 font-medium">Feature</th>
-                        <th className="px-4 py-3 font-medium">Tier</th>
                         <th className="px-4 py-3 font-medium text-right">Usage Count</th>
                         <th className="px-4 py-3 font-medium text-right">Unique Users</th>
                         <th className="px-4 py-3 font-medium text-right">Share</th>
-                        <th className="px-4 py-3 font-medium">Usage</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -616,18 +614,10 @@ export default function LicenseUsagePage() {
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3.5">
-                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 border border-gray-200">
-                              Free
-                            </span>
-                          </td>
                           <td className="px-4 py-3.5 text-right font-mono font-medium">{f.usage_count.toLocaleString()}</td>
                           <td className="px-4 py-3.5 text-right font-mono">{f.unique_users.toLocaleString()}</td>
                           <td className="px-4 py-3.5 text-right">
                             <span className="font-medium text-amber-600">{f.usage_pct}%</span>
-                          </td>
-                          <td className="px-4 py-3.5 w-32">
-                            <UsageBar pct={f.usage_pct} color="#1a73e8" />
                           </td>
                         </tr>
                       ))}

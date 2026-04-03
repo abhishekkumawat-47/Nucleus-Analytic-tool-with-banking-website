@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { dashboardAPI } from '@/lib/api';
 import { DashboardSkeleton, TableSkeleton } from '@/components/Skeletons';
@@ -12,12 +13,9 @@ export default function GovernancePage() {
   const { isLoading, auditLogs, selectedTenants, tenantsParam } = useDashboardData();
   const { data: session } = useSession();
   const actorEmail = session?.user?.email || 'admin@unknown.com';
+  const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<'toggles' | 'audit' | 'logs'>('toggles');
-  const [toggles, setToggles] = useState<any[]>([]);
-  const [configLogs, setConfigLogs] = useState<any[]>([]);
-  const [loadingToggles, setLoadingToggles] = useState(true);
-  const [loadingConfigLogs, setLoadingConfigLogs] = useState(false);
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
 
   const DEFAULT_FEATURES = [
@@ -29,9 +27,9 @@ export default function GovernancePage() {
   ];
 
   // Fetch tracking toggles
-  useEffect(() => {
-    const fetch = async () => {
-      setLoadingToggles(true);
+  const { data: toggles = [], isLoading: loadingToggles } = useQuery({
+    queryKey: ['trackingToggles', tenantsParam],
+    queryFn: async () => {
       const result = await dashboardAPI.getTrackingToggles(tenantsParam);
       const apiToggles = (result.toggles || []).map((t: any) => ({
         feature_name: t.feature,
@@ -50,50 +48,26 @@ export default function GovernancePage() {
             mergedToggles.push(a);
         }
       });
-
-      setToggles(mergedToggles);
-      setLoadingToggles(false);
-    };
-    fetch();
-  }, [tenantsParam]);
+      return mergedToggles;
+    }
+  });
 
   // Fetch config audit log
-  useEffect(() => {
-    if (activeTab === 'audit') {
-      const fetch = async () => {
-        setLoadingConfigLogs(true);
-        const result = await dashboardAPI.getConfigAuditLog(tenantsParam);
-        setConfigLogs(result.logs || []);
-        setLoadingConfigLogs(false);
-      };
-      fetch();
-    }
-  }, [activeTab, tenantsParam]);
+  const { data: configLogs = [], isLoading: loadingConfigLogs } = useQuery({
+    queryKey: ['configAuditLogs', tenantsParam],
+    queryFn: async () => {
+      const result = await dashboardAPI.getConfigAuditLog(tenantsParam);
+      return result.logs || [];
+    },
+    enabled: activeTab === 'audit',
+  });
 
   const handleToggle = async (featureName: string, currentState: boolean) => {
     setTogglingFeature(featureName);
     await dashboardAPI.setTrackingToggle(tenantsParam, featureName, !currentState, actorEmail);
     // Refresh toggles
-    const result = await dashboardAPI.getTrackingToggles(tenantsParam);
-    const apiToggles = (result.toggles || []).map((t: any) => ({
-      feature_name: t.feature,
-      is_enabled: t.enabled,
-      changed_by: actorEmail,
-      changed_at: new Date().toLocaleTimeString()
-    }));
-      
-    const mergedToggles = DEFAULT_FEATURES.map(f => {
-      const override = apiToggles.find((a: any) => a.feature_name === f.feature_name);
-      return override || f;
-    });
-
-    apiToggles.forEach((a: any) => {
-      if (!mergedToggles.find(m => m.feature_name === a.feature_name)) {
-          mergedToggles.push(a);
-      }
-    });
-
-    setToggles(mergedToggles);
+    await queryClient.invalidateQueries({ queryKey: ['trackingToggles', tenantsParam] });
+    await queryClient.invalidateQueries({ queryKey: ['configAuditLogs', tenantsParam] });
     setTogglingFeature(null);
   };
 

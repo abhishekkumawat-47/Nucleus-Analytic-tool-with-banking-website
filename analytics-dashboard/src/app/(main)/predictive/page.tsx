@@ -88,54 +88,116 @@ export default function PredictivePage() {
 
       {/* Anomaly alerts */}
       {anomalies.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
-          <h3 className="text-sm font-semibold text-amber-900">⚠ Anomalies Detected</h3>
-          {anomalies.map((a) => (
-            <p key={a.feature_name} className="text-xs text-amber-800">
-              <strong>{a.feature_name}</strong> — {(a.growth_rate ?? 0) > 0 ? `+${a.growth_rate}%` : `${a.growth_rate}%`} growth (projected: {a.projected_next_7d?.toLocaleString() ?? '—'} events next 7d)
+        <div className="rounded-xl border border-gray-200 bg-white mt-6">
+
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Anomaly Insights
+            </h3>
+            <p className="text-xs text-gray-500">
+              Features with unusual growth or decline
             </p>
-          ))}
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-200">
+                  <th className="px-6 py-3 font-medium">Feature</th>
+                  <th className="px-6 py-3 font-medium">Growth</th>
+                  <th className="px-6 py-3 font-medium">Trend</th>
+                  <th className="px-6 py-3 font-medium">Projected (Next 7d)</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {anomalies.map((a) => {
+                  const growth = a.growth_rate ?? 0;
+
+                  const trend =
+                    growth > 20
+                      ? "High Growth"
+                      : growth < -20
+                        ? "Declining"
+                        : "Stable";
+
+                  return (
+                    <tr
+                      key={a.feature_name}
+                      className="border-b border-gray-100 bg-yellow-50  hover:bg-yellow-100 transition"
+                    >
+                      {/* Feature */}
+                      <td className="px-6 py-4 font-medium text-gray-900">
+                        {a.feature_name}
+                      </td>
+
+                      {/* Growth with bar */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`font-medium ${growth > 0
+                              ? "text-blue-600"
+                              : growth < 0
+                                ? "text-gray-700"
+                                : "text-gray-500"
+                              }`}
+                          >
+                            {growth > 0 ? `+${growth}%` : `${growth}%`}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Trend */}
+                      <td className="px-6 py-4 text-gray-700">
+                        {trend}
+                      </td>
+
+                      {/* Projection */}
+                      <td className="px-6 py-4 text-gray-900">
+                        {a.projected_next_7d
+                          ? a.projected_next_7d.toLocaleString()
+                          : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {/* Predictions table */}
       <ChartContainer title="Feature Adoption Predictions" id="predictive-table">
-        <div className="overflow-x-auto mt-2">
-          <table className="w-full text-left text-sm text-gray-600">
+        <div className="overflow-x-auto mt-2 scrollbar-thin scrollbar-thumb-gray-300">
+          <table className="min-w-[1200px] w-full text-left text-sm text-gray-600">
             <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
               <tr>
-                <th className="px-4 py-3 font-medium">Feature</th>
-                <th className="px-4 py-3 font-medium">Score</th>
-                <th className="px-4 py-3 font-medium">Visual</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Growth</th>
-                <th className="px-4 py-3 font-medium text-right">Projected 7d</th>
-                <th className="px-4 py-3 font-medium text-right">User Reach</th>
-                <th className="px-4 py-3 font-medium text-right">Consistency</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium">Feature</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium">Score</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium">Status</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">Growth</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">Projected 7d</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">User Reach</th>
+                <th className="px-4 py-3 whitespace-nowrap font-medium text-right">Consistency</th>
               </tr>
             </thead>
             <tbody>
               {predictions.map((p, i) => (
-                <tr key={i} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${p.anomaly ? 'bg-amber-50/50' : ''}`}>
-                  <td className="px-4 py-3 font-medium text-gray-900">
+                <tr key={i} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${p.anomaly ? 'bg-yellow-50 hover:bg-yellow-100' : ''}`}>
+                  <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900">
                     {p.feature_name}
-                    {p.anomaly && <span className="ml-1.5 text-amber-600 text-[10px] font-bold">⚠</span>}
+                    {p.anomaly && <span className="ml-1.5 text-amber-600 text-[10px] font-bold"></span>}
                   </td>
-                  <td className={`px-4 py-3 font-bold text-lg ${getScoreColor(p.score)}`}>{p.score}</td>
-                  <td className="px-4 py-3 w-40">
-                    <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${getScoreBarColor(p.score)}`}
-                        style={{ width: `${Math.min(p.score, 100)}%` }}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
+                  <td className={`px-4 py-3 whitespace-nowrap font-bold text-lg ${getScoreColor(p.score)}`}>{p.score}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getStatusBadge(p.status)}`}>
                       {p.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1">
                       {getGrowthIcon(p.growth_rate ?? 0)}
                       <span className={`font-mono text-xs ${(p.growth_rate ?? 0) > 0 ? 'text-[#1a73e8]' : (p.growth_rate ?? 0) < 0 ? 'text-red-500' : 'text-gray-500'}`}>
@@ -143,9 +205,9 @@ export default function PredictivePage() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs">{p.projected_next_7d?.toLocaleString() ?? '—'}</td>
-                  <td className="px-4 py-3 text-right font-mono text-xs">{p.users_pct}%</td>
-                  <td className="px-4 py-3 text-right font-mono text-xs">{p.frequency_score}%</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono text-xs">{p.projected_next_7d?.toLocaleString() ?? '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono text-xs">{p.users_pct}%</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right font-mono text-xs">{p.frequency_score}%</td>
                 </tr>
               ))}
               {predictions.length === 0 && (
@@ -157,11 +219,11 @@ export default function PredictivePage() {
       </ChartContainer>
 
       {/* Score Legend */}
-      <div className="flex flex-wrap gap-4 text-xs text-gray-500 p-4 bg-white rounded-lg border border-gray-200">
+      <div className="flex items-center justify-evenly flex-wrap gap-4 text-xs text-gray-500 p-4 bg-white rounded-lg border border-gray-200">
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#1a73e8] rounded-full"></div> <strong>70-100:</strong> High Adoption</div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-400 rounded-full"></div> <strong>40-69:</strong> Growing</div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-300 rounded-full"></div> <strong>0-39:</strong> At Risk</div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-400 rounded-full"></div> <strong>⚠:</strong> Anomaly (&gt;50% change)</div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-yellow-500 rounded-full"></div>Anomaly (&gt;50% change)</div>
       </div>
     </div>
   );

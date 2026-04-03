@@ -154,8 +154,11 @@ async def websocket_dashboard(websocket: WebSocket, tenant_id: str):
 
 
 @app.get("/tenants/available")
-def get_available_tenants():
-    """Returns all distinct tenants from ClickHouse with event counts for dropdown population."""
+def get_available_tenants(request: Request):
+    """Returns all distinct tenants from ClickHouse, filtered by admin access if applicable."""
+    role = request.headers.get("X-User-Role", "")
+    admin_apps_str = request.headers.get("X-Admin-Apps", "")
+    allowed_apps = [a.strip() for a in admin_apps_str.split(",") if a.strip()]
     # Always include known tenants in the base list so the dropdown is never empty
     KNOWN_TENANTS = [
         {"id": "nexabank", "name": "NexaBank", "eventCount": 0, "uniqueUsers": 0},
@@ -194,6 +197,11 @@ def get_available_tenants():
         for tid, tdata in found.items():
             if tid not in seen:
                 merged.append(tdata)
+                
+        # Filter strictly
+        if role == "app_admin" and allowed_apps:
+            merged = [t for t in merged if t["id"] in allowed_apps]
+            
         return merged
     except Exception:
         return KNOWN_TENANTS
@@ -297,7 +305,7 @@ def get_funnel_analysis(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/tenants/compare")
+@app.get("/features/compare-adoption")
 def compare_tenants(feature: str = Query(..., description="Feature event to compare adoption across tenants")):
     """
     Compare feature adoption across all tenants. 
@@ -1692,110 +1700,58 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
     require_tenant_access(tenants)
     days = parse_range(range)
     tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
-    
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenant_list[0], "days": days} if len(tenant_list) == 1 else {"tenant_ids": tuple(tenant_list), "days": days}
+
     try:
-        pro_feature_catalog = {
-            "pro.crypto-trading.trade_execute": {
-                "feature_id": "crypto-trading",
-                "title": "Crypto Trading",
-                "tagline": "Institutional-grade digital asset management.",
-                "price_inr": 2000,
-            },
-            "pro.wealth-management.rebalance": {
-                "feature_id": "wealth-management-pro",
-                "title": "Wealth Management",
-                "tagline": "Sophisticated portfolio tracking and rebalancing.",
-                "price_inr": 2000,
-            },
-            "pro.payroll-pro.batch_process": {
-                "feature_id": "bulk-payroll-processing",
-                "title": "Payroll Pro",
-                "tagline": "Enterprise-scale payroll automation.",
-                "price_inr": 2000,
-            },
-            "pro.finance-library.book_access": {
-                "feature_id": "ai-insights",
-                "title": "Finance Library",
-                "tagline": "Premium knowledge base for professional banking and investments.",
-                "price_inr": 2000,
-            },
+    try:
+        # Single source of truth catalog
+        feature_catalog = {
+            "pro.crypto-trading.trade_execute": {"plan": "enterprise"},
+            "pro.crypto-trading.prices_view": {"plan": "enterprise"},
+            "pro.crypto-trading.portfolio_view": {"plan": "enterprise"},
+            "pro.wealth-management.rebalance": {"plan": "enterprise"},
+            "pro.wealth-management.insights_view": {"plan": "enterprise"},
+            "pro.payroll-pro.batch_process": {"plan": "enterprise"},
+            "pro.payroll-pro.payees_view": {"plan": "enterprise"},
+            "pro.payroll-pro.search_payees": {"plan": "enterprise"},
+            "pro.finance-library.book_access": {"plan": "enterprise"},
+            "pro.finance-library.stats_view": {"plan": "enterprise"},
+            "pro.features.view": {"plan": "enterprise"},
+            "pro.features.unlock_success": {"plan": "enterprise"},
+            "core.dashboard.view": {"plan": "free"},
+            "auth.login.success": {"plan": "free"},
+            "core.transactions.transfer": {"plan": "free"},
         }
-
-        # ─── Determine tenant tier ───
-        tier_sql = """
-            SELECT argMax(plan_tier, updated_at) as tenant_tier
-            FROM feature_intelligence.tenant_licenses
-            WHERE tenant_id IN %(tenant_ids)s AND feature_name = 'global_tier'
-            GROUP BY feature_name
-        """
-        ts = ch_client.query(tier_sql, {"tenant_ids": tuple(tenant_list)})
-        tenant_tier = ts[0]["tenant_tier"] if ts else "enterprise"
-
-        # ─── Build canonical licensed set from catalog (no duplicates possible) ───
-        if tenant_tier == "enterprise":
-            licensed_set = set(pro_feature_catalog.keys())
-            licensed = [{"feature_name": k, "plan_tier": "enterprise"} for k in pro_feature_catalog.keys()]
-        else:
-            sql_licensed = """
-                SELECT feature_name, argMax(is_licensed, updated_at) as is_licensed, argMax(plan_tier, updated_at) as plan_tier
-                FROM feature_intelligence.tenant_licenses
-                WHERE tenant_id IN %(tenant_ids)s
-                GROUP BY feature_name
-                HAVING is_licensed = 1
-            """
-            raw_licensed = ch_client.query(sql_licensed, {"tenant_ids": tuple(tenant_list)})
-            licensed = [r for r in raw_licensed if r["feature_name"] not in pro_feature_catalog]
-            licensed_set = {r["feature_name"] for r in licensed}
-
-        # ─── Actual usage (aggregated across all selected tenants) ───
-        sql_used = """
-            SELECT event_name as feature_name, sum(total_events) as usage_count, uniqMerge(unique_users) as unique_users
-            FROM feature_intelligence.daily_feature_usage
-            WHERE tenant_id IN %(tenant_ids)s AND date >= today() - %(days)s
+        
+        # Fetch usage
+        sql_used = f"""
+            SELECT event_name as feature_name, count() as usage_count, uniqExact(user_id) as unique_users
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND timestamp >= today() - %(days)s
             GROUP BY event_name
             ORDER BY usage_count DESC
         """
-        used = ch_client.query(sql_used, {"tenant_ids": tuple(tenant_list), "days": days})
-        used_set = {r["feature_name"] for r in used}
+        used = ch_client.query(sql_used, params)
         used_map = {r["feature_name"]: r for r in used}
 
-        # ─── Relevant feature usage (core/auth/pro events) ───
-        sql_relevant = """
-            SELECT event_name as feature_name, sum(total_events) as usage_count, uniqMerge(unique_users) as unique_users
-            FROM feature_intelligence.daily_feature_usage
-            WHERE tenant_id IN %(tenant_ids)s
-              AND date >= today() - %(days)s
-              AND (
-                event_name LIKE 'core.%%'
-                OR event_name LIKE 'auth.%%'
-                OR event_name LIKE 'pro.%%'
-              )
-            GROUP BY event_name
-            ORDER BY usage_count DESC
-            LIMIT 10
-        """
-        relevant_rows = ch_client.query(sql_relevant, {"tenant_ids": tuple(tenant_list), "days": days})
+        # Dynamically append any actually used "pro." items to enterprise so they aren't marked as generic free items
+        for fname in used_map.keys():
+            if fname.startswith("pro.") and fname not in feature_catalog:
+                feature_catalog[fname] = {"plan": "enterprise"}
 
-        sql_last_event = """
-            SELECT max(timestamp) as last_event_at
-            FROM feature_intelligence.events_raw
-            WHERE tenant_id IN %(tenant_ids)s
-        """
-        last_event_res = ch_client.query(sql_last_event, {"tenant_ids": tuple(tenant_list)})
-        last_event_at = None
-        if last_event_res and last_event_res[0].get("last_event_at"):
-            ts_val = last_event_res[0]["last_event_at"]
-            last_event_at = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val)
+        pro_features_set = {k for k, v in feature_catalog.items() if v["plan"] == "enterprise"}
+
         
         # ─── Usage trends (last 7 days) ───
-        sql_trends = """
+        sql_trends = f"""
             SELECT event_name as feature_name, toDate(timestamp) as date, count() as count
             FROM feature_intelligence.events_raw
-            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - 7
+            WHERE {cond} AND timestamp >= today() - 7
             GROUP BY event_name, date
             ORDER BY date ASC
         """
-        trend_rows = ch_client.query(sql_trends, {"tenant_ids": tuple(tenant_list)})
+        trend_rows = ch_client.query(sql_trends, params)
         trends_map = {}
         for r in trend_rows:
             fname = r["feature_name"]
@@ -1803,128 +1759,99 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
                 trends_map[fname] = []
             date_str = r["date"].strftime("%Y-%m-%d") if hasattr(r["date"], "strftime") else str(r["date"])
             trends_map[fname].append({"date": date_str, "count": int(r["count"])})
+            
+        # Build lists based strictly on catalog mapping
+        total_usage_count = sum(int(r["usage_count"]) for r in used) or 1
+        
+        licensed_list = []
+        unused_licensed = []
+        unlicensed_used = []
+        
+        # Populate pro/licensed
+        for fname in pro_features_set:
+            uc = int(used_map.get(fname, {}).get("usage_count", 0))
+            item = {
+                "feature_name": fname,
+                "plan_tier": feature_catalog[fname]["plan"],
+                "is_used": fname in used_map,
+                "usage_count": uc,
+                "unique_users": int(used_map.get(fname, {}).get("unique_users", 0)),
+                "usage_pct": round((uc / total_usage_count) * 100, 1),
+                "trend": trends_map.get(fname, []),
+            }
+            if item["is_used"]:
+                licensed_list.append(item)
+            else:
+                unused_licensed.append(item)
+                
+        # Populate free/unlicensed
+        for fname, r in used_map.items():
+            if fname not in pro_features_set:
+                uc = int(r["usage_count"])
+                unlicensed_used.append({
+                    "feature_name": fname,
+                    "usage_count": uc,
+                    "unique_users": int(r["unique_users"]),
+                    "usage_pct": round((uc / total_usage_count) * 100, 1),
+                })
+                
+        unlicensed_used.sort(key=lambda x: x["usage_count"], reverse=True)
 
-        # ─── Pro user counts ───
-        if licensed_set:
-            feature_list_str = ", ".join([f"'{f}'" for f in licensed_set])
+        # ─── Summaries ───
+        pro_user_count = 0
+        total_user_count = 1
+        wow_change = 0.0
+
+        if pro_features_set:
+            pro_str = ", ".join([f"'{f}'" for f in pro_features_set])
             sql_pro_users = f"""
                 SELECT uniqExact(user_id) as pro_users
                 FROM feature_intelligence.events_raw
-                WHERE tenant_id IN %(tenant_ids)s AND event_name IN ({feature_list_str}) AND timestamp >= today() - %(days)s
+                WHERE {cond} AND event_name IN ({pro_str}) AND timestamp >= today() - %(days)s
             """
-            pro_res = ch_client.query(sql_pro_users, {"tenant_ids": tuple(tenant_list), "days": days})
+            pro_res = ch_client.query(sql_pro_users, params)
             pro_user_count = int(pro_res[0]["pro_users"]) if pro_res else 0
 
-            sql_total_users = """
-                SELECT uniqExact(user_id) as total_users
-                FROM feature_intelligence.events_raw
-                WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - %(days)s
+            sql_total = f"""
+                SELECT uniqExact(user_id) as total_users 
+                FROM feature_intelligence.events_raw 
+                WHERE {cond} AND timestamp >= today() - %(days)s
             """
-            total_res = ch_client.query(sql_total_users, {"tenant_ids": tuple(tenant_list), "days": days})
-            total_user_count = int(total_res[0]["total_users"]) if total_res else 0
+            total_user_count = max(int((ch_client.query(sql_total, params) or [{"total_users": 1}])[0]["total_users"]), 1)
 
             sql_wow = f"""
                 SELECT
-                    sumIf(1, timestamp >= today() - 7) as current_week,
-                    sumIf(1, timestamp >= today() - 14 AND timestamp < today() - 7) as prev_week
+                    countIf(timestamp >= today() - 7) as current_week,
+                    countIf(timestamp >= today() - 14 AND timestamp < today() - 7) as prev_week
                 FROM feature_intelligence.events_raw
-                WHERE tenant_id IN %(tenant_ids)s AND event_name IN ({feature_list_str})
+                WHERE {cond} AND event_name IN ({pro_str})
             """
-            wow_res = ch_client.query(sql_wow, {"tenant_ids": tuple(tenant_list)})
-            current_week = int(wow_res[0]["current_week"]) if wow_res else 0
-            prev_week = int(wow_res[0]["prev_week"]) if wow_res else 0
-            wow_change = round(((current_week - prev_week) / max(prev_week, 1)) * 100, 1)
-        else:
-            pro_user_count = 0
-            total_user_count = 0
-            wow_change = 0.0
-        
-        # ─── Build comparison ───
-        total_usage_count = sum(int(r.get("usage_count", 0)) for r in used)
-        licensed_list = []
-        for r in licensed:
-            usage = used_map.get(r["feature_name"], {})
-            uc = int(usage.get("usage_count", 0))
-            licensed_list.append({
-                "feature_name": r["feature_name"],
-                "plan_tier": r["plan_tier"],
-                "is_used": r["feature_name"] in used_set,
-                "usage_count": uc,
-                "unique_users": int(usage.get("unique_users", 0)),
-                "usage_pct": round((uc / max(total_usage_count, 1)) * 100, 1),
-                "trend": trends_map.get(r["feature_name"], []),
-            })
-        
-        unused_licensed = [f for f in licensed_list if not f["is_used"]]
-        unlicensed_used = []
-        for f in used_set - licensed_set:
-            uc = int(used_map[f]["usage_count"])
-            unlicensed_used.append({
-                "feature_name": f,
-                "usage_count": uc,
-                "unique_users": int(used_map[f].get("unique_users", 0)),
-                "usage_pct": round((uc / max(total_usage_count, 1)) * 100, 1),
-            })
-        unlicensed_used.sort(key=lambda x: x["usage_count"], reverse=True)
-        
-        total_licensed = len(licensed_set)
-        total_used_licensed = len([f for f in licensed_list if f["is_used"]])
+            wow_res = ch_client.query(sql_wow, params)
+            cw = int(wow_res[0]["current_week"]) if wow_res else 0
+            pw = int(wow_res[0]["prev_week"]) if wow_res else 0
+            wow_change = round(((cw - pw) / max(pw, 1)) * 100, 1)
+
+        total_licensed = len(pro_features_set)
+        total_used_licensed = len(licensed_list)
         waste_pct = round(((total_licensed - total_used_licensed) / max(total_licensed, 1)) * 100, 1)
-        
-        estimated_revenue = pro_user_count * 2000
 
-        pro_catalog_usage = []
-        for feature_name, meta in pro_feature_catalog.items():
-            usage = used_map.get(feature_name, {})
-            pro_catalog_usage.append({
-                "feature_name": feature_name,
-                "feature_id": meta["feature_id"],
-                "title": meta["title"],
-                "tagline": meta["tagline"],
-                "price_inr": meta["price_inr"],
-                "is_licensed": feature_name in licensed_set,
-                "is_used": feature_name in used_set,
-                "usage_count": int(usage.get("usage_count", 0)),
-                "unique_users": int(usage.get("unique_users", 0)),
-            })
-
-        top_relevant_features = []
-        for row in relevant_rows:
-            name = row["feature_name"]
-            meta = pro_feature_catalog.get(name)
-            top_relevant_features.append({
-                "feature_name": name,
-                "title": meta["title"] if meta else name,
-                "feature_id": meta["feature_id"] if meta else None,
-                "is_pro_feature": name.startswith("pro."),
-                "usage_count": int(row.get("usage_count", 0)),
-                "unique_users": int(row.get("unique_users", 0)),
-            })
-
-        pro_events_30d = sum(item["usage_count"] for item in pro_catalog_usage)
-        
         return {
             "tenant_id": tenants,
             "summary": {
                 "total_licensed": total_licensed,
-                "total_used": len(used_set),
+                "total_used": len(used_map),
                 "total_used_licensed": total_used_licensed,
                 "waste_pct": waste_pct,
                 "pro_users": pro_user_count,
                 "total_users": total_user_count,
-                "pro_adoption_pct": round((pro_user_count / max(total_user_count, 1)) * 100, 1),
-                "estimated_revenue": estimated_revenue,
+                "pro_adoption_pct": round((pro_user_count / total_user_count) * 100, 1),
+                "estimated_revenue": pro_user_count * 2000,
                 "wow_change": wow_change,
             },
             "licensed": licensed_list,
             "unused_licensed": unused_licensed,
             "unlicensed_used": unlicensed_used,
-            "nexabank_context": {
-                "last_event_at": last_event_at,
-                "pro_events_30d": pro_events_30d,
-                "pro_feature_catalog": pro_catalog_usage,
-                "top_relevant_features": top_relevant_features,
-            }
+            "nexabank_context": {}
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

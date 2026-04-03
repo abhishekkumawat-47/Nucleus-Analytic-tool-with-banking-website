@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { Search, User, Clock, ArrowDown, AlertCircle, Loader2 } from 'lucide-react';
@@ -9,28 +10,24 @@ import { TableSkeleton, ChartSkeleton } from '@/components/Skeletons';
 
 export default function UserJourneyPage() {
   const { tenantsParam } = useDashboardData();
-  const [users, setUsers] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<string>('');
-  const [journey, setJourney] = useState<any>(null);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [loadingJourney, setLoadingJourney] = useState(false);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      setLoadingUsers(true);
-      const result = await dashboardAPI.getJourneyUsers(tenantsParam);
-      setUsers(result.users || []);
-      setLoadingUsers(false);
-    };
-    fetchUsers();
-  }, [tenantsParam]);
+  const { data: usersData, isLoading: loadingUsers } = useQuery({
+    queryKey: ['journeyUsers', tenantsParam],
+    queryFn: () => dashboardAPI.getJourneyUsers(tenantsParam),
+  });
 
-  const loadJourney = async (userId: string) => {
+  const { data: journeyData, isLoading: loadingJourney } = useQuery({
+    queryKey: ['userJourney', tenantsParam, selectedUser],
+    queryFn: () => dashboardAPI.getUserJourney(tenantsParam, selectedUser),
+    enabled: !!selectedUser,
+  });
+
+  const users = usersData?.users || [];
+  const journey = journeyData || null;
+
+  const loadJourney = (userId: string) => {
     setSelectedUser(userId);
-    setLoadingJourney(true);
-    const result = await dashboardAPI.getUserJourney(tenantsParam, userId);
-    setJourney(result);
-    setLoadingJourney(false);
   };
 
   const channelColors: Record<string, string> = {
