@@ -1,28 +1,79 @@
 /**
- * Redux store configuration using Redux Toolkit.
- * Provides typed hooks and centralized state management
- * for the analytics dashboard.
+ * Redux store with redux-persist for localStorage persistence.
+ * Persists the dashboard slice (timeRange, selectedTenants, deploymentMode).
+ * Transient state (realTimeUsers, kpiMetrics) is handled via rehydration transforms.
  */
 
 import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import {
+  persistStore,
+  persistReducer,
+  FLUSH,
+  REHYDRATE,
+  PAUSE,
+  PERSIST,
+  PURGE,
+  REGISTER,
+} from 'redux-persist';
+import createWebStorage from 'redux-persist/lib/storage/createWebStorage';
 import dashboardReducer from './dashboardSlice';
 
-/** Root Redux store */
+/* ---------- storage (SSR-safe) ---------- */
+
+function createNoopStorage() {
+  return {
+    getItem(_key: string) {
+      return Promise.resolve(null);
+    },
+    setItem(_key: string, value: string) {
+      return Promise.resolve(value);
+    },
+    removeItem(_key: string) {
+      return Promise.resolve();
+    },
+  };
+}
+
+const storage =
+  typeof window !== 'undefined'
+    ? createWebStorage('local')
+    : createNoopStorage();
+
+/* ---------- persist config ---------- */
+
+// Apply persistence directly to the dashboard reducer so whitelist
+// targets the slice's own keys (timeRange, selectedTenants, deploymentMode).
+// Transient keys like realTimeUsers, kpiMetrics are excluded.
+const dashboardPersistConfig = {
+  key: 'nucleus-dashboard',
+  storage,
+  whitelist: ['timeRange', 'selectedTenants', 'deploymentMode'],
+};
+
+const persistedDashboardReducer = persistReducer(dashboardPersistConfig, dashboardReducer);
+
+/* ---------- store ---------- */
+
 export const store = configureStore({
   reducer: {
-    dashboard: dashboardReducer,
+    dashboard: persistedDashboardReducer,
   },
-  // Middleware is configured by default with RTK (thunk included)
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: {
+        ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
+      },
+    }),
   devTools: process.env.NODE_ENV !== 'production',
 });
 
-/** Infer the `RootState` and `AppDispatch` types from the store itself */
+export const persistor = persistStore(store);
+
+/* ---------- types + hooks ---------- */
+
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
 
-/** Typed dispatch hook - use this instead of plain `useDispatch` */
 export const useAppDispatch = useDispatch.withTypes<AppDispatch>();
-
-/** Typed selector hook - use this instead of plain `useSelector` */
 export const useAppSelector = useSelector.withTypes<RootState>();

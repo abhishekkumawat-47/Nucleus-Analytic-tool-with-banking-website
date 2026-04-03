@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
 import { dashboardAPI } from '@/lib/api';
 import { DashboardSkeleton } from '@/components/Skeletons';
@@ -10,20 +11,12 @@ import Link from 'next/link';
 
 export default function AppOverviewPage({ params }: { params: { appId: string } }) {
   const appId = params.appId;
-  const [kpi, setKpi] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (appId) {
-      // Super admins are allowed to call /metrics/kpi for a specific tenant (app)
-      dashboardAPI.getKPIMetrics(appId).then((res) => {
-        setKpi(res);
-        setLoading(false);
-      }).catch(() => {
-        setLoading(false);
-      });
-    }
-  }, [appId]);
+  const { data: kpi = [], isLoading: loading } = useQuery({
+    queryKey: ['appKpiMetrics', appId],
+    queryFn: () => dashboardAPI.getKPIMetrics([appId], '7d'),
+    enabled: !!appId,
+  });
 
   if (loading) return <DashboardSkeleton />;
 

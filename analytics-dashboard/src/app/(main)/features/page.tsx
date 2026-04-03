@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useDashboardData } from '@/hooks/useDashboard';
-import { DashboardSkeleton } from '@/components/Skeletons';
+import { FeaturePageSkeleton } from '@/components/Skeletons';
 import FeatureUsageChart from '@/components/FeatureUsageChart';
 import TopFeaturesChart from '@/components/TopFeaturesChart';
 import FeatureHeatmap from '@/components/FeatureHeatmap';
@@ -10,8 +10,8 @@ import FeatureHeatmap from '@/components/FeatureHeatmap';
 export default function FeaturesPage() {
   const { isLoading, featureUsageData, topFeatures, featureActivity } = useDashboardData();
 
-  if (isLoading && featureUsageData.length === 0) {
-    return <DashboardSkeleton />;
+  if (isLoading) {
+    return <FeaturePageSkeleton />;
   }
 
   return (

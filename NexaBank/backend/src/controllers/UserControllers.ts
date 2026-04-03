@@ -152,7 +152,7 @@ export const LoginController = async (
       data: { lastLogin: new Date() },
     });
 
-    await trackEvent("login", user.id, user.tenantId || "bank_a", { email, ip: req.ip });
+    await trackEvent("auth.login.success", user.id, user.tenantId || "bank_a", { ip: req.ip, device_type: "web" });
 
     res.status(200).json({ userId: user.id, role: user.role, tenantId: user.tenantId });
   } catch (error) {
@@ -278,7 +278,7 @@ export const RegisterController = async (
     const fingerprint = generateClientFingerprint(req);
     createTokenAndCookie(res, result.id, fingerprint);
 
-    await trackEvent("register", result.id, tenantId, { email });
+    await trackEvent("auth.register.success", result.id, tenantId, { device_type: "web" });
 
     const { password: _, ...userWithoutPassword } = result;
     res.status(201).json(userWithoutPassword);

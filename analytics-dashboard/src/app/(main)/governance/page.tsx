@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { dashboardAPI } from '@/lib/api';
 import { DashboardSkeleton, TableSkeleton } from '@/components/Skeletons';
@@ -9,32 +10,32 @@ import { Shield, ToggleLeft, ToggleRight, History, Loader2 } from 'lucide-react'
 import { useSession } from 'next-auth/react';
 
 export default function GovernancePage() {
-  const { isLoading, auditLogs, selectedTenant } = useDashboardData();
-  const tenantId = selectedTenant || 'nexabank';
+  const { isLoading, auditLogs, selectedTenants, tenantsParam } = useDashboardData();
   const { data: session } = useSession();
   const actorEmail = session?.user?.email || 'admin@unknown.com';
+  const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<'toggles' | 'audit' | 'logs'>('toggles');
-  const [toggles, setToggles] = useState<any[]>([]);
-  const [configLogs, setConfigLogs] = useState<any[]>([]);
-  const [loadingToggles, setLoadingToggles] = useState(true);
-  const [loadingConfigLogs, setLoadingConfigLogs] = useState(false);
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
 
   const DEFAULT_FEATURES = [
-    { feature_name: "core.payees.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "core.transactions.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "loans.dashboard.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "pro.crypto-trading.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "pro.wealth-management.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.wealth_insights.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.finance_library_stats.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.crypto_portfolio.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
+    { feature_name: "pro.payroll_batch.success", is_enabled: true, changed_by: 'system', changed_at: '-' },
   ];
 
   // Fetch tracking toggles
-  useEffect(() => {
-    const fetch = async () => {
-      setLoadingToggles(true);
-      const result = await dashboardAPI.getTrackingToggles(tenantId);
-      const apiToggles = result.toggles || [];
+  const { data: toggles = [], isLoading: loadingToggles } = useQuery({
+    queryKey: ['trackingToggles', tenantsParam],
+    queryFn: async () => {
+      const result = await dashboardAPI.getTrackingToggles(tenantsParam);
+      const apiToggles = (result.toggles || []).map((t: any) => ({
+        feature_name: t.feature,
+        is_enabled: t.enabled,
+        changed_by: 'system',
+        changed_at: '-'
+      }));
       
       const mergedToggles = DEFAULT_FEATURES.map(f => {
         const override = apiToggles.find((a: any) => a.feature_name === f.feature_name);
@@ -46,45 +47,26 @@ export default function GovernancePage() {
             mergedToggles.push(a);
         }
       });
-
-      setToggles(mergedToggles);
-      setLoadingToggles(false);
-    };
-    fetch();
-  }, [tenantId]);
+      return mergedToggles;
+    }
+  });
 
   // Fetch config audit log
-  useEffect(() => {
-    if (activeTab === 'audit') {
-      const fetch = async () => {
-        setLoadingConfigLogs(true);
-        const result = await dashboardAPI.getConfigAuditLog(tenantId);
-        setConfigLogs(result.logs || []);
-        setLoadingConfigLogs(false);
-      };
-      fetch();
-    }
-  }, [activeTab, tenantId]);
+  const { data: configLogs = [], isLoading: loadingConfigLogs } = useQuery({
+    queryKey: ['configAuditLogs', tenantsParam],
+    queryFn: async () => {
+      const result = await dashboardAPI.getConfigAuditLog(tenantsParam);
+      return result.logs || [];
+    },
+    enabled: activeTab === 'audit',
+  });
 
   const handleToggle = async (featureName: string, currentState: boolean) => {
     setTogglingFeature(featureName);
-    await dashboardAPI.setTrackingToggle(tenantId, featureName, !currentState, actorEmail);
+    await dashboardAPI.setTrackingToggle(tenantsParam, featureName, !currentState, actorEmail);
     // Refresh toggles
-    const result = await dashboardAPI.getTrackingToggles(tenantId);
-    const apiToggles = result.toggles || [];
-      
-    const mergedToggles = DEFAULT_FEATURES.map(f => {
-      const override = apiToggles.find((a: any) => a.feature_name === f.feature_name);
-      return override || f;
-    });
-
-    apiToggles.forEach((a: any) => {
-      if (!mergedToggles.find(m => m.feature_name === a.feature_name)) {
-          mergedToggles.push(a);
-      }
-    });
-
-    setToggles(mergedToggles);
+    await queryClient.invalidateQueries({ queryKey: ['trackingToggles', tenantsParam] });
+    await queryClient.invalidateQueries({ queryKey: ['configAuditLogs', tenantsParam] });
     setTogglingFeature(null);
   };
 
@@ -179,7 +161,7 @@ export default function GovernancePage() {
                         {togglingFeature === t.feature_name ? (
                           <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
                         ) : t.is_enabled ? (
-                          <ToggleRight className="h-8 w-8 text-blue-600" />
+                          <ToggleRight className="h-8 w-8 text-[#1a73e8]" />
                         ) : (
                           <ToggleLeft className="h-8 w-8 text-gray-400" />
                         )}
@@ -217,14 +199,14 @@ export default function GovernancePage() {
                       <td className="px-4 py-3 text-gray-400 font-medium whitespace-nowrap">{log.timestamp}</td>
                       <td className="px-4 py-3 text-gray-900 font-medium">{log.actor}</td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{log.action}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#1a73e8]/10 text-[#1a73e8] border border-[#1a73e8]/20">{log.action}</span>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">{log.target}</td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-xs bg-red-50 text-red-600">{log.old_value}</span>
+                        <span className="px-2 py-0.5 rounded text-xs bg-white border border-gray-200 text-gray-500 line-through">{log.old_value}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-xs bg-green-50 text-green-600">{log.new_value}</span>
+                        <span className="px-2 py-0.5 rounded text-xs bg-white border border-gray-200 text-gray-700">{log.new_value}</span>
                       </td>
                     </tr>
                   ))}

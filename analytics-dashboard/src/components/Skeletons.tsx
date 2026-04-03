@@ -1,60 +1,61 @@
 /**
- * Loading skeleton components for the dashboard.
- * Provides shimmer animations while data is being fetched.
- * Each skeleton matches the dimensions of its corresponding component.
+ * Loading skeleton components for every page in the dashboard.
+ * Uses shimmer animation via animate-pulse on a gradient background.
+ * Each skeleton matches the approximate dimensions of its corresponding widget.
  */
 
 import React from 'react';
 
-/** Base skeleton with shimmer animation */
-function SkeletonPulse({ className = '' }: { className?: string }) {
+/* ─────────────── Base Primitives ─────────────── */
+
+function SkeletonBlock({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] rounded-xl ${className}`}
+      className={`animate-pulse bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 bg-[length:400%_100%] rounded-lg ${className}`}
+      style={{ animation: 'shimmer 1.8s infinite linear' }}
     />
   );
 }
 
-/** KPI card loading skeleton */
+/* ─────────────── Small Widgets ─────────────── */
+
 export function KPICardSkeleton() {
   return (
-    <div
-      className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 flex flex-col justify-between h-[104px]"
-    >
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col justify-between h-[104px]">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-4 h-4 rounded bg-gray-100 animate-pulse" />
-        <div className="h-4 bg-gray-100 rounded w-24 animate-pulse" />
+        <SkeletonBlock className="w-4 h-4 rounded" />
+        <SkeletonBlock className="h-4 w-24" />
       </div>
-      <div className="flex justify-between items-end mt-2">
-        <div className="h-8 bg-gray-100 rounded w-20 animate-pulse" />
-        <div className="h-6 bg-gray-100 rounded w-16 animate-pulse" />
+      <div className="flex justify-between items-end">
+        <SkeletonBlock className="h-8 w-20" />
+        <SkeletonBlock className="h-6 w-16" />
       </div>
     </div>
   );
 }
 
-/** Chart container loading skeleton */
 export function ChartSkeleton({ height = 'h-64' }: { height?: string }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-      <SkeletonPulse className="h-5 w-40 mb-4" />
-      <SkeletonPulse className={`w-full ${height}`} />
+      <div className="flex items-center justify-between mb-4">
+        <SkeletonBlock className="h-5 w-40" />
+        <SkeletonBlock className="h-7 w-32 rounded-lg" />
+      </div>
+      <SkeletonBlock className={`w-full ${height}`} />
     </div>
   );
 }
 
-/** Table loading skeleton */
-export function TableSkeleton({ rows = 3 }: { rows?: number }) {
+export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-      <SkeletonPulse className="h-5 w-40 mb-4" />
+      <SkeletonBlock className="h-5 w-40 mb-4" />
       <div className="space-y-3">
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="flex items-center gap-4">
-            <SkeletonPulse className="h-4 w-28" />
-            <SkeletonPulse className="h-4 flex-1" />
-            <SkeletonPulse className="h-4 w-12" />
-            <SkeletonPulse className="h-4 w-12" />
+            <SkeletonBlock className="h-4 w-28" />
+            <SkeletonBlock className="h-4 flex-1" />
+            <SkeletonBlock className="h-4 w-12" />
           </div>
         ))}
       </div>
@@ -62,51 +63,146 @@ export function TableSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
-/** Sidebar loading skeleton */
 export function SidebarSkeleton() {
   return (
     <div className="w-56 bg-white border-r border-gray-100 p-4 space-y-6">
-      <SkeletonPulse className="h-8 w-32 mb-8" />
+      <SkeletonBlock className="h-8 w-32 mb-8" />
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex items-center gap-3">
-          <SkeletonPulse className="w-5 h-5 rounded" />
-          <SkeletonPulse className="h-4 w-24" />
+          <SkeletonBlock className="w-5 h-5 rounded" />
+          <SkeletonBlock className="h-4 w-24" />
         </div>
       ))}
     </div>
   );
 }
 
-/** Full dashboard loading skeleton */
+/* ─────────────── Page-Level Skeletons ─────────────── */
+
+/** Main /dashboard page skeleton */
 export function DashboardSkeleton() {
   return (
-    <div className="animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300 space-y-6">
       {/* KPI Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <KPICardSkeleton key={i} />
         ))}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      {/* Traffic + Real-Time */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           <ChartSkeleton height="h-72" />
         </div>
         <ChartSkeleton height="h-72" />
       </div>
 
-      {/* Bottom Row - Map */}
-      <div className="grid grid-cols-1 gap-4 mb-6">
-        <ChartSkeleton height="h-96" />
-      </div>
+      {/* AI Insights */}
+      <ChartSkeleton height="h-24" />
 
-      {/* Bottom Row - Detailed Charts */}
+      {/* Location Map */}
+      <ChartSkeleton height="h-96" />
+
+      {/* Bottom row: Pages + Device + Acquisition */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ChartSkeleton height="h-52" />
         <ChartSkeleton height="h-52" />
         <ChartSkeleton height="h-52" />
       </div>
+
+      {/* Secondary KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <KPICardSkeleton key={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** /features page skeleton */
+export function FeaturePageSkeleton() {
+  return (
+    <div className="animate-in fade-in duration-300 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartSkeleton height="h-80" />
+        <ChartSkeleton height="h-80" />
+      </div>
+      <ChartSkeleton height="h-64" />
+      <TableSkeleton rows={6} />
+    </div>
+  );
+}
+
+/** /funnel page skeleton */
+export function FunnelPageSkeleton() {
+  return (
+    <div className="animate-in fade-in duration-300 space-y-6">
+      <ChartSkeleton height="h-96" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartSkeleton height="h-64" />
+        <ChartSkeleton height="h-64" />
+      </div>
+    </div>
+  );
+}
+
+/** /tenants page skeleton */
+export function TenantsPageSkeleton() {
+  return (
+    <div className="animate-in fade-in duration-300 space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <KPICardSkeleton key={i} />
+        ))}
+      </div>
+      <TableSkeleton rows={8} />
+    </div>
+  );
+}
+
+/** /license-usage page skeleton */
+export function LicensePageSkeleton() {
+  return (
+    <div className="animate-in fade-in duration-300 space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <KPICardSkeleton key={i} />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TableSkeleton rows={6} />
+        <TableSkeleton rows={6} />
+      </div>
+    </div>
+  );
+}
+
+/** /governance, /user-journey, /settings, /predictive, /transparency pages */
+export function GenericPageSkeleton() {
+  return (
+    <div className="animate-in fade-in duration-300 space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <KPICardSkeleton key={i} />
+        ))}
+      </div>
+      <ChartSkeleton height="h-72" />
+      <TableSkeleton rows={5} />
+    </div>
+  );
+}
+
+/** /ai-report page skeleton */
+export function AIReportPageSkeleton() {
+  return (
+    <div className="animate-in fade-in duration-300 space-y-4">
+      <SkeletonBlock className="h-8 w-64 mb-6" />
+      {Array.from({ length: 6 }).map((_, i) => (
+        <SkeletonBlock key={i} className={`h-4 w-${i % 3 === 2 ? '3/4' : 'full'}`} />
+      ))}
+      <SkeletonBlock className="h-4 w-1/2 mt-4" />
     </div>
   );
 }

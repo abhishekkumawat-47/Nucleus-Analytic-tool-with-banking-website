@@ -35,8 +35,10 @@ const Loans = () => {
   const { track } = useEventTracker();
 
   useEffect(() => {
-    track('loans.dashboard.view');
-  }, [track]);
+    track('loans.page.view');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [selectedLoanType, setSelectedLoanType] = useState("PERSONAL");
   const [applications, setApplications] = useState<any[]>([]);
@@ -79,6 +81,13 @@ const Loans = () => {
   const [amount, setAmount] = useState(50000);
   const [interest, setInterest] = useState(10.5);
   const [term, setTerm] = useState(2);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      track('loans.emi_estimator.success');
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [amount, interest, term, track]);
 
   const { isAuth, isAuthLoading, userId } = UserData();
   const router = useRouter();
@@ -142,6 +151,7 @@ const Loans = () => {
   const handleApplyNow = (loanType: string = "PERSONAL") => {
     setSelectedLoanType(loanType);
     setShowApplyModal(true);
+    track('loans.apply_loan.success');
   };
 
   const onApplicationSuccess = () => {

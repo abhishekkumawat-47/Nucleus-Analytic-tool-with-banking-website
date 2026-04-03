@@ -23,6 +23,7 @@ import {
   AuditLog,
   FeatureConfig,
   RetentionData,
+  AvailableTenant,
 } from '@/types';
 
 /** Base API configuration */
@@ -47,6 +48,9 @@ apiClient.interceptors.request.use(
         config.headers.set('X-User-Email', session.user.email);
         if (session.user.role) {
           config.headers.set('X-User-Role', session.user.role);
+        }
+        if (session.user.adminApps) {
+          config.headers.set('X-Admin-Apps', (session.user.adminApps as string[]).join(','));
         }
       }
     } catch {
@@ -107,7 +111,13 @@ interface BackendAIReportResponse {
   insights?: BackendInsight[];
 }
 
-/* (duplicate BackendAIReportResponse removed — declared above at L102) */
+interface AIReportPayload {
+  tenant_id: string;
+  report: string;
+  cached?: boolean;
+  generated_at?: string | null;
+  insights: AIInsight[];
+}
 
 interface BackendTrafficRow {
   date: string;
@@ -134,7 +144,9 @@ interface BackendChannelRow {
 interface BackendTopPageRow {
   pageUrl: string;
   totalEvents: number;
-  features: string[];
+  comparisonPct: number;
+  rank: number;
+  features: { feature: string; displayName: string; count: number; inPagePct: number }[];
 }
 
 interface BackendPPMRow {
@@ -148,7 +160,7 @@ interface BackendActivityRow {
   level: string;
 }
 
-interface DeploymentInfoResponse {
+export interface DeploymentInfoResponse {
   mode: string;
   is_cloud: boolean;
   is_on_prem: boolean;
@@ -158,7 +170,7 @@ interface DeploymentInfoResponse {
 interface AdminSummaryResponse {
   total_tenants: number;
   total_events: number;
-  top_tenants: Tenant[];
+  top_tenants: Array<{ id: string; name: string; events: number }>;
 }
 
 interface AdminAppSummaryResponse {
@@ -224,7 +236,19 @@ interface SegmentationResponse {
 }
 
 interface PredictiveResponse {
-  predictions: Array<{ metric: string; predicted_value: number; confidence: number }>;
+  predictions: Array<{
+    feature_name: string;
+    score: number;
+    trend_score: number;
+    users_pct: number;
+    frequency_score: number;
+    recent_7d: number;
+    prev_7d: number;
+    status: string;
+    growth_rate?: number;
+    projected_next_7d?: number;
+    anomaly?: boolean;
+  }>;
   total_users: number;
 }
 
@@ -232,9 +256,9 @@ interface PredictiveResponse {
 
 export const dashboardAPI = {
   /** Fetch KPI metrics for the dashboard header */
-  async getKPIMetrics(tenantId: string = 'twitter', days: number = 7): Promise<KPIMetric[]> {
+  async getKPIMetrics(tenants: string[], range: string): Promise<KPIMetric[]> {
     try {
-      const response = await apiClient.get<KPIMetric[]>(`/metrics/kpi?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<KPIMetric[]>(`/metrics/kpi?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch KPI metrics');
@@ -243,9 +267,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch Secondary KPI metrics */
-  async getSecondaryKPIMetrics(tenantId: string = 'twitter', days: number = 7): Promise<KPIMetric[]> {
+  async getSecondaryKPIMetrics(tenants: string[], range: string): Promise<KPIMetric[]> {
     try {
-      const response = await apiClient.get<KPIMetric[]>(`/metrics/secondary_kpi?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<KPIMetric[]>(`/metrics/secondary_kpi?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch Secondary KPI metrics');
@@ -254,12 +278,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch traffic overview time series data */
-  async getTrafficData(tenantId: string = 'twitter', days: number = 7): Promise<TimeSeriesDataPoint[]> {
+  async getTrafficData(tenants: string[], range: string): Promise<TimeSeriesDataPoint[]> {
     try {
-      const response = await apiClient.get<Record<string, string | number>[]>(`/metrics/traffic?tenant_id=${tenantId}&days=${days}`);
-      // Multi-tenant pivoted data has keys like nexabank_pageViews, safexbank_visitors
-      // Single-tenant data has simple visitors/pageViews
-      // Pass through the raw data shape — the chart dynamically reads keys
+      const response = await apiClient.get<Record<string, string | number>[]>(`/metrics/traffic?tenants=${tenants.join(',')}&range=${range}`);
       return response.data.map((r: Record<string, string | number>) => {
         const point: Record<string, string | number> = { date: String(r.date) };
         for (const key of Object.keys(r)) {
@@ -276,12 +297,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch feature usage over time data */
-  async getFeatureUsageData(tenantId: string = 'twitter', days: number = 7): Promise<FeatureUsageDataPoint[]> {
+  async getFeatureUsageData(tenants: string[], range: string): Promise<FeatureUsageDataPoint[]> {
     try {
-      const response = await apiClient.get<Record<string, string | number>[]>(`/metrics/feature_usage_series?tenant_id=${tenantId}&days=${days}`);
-      // Multi-tenant pivoted data has keys like nexabank_usage, safexbank_usage
-      // Single-tenant data has simple usage key
-      // Pass through the raw data shape — the chart dynamically reads keys
+      const response = await apiClient.get<Record<string, string | number>[]>(`/metrics/feature_usage_series?tenants=${tenants.join(',')}&range=${range}`);
       return response.data.map((r: Record<string, string | number>) => {
         const point: Record<string, string | number> = { date: String(r.date) };
         for (const key of Object.keys(r)) {
@@ -298,9 +316,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch top features ranking using backend /features/usage endpoint */
-  async getTopFeatures(tenantId: string = 'twitter', days: number = 7): Promise<BarDataPoint[]> {
+  async getTopFeatures(tenants: string[], range: string): Promise<BarDataPoint[]> {
     try {
-      const response = await apiClient.get<{ usage: BackendFeatureUsageItem[] }>(`/features/usage?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<{ usage: BackendFeatureUsageItem[] }>(`/features/usage?tenants=${tenants.join(',')}&range=${range}`);
       const backendUsage = response.data.usage || [];
       return backendUsage.map((item: BackendFeatureUsageItem) => ({
         name: item.event_name,
@@ -313,13 +331,15 @@ export const dashboardAPI = {
   },
 
   /** Fetch user journey funnel data using backend /funnels endpoint */
-  async getFunnelData(tenantId: string = 'twitter', days: number = 7): Promise<FunnelStep[]> {
+  async getFunnelData(tenants: string[], range: string): Promise<FunnelStep[]> {
     try {
       const { APP_REGISTRY } = await import('./feature-map');
-      const appConfig = APP_REGISTRY[tenantId];
+      // Use the first tenant for funnel step resolution
+      const primaryTenant = tenants.length > 0 ? tenants[0] : 'nexabank';
+      const appConfig = APP_REGISTRY[primaryTenant];
       const steps = appConfig?.funnelSteps?.join(',') || 'login,view_feed,post_tweet,like_tweet';
       
-      const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenant_id=${tenantId}&steps=${steps}&window_minutes=60&days=${days}`);
+      const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenants=${tenants.join(',')}&steps=${steps}&window_minutes=60&range=${range}`);
       const funnel = response.data.funnel || [];
       
       return funnel.map((step: BackendFunnelStep) => ({
@@ -337,9 +357,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch feature activity heatmap data */
-  async getFeatureActivity(tenantId: string = 'twitter', days: number = 7): Promise<FeatureActivityRow[]> {
+  async getFeatureActivity(tenants: string[], range: string): Promise<FeatureActivityRow[]> {
     try {
-      const response = await apiClient.get<BackendActivityRow[]>(`/features/activity?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<BackendActivityRow[]>(`/features/activity?tenants=${tenants.join(',')}&range=${range}`);
       return response.data.map((row: BackendActivityRow) => ({
         feature: row.feature,
         segments: row.segments,
@@ -351,9 +371,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch grid-based heatmap matrix for multi-tenant or time-based single tenant */
-  async getFeatureHeatmap(tenantIds: string): Promise<{ is_compare: boolean; groups: string[]; activities: unknown[] }> {
+  async getFeatureHeatmap(tenants: string[], range: string): Promise<{ is_compare: boolean; groups: string[]; activities: unknown[] }> {
     try {
-      const response = await apiClient.get(`/features/heatmap?tenant_id=${tenantIds}`);
+      const response = await apiClient.get(`/features/heatmap?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       return {
@@ -364,10 +384,10 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch tenant comparison data — passes tenant_id for RBAC */
-  async getTenants(tenantId?: string, days: number = 7): Promise<Tenant[]> {
+  /** Fetch tenant comparison data */
+  async getTenants(tenants?: string[], range: string = '7d'): Promise<Tenant[]> {
     try {
-      const params = tenantId ? `?tenant_id=${tenantId}&days=${days}` : `?days=${days}`;
+      const params = tenants && tenants.length > 0 ? `?tenants=${tenants.join(',')}&range=${range}` : `?range=${range}`;
       const response = await apiClient.get<Tenant[]>(`/tenants${params}`);
       return response.data;
     } catch {
@@ -375,13 +395,26 @@ export const dashboardAPI = {
     }
   },
 
+  async getAvailableTenants(): Promise<AvailableTenant[]> {
+    try {
+      const response = await apiClient.get<AvailableTenant[]>('/tenants/available');
+      return response.data;
+    } catch {
+      console.error('Failed to fetch available tenants');
+      return [
+        { id: "nexabank", name: "NexaBank", eventCount: 0, uniqueUsers: 0 },
+        { id: "safexbank", name: "SafexBank", eventCount: 0, uniqueUsers: 0 }
+      ];
+    }
+  },
+
   /** Fetch AI-generated insights using backend /insights endpoint */
-  async getAIInsights(tenantId: string = 'twitter', days: number = 7): Promise<AIInsight[]> {
+  async getAIInsights(tenants: string[], range: string): Promise<AIInsight[]> {
     // Retry once on failure before returning fallback
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await apiClient.get<{ insights: BackendInsight[] }>(
-          `/insights?tenant_id=${tenantId}&days=${days}`,
+          `/insights?tenants=${tenants.join(',')}&range=${range}`,
           { timeout: attempt === 0 ? 15000 : 30000 } // 15s first try, 30s retry
         );
         const insights = response.data.insights || [];
@@ -421,9 +454,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch AI Summarization Report */
-  async getAIReport(tenantId: string = 'nexabank'): Promise<string> {
+  async getAIReport(tenants: string[]): Promise<string> {
     try {
-      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
+      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenants=${tenants.join(',')}`, { timeout: 1200000 });
       return response.data.report || '';
     } catch {
       console.error('Failed to fetch AI Report');
@@ -432,40 +465,61 @@ export const dashboardAPI = {
   },
 
   /** Fetch the latest stored AI report snapshot */
-  async getLatestAIReport(tenantId: string = 'nexabank'): Promise<BackendAIReportResponse> {
+  async getLatestAIReport(tenants: string[]): Promise<AIReportPayload> {
     try {
-      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenant_id=${tenantId}`, { timeout: 1200000 });
-      return response.data;
+      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenants=${tenants.join(',')}`, { timeout: 1200000 });
+      const insights: AIInsight[] = (response.data.insights || []).map((ins: BackendInsight, i: number) => ({
+        id: `ai-${i}`,
+        title: ins.type || 'Insight',
+        message: ins.message || String(ins),
+        type: ins.severity === 'high' ? 'warning' : ins.severity === 'medium' ? 'info' : 'success',
+        priority: ins.severity,
+        impact: ins.severity === 'high' ? 'High' : 'Medium',
+        actionRequired: ins.severity === 'high',
+      }));
+      return { ...response.data, insights };
     } catch {
-      return { tenant_id: tenantId, report: '', cached: true, generated_at: null, insights: [] };
+      return { tenant_id: tenants.join(','), report: '', cached: true, generated_at: null, insights: [] };
     }
   },
 
   /** Generate a fresh AI report on demand */
-  async generateAIReport(tenantId: string = 'nexabank'): Promise<BackendAIReportResponse> {
+  async generateAIReport(tenants: string[]): Promise<AIReportPayload> {
     try {
-      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenant_id=${tenantId}&force_refresh=true`, { timeout: 1200000 });
-      return response.data;
+      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenants=${tenants.join(',')}&force_refresh=true`, { timeout: 1200000 });
+      const insights: AIInsight[] = (response.data.insights || []).map((ins: BackendInsight, i: number) => ({
+        id: `ai-${i}`,
+        title: ins.type || 'Insight',
+        message: ins.message || String(ins),
+        type: ins.severity === 'high' ? 'warning' : ins.severity === 'medium' ? 'info' : 'success',
+        priority: ins.severity,
+        impact: ins.severity === 'high' ? 'High' : 'Medium',
+        actionRequired: ins.severity === 'high',
+      }));
+      return { ...response.data, insights };
     } catch {
       console.error('Failed to generate AI Report');
-      return { tenant_id: tenantId, report: '', cached: false, generated_at: null, insights: [] };
+      return { tenant_id: tenants.join(','), report: '', cached: false, generated_at: null, insights: [] };
     }
   },
 
-  /** Fetch real-time active user count */
-  async getRealTimeUsers(tenantId: string = 'twitter'): Promise<number> {
+  /** Fetch real-time active user count (returns count + IST timestamp) */
+  async getRealTimeUsers(tenants: string[]): Promise<{ count: number; timestampIST: string | null }> {
     try {
-      const response = await apiClient.get<number>(`/metrics/realtime_users?tenant_id=${tenantId}`);
-      return response.data;
+      const response = await apiClient.get<{ count: number; timestamp_ist: string | null; timezone: string }>(`/metrics/realtime_users?tenants=${tenants.join(',')}`);
+      return {
+        count: response.data.count ?? 0,
+        timestampIST: response.data.timestamp_ist ?? null,
+      };
     } catch {
-      return 0;
+      return { count: 0, timestampIST: null };
     }
   },
 
   /** Fetch pages per minute data */
-  async getPagesPerMinute(tenantId: string = 'twitter'): Promise<PagesPerMinuteDataPoint[]> {
+  async getPagesPerMinute(tenants: string[]): Promise<PagesPerMinuteDataPoint[]> {
     try {
-      const response = await apiClient.get<BackendPPMRow[]>(`/metrics/pages_per_minute?tenant_id=${tenantId}`);
+      const response = await apiClient.get<BackendPPMRow[]>(`/metrics/pages_per_minute?tenants=${tenants.join(',')}`);
       return response.data;
     } catch {
       return [];
@@ -473,13 +527,20 @@ export const dashboardAPI = {
   },
 
   /** Fetch top pages data — returns page-grouped entries with nested features */
-  async getTopPages(tenantId: string = 'twitter', days: number = 7): Promise<TopPage[]> {
+  async getTopPages(tenants: string[], range: string): Promise<TopPage[]> {
     try {
-      const response = await apiClient.get<BackendTopPageRow[]>(`/metrics/top_pages?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<BackendTopPageRow[]>(`/metrics/top_pages?tenants=${tenants.join(',')}&range=${range}`);
       return response.data.map((row: BackendTopPageRow) => ({
         pageUrl: row.pageUrl,
         totalEvents: row.totalEvents,
-        features: row.features || [],
+        comparisonPct: row.comparisonPct ?? 0,
+        rank: row.rank ?? 0,
+        features: (row.features || []).map(f => ({
+          feature: f.feature,
+          displayName: f.displayName || f.feature,
+          count: f.count,
+          inPagePct: f.inPagePct ?? 0,
+        })),
       }));
     } catch {
       return [];
@@ -487,9 +548,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch device breakdown data */
-  async getDeviceBreakdown(tenantId: string = 'twitter', days: number = 7): Promise<DeviceBreakdown[]> {
+  async getDeviceBreakdown(tenants: string[], range: string): Promise<DeviceBreakdown[]> {
     try {
-      const response = await apiClient.get<DeviceBreakdown[]>(`/metrics/devices?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<DeviceBreakdown[]>(`/metrics/devices?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch device breakdown');
@@ -497,20 +558,25 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch user acquisition channel data */
-  async getAcquisitionChannels(tenantId: string = 'twitter', days: number = 7): Promise<AcquisitionChannel[]> {
+  /** Fetch user acquisition channel breakdown */
+  async getAcquisitionChannels(tenants: string[], range: string): Promise<AcquisitionChannel[]> {
     try {
-      const response = await apiClient.get<BackendChannelRow[]>(`/metrics/channels?tenant_id=${tenantId}&days=${days}`);
-      return response.data;
+      const response = await apiClient.get<BackendChannelRow[]>(`/metrics/channels?tenants=${tenants.join(',')}&range=${range}`);
+      return (response.data || []).map((row: BackendChannelRow) => ({
+        name: row.name,
+        value: row.value,
+        formattedValue: row.formattedValue || row.value.toLocaleString(),
+      }));
     } catch {
+      console.error('Failed to fetch acquisition channels');
       return [];
     }
   },
 
   /** Fetch top locations data from backend */
-  async getLocations(tenantId: string = 'twitter', days: number = 7): Promise<LocationData[]> {
+  async getLocations(tenants: string[], range: string): Promise<LocationData[]> {
     try {
-      const response = await apiClient.get<LocationData[]>(`/locations?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<LocationData[]>(`/locations?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch Locations');
@@ -519,9 +585,9 @@ export const dashboardAPI = {
   },
 
   /** Fetch audit logs from backend */
-  async getAuditLogs(tenantId: string = 'twitter'): Promise<AuditLog[]> {
+  async getAuditLogs(tenants: string[], range: string): Promise<AuditLog[]> {
     try {
-      const response = await apiClient.get<AuditLog[]>(`/audit_logs?tenant_id=${tenantId}`);
+      const response = await apiClient.get<AuditLog[]>(`/audit_logs?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch AuditLogs');
@@ -529,29 +595,21 @@ export const dashboardAPI = {
     }
   },
 
-  /** Fetch feature routing configurations dynamically from APP_REGISTRY */
-  async getFeatureConfigs(tenantId: string = 'twitter'): Promise<FeatureConfig[]> {
+  /** Fetch top feature configs using backend data */
+  async getFeatureConfigs(tenants: string[], range: string): Promise<FeatureConfig[]> {
     try {
-      const { APP_REGISTRY } = await import('./feature-map');
-      const appConfig = APP_REGISTRY[tenantId];
-      if (!appConfig) return [];
-      
-      return appConfig.routes.map((route, idx) => ({
-        id: `fc-${idx}`,
-        pattern: route.pattern,
-        featureName: route.featureName,
-        category: route.category,
-        isActive: true,
-      }));
+      const response = await apiClient.get<FeatureConfig[]>(`/features/configs?tenants=${tenants.join(',')}&range=${range}`);
+      return response.data;
     } catch {
+      console.error('Failed to fetch feature configs');
       return [];
     }
   },
 
   /** Fetch retention data */
-  async getRetentionData(tenantId: string = 'twitter', days: number = 7): Promise<RetentionData[]> {
+  async getRetentionData(tenants: string[], range: string): Promise<RetentionData[]> {
     try {
-      const response = await apiClient.get<RetentionData[]>(`/metrics/retention?tenant_id=${tenantId}&days=${days}`);
+      const response = await apiClient.get<RetentionData[]>(`/metrics/retention?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       return [];
@@ -580,9 +638,9 @@ export const dashboardAPI = {
     }
   },
 
-  async getAdminAppSummary(tenantId: string): Promise<{ kpi: KPIMetric[]; insights: AIInsight[] }> {
+  async getAdminAppSummary(tenants: string[]): Promise<{ kpi: KPIMetric[]; insights: AIInsight[] }> {
     try {
-      const response = await apiClient.get<AdminAppSummaryResponse>(`/admin/app/${tenantId}/summary`);
+      const response = await apiClient.get<AdminAppSummaryResponse>(`/admin/app/${tenants.join(',')}/summary`);
       const payload = response.data;
       
       const insights: AIInsight[] = (payload.insights || []).map((insight: BackendInsight, ix: number) => ({
@@ -603,9 +661,10 @@ export const dashboardAPI = {
   },
 
   /** Fetch transparency info showing what data goes to the cloud */
-  async getTransparencyInfo(tenantId: string = 'twitter'): Promise<TransparencyResponse | null> {
+  async getTransparencyInfo(tenants: string[] | string): Promise<TransparencyResponse | null> {
     try {
-      const response = await apiClient.get<TransparencyResponse>(`/transparency/cloud-data?tenant_id=${tenantId}`);
+      const tenantsStr = Array.isArray(tenants) ? tenants.join(',') : tenants;
+      const response = await apiClient.get<TransparencyResponse>(`/transparency/cloud-data?tenants=${tenantsStr}`);
       return response.data;
     } catch {
       console.warn('Failed to fetch transparency info');
@@ -615,9 +674,9 @@ export const dashboardAPI = {
 
   /* ─────────────── License vs Usage ─────────────── */
 
-  async getLicenseUsage(tenantId: string): Promise<LicenseUsageResponse> {
+  async getLicenseUsage(tenants: string[], range: string): Promise<LicenseUsageResponse> {
     try {
-      const response = await apiClient.get<LicenseUsageResponse>(`/license/usage?tenant_id=${tenantId}`);
+      const response = await apiClient.get<LicenseUsageResponse>(`/license/usage?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch license usage');
@@ -625,9 +684,9 @@ export const dashboardAPI = {
     }
   },
 
-  async syncLicenses(tenantId: string, features: { feature_name: string; plan_tier: string; is_licensed?: boolean }[]): Promise<{ status: string }> {
+  async syncLicenses(tenants: string[], features: { feature_name: string; plan_tier: string; is_licensed?: boolean }[]): Promise<{ status: string }> {
     try {
-      const response = await apiClient.post<{ status: string }>('/license/sync', { tenant_id: tenantId, features });
+      const response = await apiClient.post<{ status: string }>('/license/sync', { tenant_id: tenants.join(','), features });
       return response.data;
     } catch {
       console.error('Failed to sync licenses');
@@ -637,9 +696,9 @@ export const dashboardAPI = {
 
   /* ─────────────── Tracking Toggles ─────────────── */
 
-  async getTrackingToggles(tenantId: string): Promise<TrackingToggleResponse> {
+  async getTrackingToggles(tenants: string[]): Promise<TrackingToggleResponse> {
     try {
-      const response = await apiClient.get<TrackingToggleResponse>(`/tracking/toggles?tenant_id=${tenantId}`);
+      const response = await apiClient.get<TrackingToggleResponse>(`/tracking/toggles?tenants=${tenants.join(',')}`);
       return response.data;
     } catch {
       console.error('Failed to fetch tracking toggles');
@@ -647,10 +706,10 @@ export const dashboardAPI = {
     }
   },
 
-  async setTrackingToggle(tenantId: string, featureName: string, isEnabled: boolean, actorEmail: string): Promise<{ status: string }> {
+  async setTrackingToggle(tenants: string[], featureName: string, isEnabled: boolean, actorEmail: string): Promise<{ status: string }> {
     try {
       const response = await apiClient.post<{ status: string }>('/tracking/toggles', {
-        tenant_id: tenantId,
+        tenant_id: tenants.join(','),
         feature_name: featureName,
         is_enabled: isEnabled,
         actor_email: actorEmail,
@@ -664,9 +723,9 @@ export const dashboardAPI = {
 
   /* ─────────────── Config Audit Log ─────────────── */
 
-  async getConfigAuditLog(tenantId: string): Promise<ConfigAuditResponse> {
+  async getConfigAuditLog(tenants: string[]): Promise<ConfigAuditResponse> {
     try {
-      const response = await apiClient.get<ConfigAuditResponse>(`/config/audit-log?tenant_id=${tenantId}`);
+      const response = await apiClient.get<ConfigAuditResponse>(`/config/audit-log?tenants=${tenants.join(',')}`);
       return response.data;
     } catch {
       console.error('Failed to fetch config audit log');
@@ -676,9 +735,9 @@ export const dashboardAPI = {
 
   /* ─────────────── User Journey ─────────────── */
 
-  async getUserJourney(tenantId: string, userId: string): Promise<UserJourneyResponse> {
+  async getUserJourney(tenants: string[], userId: string): Promise<UserJourneyResponse> {
     try {
-      const response = await apiClient.get<UserJourneyResponse>(`/journey/user?tenant_id=${tenantId}&user_id=${userId}`);
+      const response = await apiClient.get<UserJourneyResponse>(`/journey/user?tenants=${tenants.join(',')}&user_id=${userId}`);
       return response.data;
     } catch {
       console.error('Failed to fetch user journey');
@@ -686,9 +745,9 @@ export const dashboardAPI = {
     }
   },
 
-  async getJourneyUsers(tenantId: string): Promise<JourneyUsersResponse> {
+  async getJourneyUsers(tenants: string[]): Promise<JourneyUsersResponse> {
     try {
-      const response = await apiClient.get<JourneyUsersResponse>(`/journey/users?tenant_id=${tenantId}`);
+      const response = await apiClient.get<JourneyUsersResponse>(`/journey/users?tenants=${tenants.join(',')}`);
       return response.data;
     } catch {
       console.error('Failed to fetch journey users');
@@ -698,9 +757,9 @@ export const dashboardAPI = {
 
   /* ─────────────── Segmentation ─────────────── */
 
-  async getSegmentationComparison(tenantId: string): Promise<SegmentationResponse> {
+  async getSegmentationComparison(tenants: string[]): Promise<SegmentationResponse> {
     try {
-      const response = await apiClient.get<SegmentationResponse>(`/segmentation/compare?tenant_id=${tenantId}`);
+      const response = await apiClient.get<SegmentationResponse>(`/segmentation/compare?tenants=${tenants.join(',')}`);
       return response.data;
     } catch {
       console.error('Failed to fetch segmentation');
@@ -710,13 +769,25 @@ export const dashboardAPI = {
 
   /* ─────────────── Predictive Adoption ─────────────── */
 
-  async getPredictiveAdoption(tenantId: string): Promise<PredictiveResponse> {
+  async getPredictiveAdoption(tenants: string[], range: string): Promise<PredictiveResponse> {
     try {
-      const response = await apiClient.get<PredictiveResponse>(`/predictive/adoption?tenant_id=${tenantId}`);
+      const response = await apiClient.get<PredictiveResponse>(`/predictive/adoption?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch predictive adoption');
       return { predictions: [], total_users: 0 };
+    }
+  },
+
+  /* ─────────────── Tenant Comparison ─────────────── */
+
+  async getTenantComparison(tenants: string[], range: string): Promise<{ tenants: Array<{ id: string; name: string; total_events: number; unique_users: number; active_features: number; growth_rate: number; conversion_rate: number; trend: Array<{ date: string; events: number }> }> }> {
+    try {
+      const response = await apiClient.get(`/tenants/compare?tenants=${tenants.join(',')}&range=${range}`);
+      return response.data;
+    } catch {
+      console.error('Failed to fetch tenant comparison');
+      return { tenants: [] };
     }
   },
 };

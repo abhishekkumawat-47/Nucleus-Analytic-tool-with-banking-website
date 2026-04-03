@@ -1,12 +1,14 @@
 'use client';
 
 /**
- * Redux Provider wrapper for Next.js App Router.
- * Wraps the application with the Redux store provider.
+ * Redux Provider + PersistGate wrapper for Next.js App Router.
+ * PersistGate delays rendering children until persisted state is rehydrated,
+ * preventing the flash of default state (e.g. resetting "30d" back to "7d").
  */
 
 import { Provider } from 'react-redux';
-import { store } from '@/lib/store';
+import { PersistGate } from 'redux-persist/integration/react';
+import { store, persistor } from '@/lib/store';
 import { ReactNode } from 'react';
 
 interface StoreProviderProps {
@@ -14,5 +16,11 @@ interface StoreProviderProps {
 }
 
 export default function StoreProvider({ children }: StoreProviderProps) {
-  return <Provider store={store}>{children}</Provider>;
+  return (
+    <Provider store={store}>
+      <PersistGate loading={null} persistor={persistor}>
+        {children}
+      </PersistGate>
+    </Provider>
+  );
 }

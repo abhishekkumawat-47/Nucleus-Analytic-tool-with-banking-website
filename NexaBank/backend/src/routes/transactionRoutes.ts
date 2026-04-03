@@ -302,7 +302,7 @@ router.post(
         });
         if (senderInfo) {
           await trackEvent(
-            transactionType === "TRANSFER" ? "transfer_completed" : "payment_completed",
+            transactionType === "TRANSFER" ? "transfer_completed" : "payees",
             senderInfo.customerId,
             senderInfo.customer.tenantId || "bank_a",
             { amount, category: result.category, transactionId: result.id }

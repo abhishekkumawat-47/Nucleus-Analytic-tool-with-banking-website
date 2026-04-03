@@ -2,8 +2,8 @@
 
 /**
  * User Acquisition horizontal bar chart.
- * Shows acquisition channels with colored bars and formatted values.
- * Matches the Google Analytics design.
+ * Shows acquisition channels with a clean blue-scale design.
+ * Matches the blue/black/white dashboard design system.
  */
 
 import React, { memo } from 'react';
@@ -14,8 +14,15 @@ interface UserAcquisitionChartProps {
   data: AcquisitionChannel[];
 }
 
-/** Color gradient for acquisition channels */
-const channelColors = ['#0EA5A4', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6'];
+/** Blue-scale palette for channel bars */
+const CHANNEL_COLORS = [
+  '#1a73e8', // Primary blue
+  '#2b7de9',
+  '#4285F4',
+  '#5a95f5',
+  '#8AB4F8',
+  '#C2D9FC',
+];
 
 function UserAcquisitionChart({ data }: UserAcquisitionChartProps) {
   if (!data || data.length === 0) {
@@ -33,30 +40,35 @@ function UserAcquisitionChart({ data }: UserAcquisitionChartProps) {
   return (
     <ChartContainer title="User Acquisition" id="user-acquisition">
       <div className="space-y-3.5 mt-3">
-        {data.map((channel, index) => (
-          <div key={channel.name} className="flex items-center gap-3 group cursor-pointer">
-            {/* Channel name */}
-            <span className="text-sm text-gray-600 w-28 flex-shrink-0 font-medium group-hover:text-slate-900 transition-colors">
-              {channel.name}
-            </span>
+        {data.map((channel, index) => {
+          const barColor = CHANNEL_COLORS[index % CHANNEL_COLORS.length];
+          const widthPct = Math.max((channel.value / maxValue) * 100, 8);
 
-            {/* Bar + Value */}
-            <div className="flex-1 flex items-center gap-2">
-              <div
-                className="h-7 rounded-md flex items-center justify-end px-2 transition-all duration-500 group-hover:opacity-90"
-                style={{
-                  width: `${(channel.value / maxValue) * 100}%`,
-                  backgroundColor: channelColors[index] || '#3B82F6',
-                  minWidth: '60px',
-                }}
-              >
-                <span className="text-white text-xs font-semibold">
-                  {channel.formattedValue}
-                </span>
+          return (
+            <div key={channel.name} className="flex items-center gap-3 group cursor-pointer">
+              {/* Channel name */}
+              <span className="text-sm text-gray-600 w-28 flex-shrink-0 font-medium group-hover:text-gray-900 transition-colors truncate">
+                {channel.name}
+              </span>
+
+              {/* Bar */}
+              <div className="flex-1 flex items-center gap-2">
+                <div
+                  className="h-6 rounded flex items-center justify-end px-2 transition-all duration-500 group-hover:opacity-90"
+                  style={{
+                    width: `${widthPct}%`,
+                    backgroundColor: barColor,
+                    minWidth: '48px',
+                  }}
+                >
+                  <span className="text-white text-[11px] font-semibold whitespace-nowrap">
+                    {channel.formattedValue}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </ChartContainer>
   );

@@ -2,6 +2,7 @@
  * Core type definitions for the analytics dashboard.
  * All data models, component props, and API response types are defined here
  * to enforce strict typing across the application.
+ * No `any` types — strict TypeScript throughout.
  */
 
 /* ─────────────── Data Models ─────────────── */
@@ -35,6 +36,14 @@ export interface Tenant {
   plan: 'free' | 'pro' | 'enterprise';
 }
 
+/** Represents an available tenant from the dynamic catalog */
+export interface AvailableTenant {
+  id: string;
+  name: string;
+  eventCount: number;
+  uniqueUsers: number;
+}
+
 /* ─────────────── KPI Types ─────────────── */
 
 /** Key performance indicator card data */
@@ -49,18 +58,22 @@ export interface KPIMetric {
 
 /* ─────────────── Chart Data Types ─────────────── */
 
-/** Data point for time-series line/area charts */
-export interface TimeSeriesDataPoint {
+/**
+ * Data point for time-series line/area charts.
+ * Supports both single-tenant (visitors, pageViews)
+ * and multi-tenant pivoted keys (nexabank_visitors, safexbank_pageViews, …).
+ */
+export type TimeSeriesDataPoint = {
   date: string;
-  visitors: number;
-  pageViews: number;
-}
+} & Record<string, string | number>;
 
-/** Data point for feature usage line chart */
-export interface FeatureUsageDataPoint {
+/**
+ * Data point for feature usage line chart.
+ * Supports both single-tenant (usage) and multi-tenant pivoted keys.
+ */
+export type FeatureUsageDataPoint = {
   date: string;
-  usage: number;
-}
+} & Record<string, string | number>;
 
 /** Data point for horizontal bar charts (top features, acquisition, etc.) */
 export interface BarDataPoint {
@@ -97,6 +110,13 @@ export interface FeatureActivityRow {
   level: 'High' | 'Med' | 'Low';
 }
 
+/** User acquisition channel data for horizontal bar chart */
+export interface AcquisitionChannel {
+  name: string;
+  value: number;
+  formattedValue: string;
+}
+
 /** Device breakdown data for donut/pie chart */
 export interface DeviceBreakdown {
   name: string;
@@ -104,18 +124,28 @@ export interface DeviceBreakdown {
   color: string;
 }
 
-/** User acquisition channel */
-export interface AcquisitionChannel {
-  name: string;
-  value: number;
-  formattedValue: string;
+/** A single feature event grouped under a page */
+export interface PageFeature {
+  feature: string;
+  /** Human-readable display name e.g. "Payee Added" */
+  displayName: string;
+  count: number;
+  /** % of this feature's events within its parent page (0–100) */
+  inPagePct: number;
 }
 
-/** Top page entry — matches backend /metrics/top_pages response */
+/** A page entry in the Top Pages widget */
 export interface TopPage {
+  /** URL path, e.g. "/dashboard" */
   pageUrl: string;
+  /** Total events across all features on this page */
   totalEvents: number;
-  features: string[];
+  /** Features that fired on this page */
+  features: PageFeature[];
+  /** % share of this page vs all pages combined (0–100) */
+  comparisonPct: number;
+  /** Rank position (1 = most popular) */
+  rank: number;
 }
 
 /** Location data for geography section */
@@ -184,32 +214,14 @@ export interface NavItem {
   active?: boolean;
 }
 
-/** Complete dashboard state shape for Redux */
 export interface DashboardState {
   timeRange: TimeRange;
-  selectedTenant: string;
+  selectedTenants: string[];
   deploymentMode: DeploymentMode;
-  isLoading: boolean;
-  isFetching: boolean;
   sidebarCollapsed: boolean;
   kpiMetrics: KPIMetric[];
-  secondaryKpiMetrics: KPIMetric[];
-  trafficData: TimeSeriesDataPoint[];
-  featureUsageData: FeatureUsageDataPoint[];
-  topFeatures: BarDataPoint[];
-  funnelData: FunnelStep[];
-  featureActivity: FeatureActivityRow[];
-  tenants: Tenant[];
-  aiInsights: AIInsight[];
   realTimeUsers: number;
-  pagesPerMinute: PagesPerMinuteDataPoint[];
-  topPages: TopPage[];
-  deviceBreakdown: DeviceBreakdown[];
-  acquisitionChannels: AcquisitionChannel[];
-  locations: LocationData[];
-  auditLogs: AuditLog[];
-  featureConfigs: FeatureConfig[];
-  retentionData: RetentionData[];
+  realTimeUsersTimestampIST: string | null;
 }
 
 /* ─────────────── License vs Usage ─────────────── */

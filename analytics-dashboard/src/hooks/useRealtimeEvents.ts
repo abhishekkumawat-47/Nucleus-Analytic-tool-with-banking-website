@@ -32,7 +32,8 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  const selectedTenant = useAppSelector((state) => state.dashboard.selectedTenant);
+  const selectedTenants = useAppSelector((state) => state.dashboard.selectedTenants);
+  const selectedTenant = selectedTenants.length > 0 ? selectedTenants[0] : 'nexabank';
 
   const connect = useCallback(() => {
     if (!selectedTenant) return;

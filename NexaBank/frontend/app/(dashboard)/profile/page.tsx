@@ -17,9 +17,12 @@ import { API_BASE_URL } from "@/lib/api"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import Image from "next/image"
+import { useEventTracker } from "@/hooks/useEventTracker"
+
 
 export default function ProfilePage() {
 
+   const { track, measureAndTrack } = useEventTracker();
    const { userId ,isAuth, isAuthLoading } = UserData();
 
   
@@ -30,6 +33,13 @@ export default function ProfilePage() {
         if (!isAuthLoading) router.push("/login");
       }
     }, [isAuth, isAuthLoading, router]);
+
+  // Track profile page view
+  useEffect(() => {
+    if (isAuth && !isAuthLoading) {
+      track('profile.page.view');
+    }
+  }, [isAuth, isAuthLoading, track]);
 
   useEffect(() => {
       console.log("profile id:",userId);
@@ -93,20 +103,22 @@ export default function ProfilePage() {
 
   const handleSaveProfile = useCallback(async () => {
     try {
-      await axios.put(`${API_BASE_URL}/auth/updateUser`, {
-        id: userId,
-        name: profileData.name,
-        email: profileData.email,
-        phone: profileData.phone,
-        pan: profileData.pan,
-        address: {
-          street: profileData.street,
-          city: profileData.city,
-          state: profileData.state,
-          zipCode: profileData.zipCode,
-          country: profileData.country
-        }
-      }, { withCredentials: true });
+      await measureAndTrack('profile.edit_details', async () => {
+        await axios.put(`${API_BASE_URL}/auth/updateUser`, {
+          id: userId,
+          name: profileData.name,
+          email: profileData.email,
+          phone: profileData.phone,
+          pan: profileData.pan,
+          address: {
+            street: profileData.street,
+            city: profileData.city,
+            state: profileData.state,
+            zipCode: profileData.zipCode,
+            country: profileData.country
+          }
+        }, { withCredentials: true });
+      });
       
       toast.success("Profile updated successfully!");
       setIsEditing(false);
@@ -115,7 +127,8 @@ export default function ProfilePage() {
       console.error("Update failed:", err);
       toast.error(err.response?.data?.error || "Failed to update profile");
     }
-  }, [userId, profileData, fetchProfile])
+  }, [userId, profileData, fetchProfile, measureAndTrack])
+
 
   if (loading || isAuthLoading || !isAuth) {
     return (

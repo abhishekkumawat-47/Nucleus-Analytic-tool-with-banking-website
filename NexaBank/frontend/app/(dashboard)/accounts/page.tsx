@@ -18,8 +18,11 @@ import { UserData } from '@/components/context/UserContext';
 import axios from 'axios';
 import { Skeleton } from "@/components/ui/skeleton";
 import { API_BASE_URL } from '@/lib/api';
+import { useEventTracker } from '@/hooks/useEventTracker';
+
 
 const Accounts = () => {
+  const { track } = useEventTracker();
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showOpenAccountModal, setShowOpenAccountModal] = useState(false);
   const { isAuth, isAuthLoading, userId, globalAccounts, fetchGlobalAccounts } = UserData();
@@ -33,12 +36,20 @@ const Accounts = () => {
     }
   }, [isAuth, isAuthLoading, router]);
 
+  // Track page view
+  useEffect(() => {
+    if (isAuth && !isAuthLoading) {
+      track('accounts.page.view');
+    }
+  }, [isAuth, isAuthLoading]);
+
   // Derive local state from global accounts (auto-fetched in Auth)
   useEffect(() => {
     if (!isAuthLoading && isAuth) {
       setLoading(false);
     }
   }, [isAuthLoading, isAuth, globalAccounts]);
+
 
   // rawAccounts for TransferModal
   const rawAccounts = globalAccounts;
