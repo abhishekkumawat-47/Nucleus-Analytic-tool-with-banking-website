@@ -133,31 +133,6 @@ services:
       - ollama
     command: >
       sh -c "echo 'Waiting for Ollama API...' && until curl -s http://ollama:11434/api/tags; do sleep 5; done && echo 'Pulling llama3.2:1b model...' && curl -X POST -H 'Content-Type: application/json' -d '{\"name\": \"llama3.2:1b\"}' http://ollama:11434/api/pull"
-
-  # ═══════════════════════════════════════════════════════════
-  # TWITTER DEMO — port 3000
-  # ═══════════════════════════════════════════════════════════
-
-  twitter-demo:
-    build:
-      context: ./twitter-demo
-      dockerfile: Dockerfile
-    container_name: nucleus-twitter-demo
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXTAUTH_URL=http://localhost:3000
-      - NEXTAUTH_SECRET=fallback-secret-for-dev
-    env_file:
-      - ./twitter-demo/.env.local
-    volumes:
-      # Hot-reload: mount source directories
-      - ./twitter-demo/app:/app/app
-      - ./twitter-demo/components:/app/components
-      - ./twitter-demo/lib:/app/lib
-      - ./twitter-demo/public:/app/public
-    depends_on:
-      - ingestion-api
     restart: unless-stopped
 
   # ═══════════════════════════════════════════════════════════
