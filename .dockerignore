@@ -22,9 +22,6 @@ docker-compose.yml
 # NexaBank (built separately)
 NexaBank/
 
-# Twitter demo (built separately)
-twitter-demo/
-
 # Analytics dashboard (built separately)
 analytics-dashboard/
 
