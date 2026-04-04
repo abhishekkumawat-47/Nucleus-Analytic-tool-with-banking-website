@@ -17,7 +17,6 @@ export { default as AIInsightsPanel } from './AIInsightsPanel';
 export { default as RealTimeUsers } from './RealTimeUsers';
 export { default as TopPages } from './TopPages';
 export { default as DeviceBreakdownChart } from './DeviceBreakdownChart';
-export { default as UserAcquisitionChart } from './UserAcquisitionChart';
 export { default as TopLocations } from './TopLocations';
 export {
   KPICardSkeleton,

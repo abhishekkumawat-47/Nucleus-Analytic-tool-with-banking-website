@@ -5,8 +5,10 @@ import asyncio
 import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from aiokafka import AIOKafkaProducer
 
 # Add project root to path so we can import 'core'
@@ -86,6 +88,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Custom exception handler for validation errors
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Log detailed validation errors to help debug 422 responses."""
+    error_details = []
+    for error in exc.errors():
+        error_details.append({
+            "field": ".".join(str(x) for x in error["loc"][1:]),
+            "message": error["msg"],
+            "type": error["type"],
+        })
+    
+    request_body = {}
+    try:
+        if request.method == "POST":
+            request_body = await request.json()
+    except:
+        request_body = {"_error": "Could not parse request body"}
+    
+    logger.error(f"[VALIDATION ERROR] Errors: {error_details}, Request body: {request_body}")
+    
+    return JSONResponse(
+        status_code=422,
+        content={"detail": error_details, "received_body": request_body},
+    )
 
 @app.post("/events", status_code=202)
 async def ingest_event(event: FeatureEvent):

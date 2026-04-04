@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { Search, User, Clock, ArrowDown, AlertCircle, Loader2 } from 'lucide-react';
 import ChartContainer from '@/components/ChartContainer';
 import { TableSkeleton, ChartSkeleton } from '@/components/Skeletons';
@@ -11,17 +12,37 @@ import { TableSkeleton, ChartSkeleton } from '@/components/Skeletons';
 export default function UserJourneyPage() {
   const { tenantsParam } = useDashboardData();
   const [selectedUser, setSelectedUser] = useState<string>('');
+  const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
+  const lastRealtimeRefetchAt = useRef(0);
 
-  const { data: usersData, isLoading: loadingUsers } = useQuery({
+  const { data: usersData, isLoading: loadingUsers, refetch: refetchUsers } = useQuery({
     queryKey: ['journeyUsers', tenantsParam],
     queryFn: () => dashboardAPI.getJourneyUsers(tenantsParam),
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
-  const { data: journeyData, isLoading: loadingJourney } = useQuery({
+  const { data: journeyData, isLoading: loadingJourney, refetch: refetchJourney } = useQuery({
     queryKey: ['userJourney', tenantsParam, selectedUser],
     queryFn: () => dashboardAPI.getUserJourney(tenantsParam, selectedUser),
     enabled: !!selectedUser,
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
+
+  // Real-time refetch trigger with 4-second throttle
+  useEffect(() => {
+    if (!lastEvent) return;
+    const now = Date.now();
+    if (now - lastRealtimeRefetchAt.current < 4000) return;
+    lastRealtimeRefetchAt.current = now;
+    void refetchUsers();
+    if (selectedUser) void refetchJourney();
+  }, [lastEvent, refetchUsers, refetchJourney, selectedUser]);
 
   const users = usersData?.users || [];
   const journey = journeyData || null;

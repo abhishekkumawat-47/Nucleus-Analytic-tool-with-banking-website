@@ -1,6 +1,7 @@
 import clickhouse_connect
 import logging
 import time
+import json
 from typing import List, Dict, Any
 import os
 import sys
@@ -55,7 +56,7 @@ class ClickHouseClient:
                 e['user_id'], 
                 e['channel'], 
                 datetime.utcfromtimestamp(e['timestamp']), 
-                str(e['metadata']) # Encode dict as string
+                json.dumps(e.get('metadata', {}), ensure_ascii=True) # Encode as valid JSON
             ]
             for e in events
         ]

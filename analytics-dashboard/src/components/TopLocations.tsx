@@ -163,7 +163,7 @@ function TopLocations({ data }: TopLocationsProps) {
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
               <button
                 onClick={() => setViewMode('country')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                className={`flex items-center gap-1 cursor-pointer px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                   viewMode === 'country' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -172,7 +172,7 @@ function TopLocations({ data }: TopLocationsProps) {
               </button>
               <button
                 onClick={() => setViewMode('continent')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                className={`flex items-center cursor-pointer gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                   viewMode === 'continent' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -218,7 +218,7 @@ function TopLocations({ data }: TopLocationsProps) {
               continentData.map((item) => (
                 <div 
                   key={item.continent} 
-                  className="flex flex-col p-2.5 rounded-lg hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100"
+                  className="flex flex-col p-2 rounded-lg hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
