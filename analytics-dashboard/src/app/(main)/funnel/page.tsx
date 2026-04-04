@@ -104,10 +104,10 @@ export default function FunnelPage() {
 
     const momentum = stageDiagnostics.length > 1
       ? stageDiagnostics.reduce((sum, stage, idx) => {
-          if (idx === 0) return sum;
-          const prev = stageDiagnostics[idx - 1].step.value || 1;
-          return sum + (stage.step.value / prev) * 100;
-        }, 0) / (stageDiagnostics.length - 1)
+        if (idx === 0) return sum;
+        const prev = stageDiagnostics[idx - 1].step.value || 1;
+        return sum + (stage.step.value / prev) * 100;
+      }, 0) / (stageDiagnostics.length - 1)
       : 0;
 
     const healthScore = Math.max(0, Math.round(100 - dropOff * 1.05 - leak.step.dropOff * 0.35 - Math.max(avgDrop - 20, 0) * 0.4));
@@ -366,24 +366,24 @@ export default function FunnelPage() {
 
           <div className="mt-5 space-y-3">
             {sortedActionableStages.map((stage) => (
-                <div key={stage.step.label} className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-gray-900">{toTitleCase(stage.step.label)}</p>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold border ${severityStyles(getSeverity(stage.step.dropOff)).badge}`}
-                    >
-                      {stage.lossSeverity}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-gray-600">
-                    {stage.usersLostToNext.toLocaleString()} users lost before {toTitleCase(stage.nextStepLabel || 'next step')}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between text-xs">
-                    <span className="text-gray-500">Drop-off</span>
-                    <span className="font-semibold text-gray-900">{stage.step.dropOff}%</span>
-                  </div>
+              <div key={stage.step.label} className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-gray-900">{toTitleCase(stage.step.label)}</p>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold border ${severityStyles(getSeverity(stage.step.dropOff)).badge}`}
+                  >
+                    {stage.lossSeverity}
+                  </span>
                 </div>
-              ))}
+                <p className="mt-1 text-xs text-gray-600">
+                  {stage.usersLostToNext.toLocaleString()} users lost before {toTitleCase(stage.nextStepLabel || 'next step')}
+                </p>
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Drop-off</span>
+                  <span className="font-semibold text-gray-900">{stage.step.dropOff}%</span>
+                </div>
+              </div>
+            ))}
           </div>
         </article>
       </section>

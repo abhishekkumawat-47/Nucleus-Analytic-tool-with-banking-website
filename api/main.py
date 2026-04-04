@@ -2386,6 +2386,23 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
         locations = get_locations(tenants=tenant_id, range="30d")[:5]
         activities = get_feature_activity(tenants=tenant_id, range="30d")
 
+        try:
+            funnels = get_funnel_analysis(tenants=tenant_id, steps="login,dashboard_view,loan_applied,kyc_started,kyc_completed", window_minutes=60, range="30d")
+        except Exception:
+            funnels = "No funnel data available."
+            
+        try:
+            retention = get_retention(tenants=tenant_id, range="30d")
+        except Exception:
+            retention = "No retention data available."
+            
+        try:
+            pred_adoption = get_predictive_adoption(tenants=tenant_id, range="30d")
+        except Exception:
+            pred_adoption = "No predictive adoption data available."
+            
+
+
         # Build HTML visualization payload
         kpi_cards_html = f'''
         <section style="margin-bottom: 20px; font-family: inherit; line-height: 1.35;">
@@ -2416,7 +2433,8 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
         for act in activities[:6]:
             feat_name = act.get('feature', 'Unknown')
             hash_val = sum(ord(c) for c in feat_name) % 60 + 20
-            color = act.get('segments', [{'color': '#3b82f6'}])[0].get('color', '#3b82f6')
+            segments = act.get('segments', [])
+            color = segments[0].get('color', '#3b82f6') if segments else '#3b82f6'
             activity_html += f'''
                 <div style="padding: 12px; background: #f8fafc; border-radius: 10px; border: 1px solid #e6edf5;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: #1f2937; font-weight: 700;">
@@ -2472,32 +2490,41 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
             '''
         geo_html += '</div></section>'
 
+
+
         divider = '<hr style="border: 0; height: 1px; background: #e2e8f0; margin: 40px 0;" />'
 
-        context_str = f"KPI Metrics: {kpi}\n\nSecondary Metrics: {secondary}\n\nTop Locations: {locations}\n\nFeature Activities: {activities}"
+        context_str = (
+            f"KPI Metrics: {kpi}\n\nSecondary Metrics: {secondary}\n\n"
+            f"Top Locations: {locations}\n\nFeature Activities: {activities}\n\n"
+            f"Funnel Step Drop-offs: {funnels}\n\nRetention Loop Metrics: {retention}\n\n"
+            f"Predictive Adoption Scores: {pred_adoption}"
+        )
 
         prompt = f"""
         You are an expert UX Researcher and Strategic Data Analyst for NexaBank.
         Write a detailed, critical analysis report based on the following raw metrics for tenant '{tenant_id}'.
-        Context Data:
+        
+        Raw Context Data (Includes Funnels, Retention, Predictive Scores, Locations, and Usage):
         {context_str}
 
-        CRITICAL INSTRUCTIONS: Focus deeply on **HOW we can improve user interaction** and **HOW we can use structural data insights to make the overall product better**. Provide a heavily analytical perspective.
-        IMPORTANT: Make sure to strictly emphasize and identify where the user journey usually falls off. Use **bold** and `highlight` text (e.g. <mark>highlighted text</mark> or **bold text**) wherever you feel it is critical to draw the reader's attention to these drop-offs.
+        CRITICAL INSTRUCTIONS: Provide a heavily analytical perspective focusing deeply on **HOW we can improve user interaction** and **HOW we can structurally improve the product** based on the funnel and retention gaps. 
+        IMPORTANT: Emphasize exactly where the user journey usually falls off. Use **bold** and `highlight` text (e.g., <mark>highlighted text</mark> or **bold text**) wherever you feel it is critical to draw the reader's attention to major drop-offs.
+        Use Github-style alert boxes (like `> [!WARNING]` or `> [!NOTE]`) for your most critical findings.
 
-        Please structure your Markdown report exactly as follows:
+        Please structure your Markdown report exactly as follows in these 4 strictly ordered sections:
 
-        ## 1. Executive Summary
-        (High-level summary of current product usage health, drop-offs, and critical gaps.)
+        ## 1. Executive State of Product Strategy
+        (High-level summary of platform health. Focus purely on *growth* and *retention* patterns identified in the KPIs and Predictive scores.)
 
-        ## 2. User Interaction Evaluation
-        (Analyze what the data says about how users are interacting with features. Where are the friction points? What behaviors highlight poor UX?)
+        ## 2. Friction Points & Drop-off Telemetry
+        (Hard analysis of funnel data. Emphasize exactly **where** users abandon their journey (e.g. KYC, transfer steps). Discuss what UX factors likely cause this friction.)
 
-        ## 3. Product Enhancement Strategy
-        (Concrete proposals on how to use these data insights to iterate on the platform. What features should be built next, redesigned, or sunset?)
+        ## 3. Feature Interaction & Stickiness Radar
+        (Evaluation of which features drive retention versus which are ignored based on the predictive adoption scores and activity logs.)
 
-        ## 4. Geographic & Engagement Insights
-        (Brief thoughts on the diverse footprint of the user base and retention anomalies.)
+        ## 4. Proposed Concrete Product Roadmap
+        (Top 3 actionable UI updates, workflow simplifications, or technical features to build next to cure the friction points discovered in Section 2.)
 
         Do not include any raw JSON or filler content. Do not output anything outside of the markdown itself.
         """
