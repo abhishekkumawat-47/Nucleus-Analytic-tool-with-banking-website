@@ -73,7 +73,7 @@ export function HeatmapTableSkeleton({ rows = 8, cols = 7 }: { rows?: number; co
           <SkeletonBlock className="h-3 w-20" />
           <div className="flex h-3 items-center gap-0.5">
             {Array.from({ length: 11 }).map((_, i) => (
-              <div key={i} className="h-3 w-3 bg-gray-50 rounded-sm" />
+              <div key={i} className="h-3 w-3 bg-gray-100 rounded-sm" />
             ))}
           </div>
           <SkeletonBlock className="h-3 w-16" />
@@ -118,7 +118,7 @@ export function HeatmapTableSkeleton({ rows = 8, cols = 7 }: { rows?: number; co
                 </td>
                 {Array.from({ length: cols }).map((_, colIdx) => (
                   <td key={`cell-${rowIdx}-${colIdx}`} className="p-0">
-                    <div className="flex h-11 w-full items-center justify-center border-r border-gray-50 bg-gray-50">
+                    <div className="flex h-11 w-full items-center justify-center border-r border-gray-50 bg-gray-100">
                       <SkeletonBlock className="h-3 w-6" />
                     </div>
                   </td>
@@ -261,7 +261,7 @@ export function TenantsPageSkeleton() {
             <SkeletonBlock className="h-4 w-full" />
             <SkeletonBlock className="h-4 w-5/6" />
           </div>
-          <div className="h-12 w-64 rounded-full border border-gray-200 bg-gray-50 p-1.5">
+          <div className="h-12 w-64 rounded-full border border-gray-200 bg-gray-100 p-1.5">
             <SkeletonBlock className="h-full w-full rounded-full" />
           </div>
         </div>
@@ -412,7 +412,7 @@ export function PredictivePageSkeleton() {
           <SkeletonBlock className="h-4 w-96 mb-4" />
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div key={i} className="rounded-lg border border-gray-200 bg-gray-100 p-3">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <SkeletonBlock className="h-4 w-32" />
                   <SkeletonBlock className="h-5 w-20 rounded-full" />
@@ -431,7 +431,7 @@ export function PredictivePageSkeleton() {
           <SkeletonBlock className="h-5 w-40 mb-4" />
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div key={i} className="rounded-lg border border-gray-200 bg-gray-100 p-3">
                 <SkeletonBlock className="h-3 w-28 mb-2" />
                 <SkeletonBlock className="h-6 w-20 mt-1" />
               </div>
@@ -479,7 +479,7 @@ export function PredictivePageSkeleton() {
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[1200px] w-full">
-            <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
+            <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-100/50">
               <tr>
                 {Array.from({ length: 7 }).map((_, i) => (
                   <th key={i} className="px-4 py-3">

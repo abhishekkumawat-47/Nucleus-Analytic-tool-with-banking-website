@@ -39,7 +39,7 @@ export default function Tweet({ id, author, handle, content, initialLikes }: Twe
   };
 
   return (
-    <article className="border-b border-gray-100 p-5 hover:bg-gray-50/80 flex space-x-4 cursor-pointer transition-colors duration-200 group">
+    <article className="border-b border-gray-100 p-5 hover:bg-gray-100/80 flex space-x-4 cursor-pointer transition-colors duration-200 group">
       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-100 to-blue-50 flex items-center justify-center text-blue-600 font-bold flex-shrink-0 shadow-inner border border-blue-100/50">
         {author[0]}
       </div>

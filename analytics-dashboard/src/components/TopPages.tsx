@@ -52,7 +52,7 @@ function TopPages({ data }: TopPagesProps) {
               <React.Fragment key={pageUrl}>
                 <tr
                   className={`border-b border-gray-50 last:border-0 transition-colors group ${
-                    isClickable ? 'hover:bg-gray-50/50' : ''
+                    isClickable ? 'hover:bg-gray-100/50' : ''
                   }`}
                 >
                   <td className="py-2.5 pl-1">

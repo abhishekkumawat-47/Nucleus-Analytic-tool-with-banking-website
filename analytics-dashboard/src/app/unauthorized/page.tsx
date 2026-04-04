@@ -34,14 +34,14 @@ export default function UnauthorizedPage() {
           
           <button
             onClick={() => signOut({ callbackUrl: '/login' })}
-            className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-lg transition-colors font-medium"
+            className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-100 text-gray-700 p-3 rounded-lg transition-colors font-medium"
           >
             <LogOut className="w-4 h-4" />
             Sign Out &amp; Switch Account
           </button>
         </div>
 
-        <div className="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-100">
+        <div className="mt-6 p-3 bg-gray-100 rounded-lg border border-gray-100">
           <p className="text-[11px] text-gray-400">
             <strong>Need access?</strong> Contact your organization administrator to request App Admin or Company Admin privileges.
           </p>

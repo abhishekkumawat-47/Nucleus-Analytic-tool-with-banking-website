@@ -244,7 +244,7 @@ export default function DashboardPage() {
                   <div className="space-y-4">
                     <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
                       <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50/80 text-xs uppercase font-semibold text-zinc-500 border-b border-gray-100">
+                        <thead className="bg-gray-100/80 text-xs uppercase font-semibold text-zinc-500 border-b border-gray-100">
                           <tr>
                             <th className="px-4 py-3 text-center w-12 border-r border-gray-100">#</th>
                             <th className="px-4 py-3">Account</th>
@@ -296,7 +296,7 @@ export default function DashboardPage() {
             </Card>
             
             {/* Accounts Summary Panel */}
-            <Card className="col-span-3 border border-violet-100 shadow-sm bg-gray-50/50 flex flex-col h-full">
+            <Card className="col-span-3 border border-violet-100 shadow-sm bg-gray-100/50 flex flex-col h-full">
               <CardHeader className="border-b border-gray-50 pb-4 bg-white/50 backdrop-blur-sm rounded-t-xl">
                 <CardTitle className="text-lg text-zinc-900">Your Accounts</CardTitle>
                 <CardDescription>Active bank accounts and balances</CardDescription>

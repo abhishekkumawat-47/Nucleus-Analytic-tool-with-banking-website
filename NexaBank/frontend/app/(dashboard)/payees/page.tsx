@@ -40,7 +40,7 @@ const PayeeCardSkeleton = memo(() => (
       </div>
     </CardHeader>
     <CardContent className="p-5 pt-3 bg-white">
-      <div className="grid grid-cols-1 gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+      <div className="grid grid-cols-1 gap-3 mb-4 p-3 bg-gray-100 rounded-lg border border-gray-100">
         <div className="space-y-2">
           <Skeleton className="h-3 w-1/3 rounded bg-zinc-200" />
           <Skeleton className="h-4 w-1/2 rounded bg-zinc-300" />
@@ -441,7 +441,7 @@ export default function PayeesPage() {
 
       <Card className="border border-violet-100 shadow-sm overflow-hidden">
         <CardContent className="p-6">
-          <div className="relative mb-8 bg-gray-50 p-4 rounded-xl border border-gray-100">
+          <div className="relative mb-8 bg-gray-100 p-4 rounded-xl border border-gray-100">
             <Search className="absolute left-7 top-7 h-5 w-5 text-muted-foreground" />
             <Input
               placeholder="Search payees by name, account number, or type..."
@@ -452,7 +452,7 @@ export default function PayeesPage() {
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredPayees.length === 0 ? (
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 bg-gray-100 rounded-xl border border-dashed border-gray-200">
                 <div className="h-16 w-16 bg-violet-50 rounded-full flex flex-col items-center justify-center mx-auto mb-4">
                   <User className="h-6 w-6 text-violet-400" />
                 </div>
@@ -510,7 +510,7 @@ export default function PayeesPage() {
                     </DropdownMenu>
                   </CardHeader>
                   <CardContent className="p-5 pt-3 bg-white">
-                    <div className="grid grid-cols-1 gap-3 text-sm mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="grid grid-cols-1 gap-3 text-sm mb-4 p-3 bg-gray-100 rounded-lg border border-gray-100">
                       {/* Account number — full display with copy button */}
                       <div className="flex items-center justify-between">
                         <div>
@@ -577,7 +577,7 @@ export default function PayeesPage() {
                 id="edit-payeeAccNo"
                 value={editPayee.payeeAccNo}
                 disabled
-                className="bg-gray-50 cursor-not-allowed rounded-lg text-gray-500 font-mono"
+                className="bg-gray-100 cursor-not-allowed rounded-lg text-gray-500 font-mono"
               />
             </div>
             <div className="grid gap-2">

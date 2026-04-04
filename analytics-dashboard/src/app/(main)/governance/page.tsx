@@ -136,7 +136,7 @@ export default function GovernancePage() {
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1a73e8]"></div>
+                    <div className="w-9 h-5 bg-gray-100 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1a73e8]"></div>
                   </label>
                 </div>
                 <div className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:border-gray-200 transition-colors">
@@ -146,7 +146,7 @@ export default function GovernancePage() {
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1a73e8]"></div>
+                    <div className="w-9 h-5 bg-gray-100 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1a73e8]"></div>
                   </label>
                 </div>
               </div>
@@ -203,7 +203,7 @@ export default function GovernancePage() {
           ) : (
             <div className="overflow-x-auto mt-2">
               <table className="w-full text-left text-sm text-gray-600">
-                <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
+                <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-100/50">
                   <tr>
                     <th className="px-4 py-3 font-medium">Timestamp</th>
                     <th className="px-4 py-3 font-medium">Actor</th>
@@ -215,7 +215,7 @@ export default function GovernancePage() {
                 </thead>
                 <tbody>
                   {configLogs.map((log: any, i: number) => (
-                    <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <tr key={i} className="border-b border-gray-100 hover:bg-gray-100 transition-colors">
                       <td className="px-4 py-3 text-gray-400 font-medium whitespace-nowrap">{log.timestamp}</td>
                       <td className="px-4 py-3 text-gray-900 font-medium">{log.actor}</td>
                       <td className="px-4 py-3">
@@ -245,7 +245,7 @@ export default function GovernancePage() {
         <ChartContainer title="Audit Logs" id="audit-logs">
           <div className="overflow-x-auto cursor-pointer mt-2">
             <table className="w-full text-left text-sm text-gray-600">
-              <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
+              <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-100/50">
                 <tr>
                   <th className="px-4 py-3 font-medium">Timestamp</th>
                   <th className="px-4 py-3 font-medium">User</th>
@@ -257,7 +257,7 @@ export default function GovernancePage() {
                 {auditLogs.map((log, index) => (
                   <tr
                     key={log.id}
-                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${index === auditLogs.length - 1 ? 'border-b-0' : ''}`}
+                    className={`border-b border-gray-100 hover:bg-gray-100 transition-colors ${index === auditLogs.length - 1 ? 'border-b-0' : ''}`}
                   >
                     <td className="px-4 py-3 text-gray-400 font-medium whitespace-nowrap">{log.timestamp}</td>
                     <td className="px-4 py-3 text-gray-900 font-medium">{log.user}</td>

@@ -29,7 +29,7 @@ function FunnelChart({ data }: FunnelChartProps) {
     <ChartContainer title="User Journey Funnel" id="funnel-chart">
       <div className="relative mt-4 pl-4 space-y-5">
         {/* Connector Line backing */}
-        <div className="absolute left-[36px] top-4 bottom-8 w-px bg-gray-200" />
+        <div className="absolute left-[36px] top-4 bottom-8 w-px bg-gray-100" />
         
         {data.map((step, index) => {
           const widthPercent = Math.max((step.value / maxValue) * 100, 30);

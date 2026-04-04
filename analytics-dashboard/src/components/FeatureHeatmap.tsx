@@ -234,7 +234,7 @@ function FeatureHeatmap() {
           <div className="relative">
             <button
               onClick={() => setDropdownOpen((open: boolean) => !open)}
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
             >
               <Filter className="h-3.5 w-3.5 text-gray-500" />
               {selectedFeatures.length > 0
@@ -262,7 +262,7 @@ function FeatureHeatmap() {
                   {filteredFeatureOptions.map((feature) => (
                     <label
                       key={feature}
-                      className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       <input
                         type="checkbox"
@@ -295,13 +295,13 @@ function FeatureHeatmap() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-          <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
+          <span className="rounded-md border border-gray-200 bg-gray-100 px-2 py-1">
             {isCompare ? "Cross-tenant matrix" : "Trend matrix"}
           </span>
-          <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
+          <span className="rounded-md border border-gray-200 bg-gray-100 px-2 py-1">
             Coverage {insights.adoptionCoverage}%
           </span>
-          <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
+          <span className="rounded-md border border-gray-200 bg-gray-100 px-2 py-1">
             Total {insights.totalEvents.toLocaleString()}
           </span>
         </div>
@@ -430,7 +430,7 @@ function FeatureHeatmap() {
             </table>
 
             {filteredData.length === 0 && (
-              <div className="mt-2 rounded-lg bg-gray-50 py-12 text-center text-sm text-gray-400">
+              <div className="mt-2 rounded-lg bg-gray-100 py-12 text-center text-sm text-gray-400">
                 No features match the current filter.
               </div>
             )}

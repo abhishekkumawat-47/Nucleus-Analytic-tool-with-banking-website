@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import StoreProvider from "@/lib/StoreProvider";
 import AuthProvider from "@/components/AuthProvider";
+import NavigationLoader from "@/components/NavigationLoader";
 import { Toaster } from "sonner";
 import QueryProvider from "@/lib/QueryProvider";
 
@@ -38,8 +39,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans bg-gray-50/50">
+      <body className="min-h-full flex flex-col font-sans bg-gray-100/50">
         <AuthProvider>
+          <NavigationLoader />
           <StoreProvider>
             <QueryProvider>{children}</QueryProvider>
           </StoreProvider>

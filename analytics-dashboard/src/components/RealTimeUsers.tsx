@@ -103,7 +103,8 @@ function RealTimeUsers({ activeUsers, pagesPerMinute, timestampIST }: RealTimeUs
     return '#C2D9FC';
   }, []);
 
-  const maxPPM = Math.max(...pagesPerMinute.map(p => p.value), 1);
+  const last60MinutesData = pagesPerMinute.slice(-60);
+  const maxPPM = Math.max(...last60MinutesData.map(p => p.value), 1);
 
   /** Live indicator badge */
   const LiveBadge = (
@@ -161,7 +162,7 @@ function RealTimeUsers({ activeUsers, pagesPerMinute, timestampIST }: RealTimeUs
         <div className="h-36 min-h-[128px] w-full cursor-pointer">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={pagesPerMinute}
+              data={last60MinutesData}
               margin={{ top: 0, right: 0, left: -20, bottom: -10 }}
             >
               <XAxis
@@ -186,7 +187,7 @@ function RealTimeUsers({ activeUsers, pagesPerMinute, timestampIST }: RealTimeUs
                   fontSize: '11px',
                   boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
                 }}
-                labelFormatter={(label) => `${label} IST`}
+                labelFormatter={(label: string | number) => `${label} IST`}
                 formatter={(value: any) => [`${value} pages`, 'Activity']}
               />
               <Bar
@@ -194,7 +195,7 @@ function RealTimeUsers({ activeUsers, pagesPerMinute, timestampIST }: RealTimeUs
                 radius={[3, 3, 0, 0]}
                 maxBarSize={24}
               >
-                {pagesPerMinute.map((entry, index) => (
+                {last60MinutesData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={getBarColor(entry.value, maxPPM)} />
                 ))}
               </Bar>

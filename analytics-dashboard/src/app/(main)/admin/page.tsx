@@ -92,7 +92,7 @@ export default function AdminSummaryPage() {
         {data?.top_tenants && data.top_tenants.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-500 uppercase bg-gray-50">
+              <thead className="text-xs text-gray-500 uppercase bg-gray-100">
                 <tr>
                   <th className="px-6 py-3 rounded-tl-lg">Tenant Name</th>
                   <th className="px-6 py-3 rounded-tr-lg text-right">Event Count</th>
@@ -100,7 +100,7 @@ export default function AdminSummaryPage() {
               </thead>
               <tbody>
                 {data.top_tenants.map((t, i) => (
-                  <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                  <tr key={i} className="border-b last:border-0 hover:bg-gray-100">
                     <td className="px-6 py-4 font-medium text-gray-900">{t.name}</td>
                     <td className="px-6 py-4 text-right">{t.events.toLocaleString()}</td>
                   </tr>

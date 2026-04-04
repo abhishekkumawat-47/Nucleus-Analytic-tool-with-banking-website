@@ -326,7 +326,7 @@ export default function LicenseUsagePage() {
         <div className="flex items-center gap-2 ml-[42px] sm:ml-0">
           <button
             onClick={() => fetchData()}
-            className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
           </button>
@@ -603,7 +603,7 @@ export default function LicenseUsagePage() {
                       </div>
                     </div>
                   </div>
-                  <div className={`px-5 py-2.5 ${f.is_used ? 'bg-gray-50' : 'bg-red-50'} border-t border-gray-100`}>
+                  <div className={`px-5 py-2.5 ${f.is_used ? 'bg-gray-100' : 'bg-red-50'} border-t border-gray-100`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-medium text-gray-400">
                         {f.usage_pct}% of total platform usage
@@ -629,7 +629,7 @@ export default function LicenseUsagePage() {
               </div>
               <div className="overflow-x-auto mt-2">
                 <table className="w-full text-left text-sm text-gray-600">
-                  <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
+                  <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-100/50">
                     <tr>
                       <th className="px-4 py-3 font-medium">Feature</th>
                       <th className="px-4 py-3 font-medium">Status</th>
@@ -641,7 +641,7 @@ export default function LicenseUsagePage() {
                   </thead>
                   <tbody>
                     {sortedLicensedFeatures.map((f, i) => (
-                      <tr key={i} className={`border-b border-gray-100 transition-colors ${!f.is_used ? 'bg-red-50/50' : 'hover:bg-gray-50'}`}>
+                      <tr key={i} className={`border-b border-gray-100 transition-colors ${!f.is_used ? 'bg-red-50/50' : 'hover:bg-gray-100'}`}>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
                             <div>
@@ -683,7 +683,7 @@ export default function LicenseUsagePage() {
               {unlicensedFeatures.length > 0 ? (
                 <div className="overflow-x-auto mt-2">
                   <table className="w-full text-left text-sm text-gray-600">
-                    <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
+                    <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-100/50">
                       <tr>
                         <th className="px-4 py-3 font-medium">Feature</th>
                         <th className="px-4 py-3 font-medium text-right">Usage Count</th>

@@ -437,7 +437,7 @@ export default function FunnelPage() {
           <h2 className="text-lg font-semibold tracking-tight text-gray-900">Recommended Experiments</h2>
           <div className="mt-4 space-y-3">
             {prioritizedActions.map((action, idx) => (
-              <div key={action.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div key={action.id} className="rounded-lg border border-gray-200 bg-gray-100 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-sm font-semibold text-gray-900">{idx + 1}. {action.title}</p>
                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${action.tone.badge}`}>
@@ -494,7 +494,7 @@ export default function FunnelPage() {
 
           <div className="mt-4 space-y-3">
             {contextualSignals.map((signal) => (
-              <div key={signal.title} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div key={signal.title} className="rounded-lg border border-gray-200 bg-gray-100 p-3">
                 <p className="text-sm font-semibold text-gray-900">{signal.title}</p>
                 <p className="mt-1 text-xs text-gray-600 leading-5">{signal.message}</p>
               </div>
@@ -506,7 +506,7 @@ export default function FunnelPage() {
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-700">
               {diagnostics.map((item, idx) => (
                 <React.Fragment key={item.step.label}>
-                  <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1">{toTitleCase(item.step.label)}</span>
+                  <span className="rounded-md border border-gray-200 bg-gray-100 px-2 py-1">{toTitleCase(item.step.label)}</span>
                   {idx < diagnostics.length - 1 && <ArrowRight className="w-3 h-3 text-gray-400" />}
                 </React.Fragment>
               ))}

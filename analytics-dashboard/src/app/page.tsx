@@ -70,7 +70,7 @@ export default function AppSelectorPage() {
                   Super Admin
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-gray-50 text-gray-700 border border-gray-200">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-gray-100 text-gray-700 border border-gray-200">
                   <Shield className="w-3 h-3" />
                   App Admin
                 </span>
@@ -160,7 +160,7 @@ export default function AppSelectorPage() {
                         href={app.appUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl text-sm font-medium text-gray-700 transition-all duration-200 cursor-pointer"
+                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm font-medium text-gray-700 transition-all duration-200 cursor-pointer"
                       >
                         <span>Open App</span>
                         <ExternalLink className="w-4 h-4 text-gray-400" />

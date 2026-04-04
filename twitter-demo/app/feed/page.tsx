@@ -64,14 +64,14 @@ export default function FeedPage() {
 
   if (status === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-screen items-center justify-center bg-gray-100">
         <Zap className="w-8 h-8 text-blue-500 animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center">
+    <div className="min-h-screen bg-gray-100 flex justify-center">
       <div className="w-full max-w-2xl bg-white border-x border-gray-100 min-h-screen shadow-sm sm:my-0">
         <header className="sticky top-0 bg-white/70 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] backdrop-blur-xl border-b border-gray-100 z-10 transition-colors">
           <div className="flex items-center justify-between p-4 px-5">
@@ -86,7 +86,7 @@ export default function FeedPage() {
                 </div>
                 <button
                   onClick={() => signOut({ callbackUrl: '/' })}
-                  className="p-2.5 text-gray-500 bg-gray-50 hover:text-red-600 hover:bg-red-50 rounded-full transition-all duration-200"
+                  className="p-2.5 text-gray-500 bg-gray-100 hover:text-red-600 hover:bg-red-50 rounded-full transition-all duration-200"
                   title="Sign out"
                 >
                   <LogOut size={16} className="stroke-[2.5]" />

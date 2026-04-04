@@ -259,7 +259,7 @@ export default function TransparencyPage() {
         {/* ═══════════ STATS BAR ═══════════ */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="p-2 bg-gray-100 border border-gray-200 rounded-lg">
               <Layers className="w-4 h-4 text-gray-600" />
             </div>
             <div>
@@ -268,7 +268,7 @@ export default function TransparencyPage() {
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="p-2 bg-gray-100 border border-gray-200 rounded-lg">
               <Eye className="w-4 h-4 text-gray-600" />
             </div>
             <div>
@@ -277,7 +277,7 @@ export default function TransparencyPage() {
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="p-2 bg-gray-100 border border-gray-200 rounded-lg">
               <Lock className="w-4 h-4 text-gray-600" />
             </div>
             <div>
@@ -361,7 +361,7 @@ export default function TransparencyPage() {
                 <Server className="w-7 h-7 text-white" />
               </div>
               <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">On-Prem</span>
-              <span className="text-[10px] text-gray-600 font-semibold bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full">All {dataCategories.length} categories</span>
+              <span className="text-[10px] text-gray-600 font-semibold bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">All {dataCategories.length} categories</span>
             </div>
 
             <div className="flex flex-col items-center gap-1">
@@ -423,7 +423,7 @@ export default function TransparencyPage() {
                     className={`w-full flex items-center justify-between px-6 py-4 transition-all duration-200 cursor-pointer ${
                       viewMode === 'cloud' && !isVisible
                         ? 'bg-red-50/30'
-                        : 'hover:bg-gray-50/60'
+                        : 'hover:bg-gray-100/60'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -469,7 +469,7 @@ export default function TransparencyPage() {
                   {/* Expanded detail row */}
                   {isExpanded && (
                     <div className="px-6 pb-4 pt-0 animate-in slide-in-from-top-1 fade-in duration-200">
-                      <div className="ml-11 bg-gray-50 rounded-xl p-3 border border-gray-100 text-xs text-gray-600">
+                      <div className="ml-11 bg-gray-100 rounded-xl p-3 border border-gray-100 text-xs text-gray-600">
                         <span className="font-semibold text-gray-700">Example data: </span>
                         <span className="font-mono">{cat.examples}</span>
                       </div>
@@ -677,7 +677,7 @@ export default function TransparencyPage() {
                       {adminSummary?.top_tenants &&
                       adminSummary.top_tenants.length > 0 ? (
                         <table className="w-full text-sm text-left">
-                          <thead className="text-xs text-gray-500 uppercase bg-gray-50">
+                          <thead className="text-xs text-gray-500 uppercase bg-gray-100">
                             <tr>
                               <th className="px-6 py-3">Tenant Name</th>
                               <th className="px-6 py-3 text-right">Event Count</th>
@@ -687,7 +687,7 @@ export default function TransparencyPage() {
                             {adminSummary.top_tenants.map((t: AdminSummaryTenant, i: number) => (
                               <tr
                                 key={i}
-                                className="border-b last:border-0 hover:bg-gray-50 transition-colors"
+                                className="border-b last:border-0 hover:bg-gray-100 transition-colors"
                               >
                                 <td className="px-6 py-4 font-medium text-gray-900">
                                   {t.name}
@@ -739,7 +739,7 @@ export default function TransparencyPage() {
                           return (
                             <div
                               key={cat.name}
-                              className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4 flex items-start gap-3 opacity-60 hover:opacity-80 transition-opacity"
+                              className="bg-gray-100 border border-dashed border-gray-300 rounded-xl p-4 flex items-start gap-3 opacity-60 hover:opacity-80 transition-opacity"
                             >
                               <div className="p-2 bg-red-50 text-red-400 rounded-xl flex-shrink-0">
                                 <IconComp className="w-4 h-4" />

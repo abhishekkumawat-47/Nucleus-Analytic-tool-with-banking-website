@@ -241,7 +241,7 @@ const Loans = () => {
                         type="number"
                         value={amount}
                         onChange={(e) => setAmount(Number(e.target.value))}
-                        className="pl-12 rounded-2xl bg-gray-50/50 border-gray-100 focus:border-violet-500 focus:ring-violet-500 h-12 text-lg font-bold"
+                        className="pl-12 rounded-2xl bg-gray-100/50 border-gray-100 focus:border-violet-500 focus:ring-violet-500 h-12 text-lg font-bold"
                       />
                     </div>
                   </div>
@@ -256,7 +256,7 @@ const Loans = () => {
                           type="number"
                           value={interest}
                           onChange={(e) => setInterest(Number(e.target.value))}
-                          className="pr-10 rounded-2xl bg-gray-50/50 border-gray-100 focus:border-violet-500 font-bold h-12"
+                          className="pr-10 rounded-2xl bg-gray-100/50 border-gray-100 focus:border-violet-500 font-bold h-12"
                         />
                         <PercentIcon className="absolute right-4 top-3.5 h-4 w-4 text-violet-400" />
                       </div>
@@ -271,7 +271,7 @@ const Loans = () => {
                           type="number"
                           value={term}
                           onChange={(e) => setTerm(Number(e.target.value))}
-                          className="rounded-2xl bg-gray-50/50 border-gray-100 focus:border-violet-500 font-bold h-12"
+                          className="rounded-2xl bg-gray-100/50 border-gray-100 focus:border-violet-500 font-bold h-12"
                         />
                         <Clock className="absolute right-4 top-3.5 h-4 w-4 text-violet-400" />
                       </div>
@@ -337,7 +337,7 @@ const Loans = () => {
               ))}
             </div>
           ) : applications.length === 0 ? (
-            <div className="p-20 border-4 border-dashed border-gray-100 rounded-[3rem] text-center bg-gray-50/30">
+            <div className="p-20 border-4 border-dashed border-gray-100 rounded-[3rem] text-center bg-gray-100/30">
               <AlertCircle className="h-12 w-12 text-zinc-300 mx-auto mb-4" />
               <p className="text-xl font-bold text-zinc-400 italic">No active loan applications found.</p>
               <p className="text-sm text-zinc-400 mt-2">Submit your first application to see it here.</p>
@@ -377,7 +377,7 @@ const Loans = () => {
                       </button>
                     )}
                     {expandedApp === app.id && app.kycData && (
-                      <div className="mb-4 bg-gray-50 rounded-2xl p-4 text-xs space-y-1.5 border border-gray-100">
+                      <div className="mb-4 bg-gray-100 rounded-2xl p-4 text-xs space-y-1.5 border border-gray-100">
                         {Object.entries(app.kycData).map(([key, value]) => (
                           <div key={key} className="flex justify-between">
                             <span className="text-zinc-400 font-bold uppercase">{key}:</span>
