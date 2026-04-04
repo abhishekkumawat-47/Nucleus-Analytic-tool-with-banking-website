@@ -1,7 +1,0 @@
-src/controllers/UserControllers.ts(270,36): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
-src/controllers/UserControllers.ts(274,48): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
-src/controllers/UserControllers.ts(317,63): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
-src/controllers/UserControllers.ts(318,51): error TS2694: Namespace '"C:/Coding_Related_Items/Web_Dev/Nucleus-Analytic-tool-with-banking-website/NexaBank/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'InputJsonValue'.
-src/helper/payee.ts(3,10): error TS2305: Module '"@prisma/client"' has no exported member 'CustomerType'.
-src/routes/loanRoutes.ts(1,18): error TS2305: Module '"@prisma/client"' has no exported member 'LoanType'.
-src/routes/loanRoutes.ts(1,28): error TS2305: Module '"@prisma/client"' has no exported member 'ApplicationStatus'.
