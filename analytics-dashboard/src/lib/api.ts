@@ -672,6 +672,18 @@ export const dashboardAPI = {
     }
   },
 
+  /* ─────────────── Pro Users Metrics ─────────────── */
+
+  async getProUsers(tenants: string[], range: string): Promise<{ pro_users: number; total_users: number; pro_adoption_pct: number }> {
+    try {
+      const response = await apiClient.get<{ pro_users: number; total_users: number; pro_adoption_pct: number }>(`/metrics/pro_users?tenants=${tenants.join(',')}&range=${range}`);
+      return response.data;
+    } catch {
+      console.error('Failed to fetch pro users');
+      return { pro_users: 0, total_users: 0, pro_adoption_pct: 0 };
+    }
+  },
+
   /* ─────────────── License vs Usage ─────────────── */
 
   async getLicenseUsage(tenants: string[], range: string): Promise<LicenseUsageResponse> {

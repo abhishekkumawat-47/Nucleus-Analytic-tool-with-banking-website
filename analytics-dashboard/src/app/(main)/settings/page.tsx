@@ -16,9 +16,6 @@ export default function SettingsPage() {
     <div className="animate-in fade-in duration-500 space-y-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">Feature Routing Configuration</h1>
-        <button className="bg-[#1a73e8] cursor-pointer text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-blue-700 transition">
-          + Add Route Map
-        </button>
       </div>
 
       <ChartContainer title="URL Pattern Mapping" id="route-mapping-config">
@@ -30,7 +27,6 @@ export default function SettingsPage() {
                 <th className="px-4 py-3 font-medium">Mapped Feature</th>
                 <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -47,10 +43,6 @@ export default function SettingsPage() {
                       <span className={`w-1.5 h-1.5 rounded-full ${config.isActive ? 'bg-[#1a73e8]' : 'bg-gray-400'}`}></span>
                       {config.isActive ? 'Active' : 'Inactive'}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button className="text-[#1a73e8] cursor-pointer hover:underline text-[13px] font-medium mr-3">Edit</button>
-                    <button className="text-gray-400 cursor-pointer hover:text-red-600 text-[13px] font-medium">Remove</button>
                   </td>
                 </tr>
               ))}

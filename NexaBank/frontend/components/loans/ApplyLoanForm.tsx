@@ -507,7 +507,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
                 {step > s.num ? <Check className="h-5 w-5" /> : s.num}
               </motion.div>
               <span className={cn(
-                "absolute top-6 text-[10px] uppercase tracking-widest font-bold whitespace-nowrap transition-colors duration-300",
+                "absolute top-10 mt-2 text-[10px] uppercase tracking-widest font-bold whitespace-nowrap transition-colors duration-300",
                 step >= s.num ? "text-violet-700" : "text-zinc-300"
               )}>
                 {s.label}

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { TableSkeleton, KPICardSkeleton, ChartSkeleton, LicensePageSkeleton } from '@/components/Skeletons';
 
 import {
@@ -39,6 +40,7 @@ interface TrendPoint { date: string; count: number }
 
 interface LicensedFeature {
   feature_name: string;
+  display_name: string;
   plan_tier: string;
   is_used: boolean;
   usage_count: number;
@@ -49,6 +51,7 @@ interface LicensedFeature {
 
 interface UnlicensedFeature {
   feature_name: string;
+  display_name: string;
   usage_count: number;
   unique_users: number;
   usage_pct: number;
@@ -212,14 +215,37 @@ function UsageBar({ pct, color }: { pct: number; color: string }) {
 
 export default function LicenseUsagePage() {
   const { tenantsParam, rangeParam, selectedTenants, timeRange } = useDashboardData();
+  const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
+  const lastRealtimeRefetchAt = useRef(0);
   const [seeding, setSeeding] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'licensed' | 'free'>('overview');
 
-  const { data, isLoading: loading, refetch: fetchData } = useQuery({
+  const { data, isLoading: loading, isFetching, refetch: fetchData } = useQuery({
     queryKey: ['licenseUsage', tenantsParam, rangeParam],
     queryFn: () => dashboardAPI.getLicenseUsage(tenantsParam, rangeParam),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 20 * 1000,
+    refetchInterval: 20 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
+
+  const { data: proUsersData, isLoading: proUsersLoading, refetch: refetchProUsers } = useQuery({
+    queryKey: ['proUsers', tenantsParam, rangeParam],
+    queryFn: () => dashboardAPI.getProUsers(tenantsParam, rangeParam),
+    staleTime: 20 * 1000,
+    refetchInterval: 20 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    if (!lastEvent) return;
+    const now = Date.now();
+    if (now - lastRealtimeRefetchAt.current < 5000) return;
+    lastRealtimeRefetchAt.current = now;
+    void fetchData();
+    void refetchProUsers();
+  }, [lastEvent, fetchData, refetchProUsers]);
 
   const summary = (data as LicenseData | undefined)?.summary;
   const hasWastedLicenses = (summary?.waste_pct || 0) > 20;
@@ -300,7 +326,7 @@ export default function LicenseUsagePage() {
             onClick={() => fetchData()}
             className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
           </button>
           {!hasData && (
             <button
@@ -377,18 +403,30 @@ export default function LicenseUsagePage() {
             <div className="bg-white border-gray-200 border-t-4 border-t-[#1a73e8] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 border border-gray-200 bg-white rounded-lg">
-                  <Users className="h-4 w-4 text-gray-700" />
+                  {proUsersLoading ? (
+                    <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                  ) : (
+                    <Users className="h-4 w-4 text-gray-700" />
+                  )}
                 </div>
-                <span className={`flex items-center gap-0.5 text-xs font-medium ${summary.wow_change >= 0 ? 'text-gray-600' : 'text-gray-500'}`}>
-                  {summary.wow_change >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {Math.abs(summary.wow_change)}% WoW
+                <span className="text-xs font-medium text-gray-600 px-2 py-1 bg-blue-50 rounded">
+                  {timeRange}
                 </span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{summary.pro_users}</p>
-              <p className="text-xs text-gray-500 mt-1">Pro users in last 30 days</p>
+              <p className="text-3xl font-bold text-gray-900">
+                {proUsersLoading ? '—' : proUsersData?.pro_users ?? 0}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Pro users in {timeRange.toLowerCase()}</p>
               <div className="mt-3 pt-3 border-t border-gray-50">
-                <UsageBar pct={summary.pro_adoption_pct} color="#1a73e8" />
-                <p className="text-[10px] text-gray-400 mt-1">{summary.pro_adoption_pct}% of {summary.total_users} total users</p>
+                {!proUsersLoading && proUsersData && (
+                  <>
+                    <UsageBar pct={proUsersData.pro_adoption_pct} color="#1a73e8" />
+                    <p className="text-[10px] text-gray-400 mt-1">{proUsersData.pro_adoption_pct}% of {proUsersData.total_users} total users</p>
+                  </>
+                )}
+                {proUsersLoading && (
+                  <div className="h-2 bg-gray-100 rounded-full animate-pulse mt-2" />
+                )}
               </div>
             </div>
 
@@ -410,7 +448,7 @@ export default function LicenseUsagePage() {
             </div>
 
             {/* License Waste */}
-            <div className="bg-white border-gray-200 border-t-4 border-t-[#1a73e8] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="bg-white border-red-200 border-t-4 border-t-[#e83c1a] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2 border border-gray-200 bg-white rounded-lg">
                   <XCircle className="h-4 w-4 text-gray-700" />
@@ -459,37 +497,43 @@ export default function LicenseUsagePage() {
 
             {/* 3 columns */}
             <ChartContainer
-              title="Pro Feature Distribution"
+              title="Pro Features — Active Usage"
               id="feature-distribution"
               className="lg:col-span-3"
             >
               <div className="space-y-3 py-2">
-                {licensedFeatures.map((f, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-900 truncate">
-                          {featureLabel(f.feature_name)}
-                        </span>
-                        <span className="text-xs font-mono text-gray-500 ml-2">
-                          {f.usage_count.toLocaleString()} events
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <UsageBar
-                            pct={f.usage_pct}
-                            color={f.is_used ? '#1a73e8' : '#9ca3af'}
-                          />
+                {licensedFeatures.filter(f => f.is_used).length > 0 ? (
+                  licensedFeatures.filter(f => f.is_used).map((f, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900">
+                            {f.display_name}
+                          </span>
+                          <span className="text-xs font-mono text-gray-500 ml-2">
+                            {f.usage_count.toLocaleString()} events
+                          </span>
                         </div>
-                        <span className="text-[10px] font-medium text-gray-400 w-10 text-right">
-                          {f.usage_pct}%
-                        </span>
+
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <UsageBar
+                              pct={f.usage_pct}
+                              color="#1a73e8"
+                            />
+                          </div>
+                          <span className="text-[10px] font-medium text-gray-400 w-10 text-right">
+                            {f.usage_pct}%
+                          </span>
+                        </div>
                       </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-gray-400 text-sm">
+                    No active enterprise feature usage detected
                   </div>
-                ))}
+                )}
               </div>
             </ChartContainer>
 
@@ -528,8 +572,8 @@ export default function LicenseUsagePage() {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <div>
-                          <h3 className="text-sm font-semibold text-gray-900">{featureLabel(f.feature_name)}</h3>
-                          <p className="text-xs text-gray-500 mt-0.5">{featureDescription(f.feature_name)}</p>
+                        <h3 className="text-sm font-semibold text-gray-900">{f.display_name}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">{f.feature_name}</p>
                         </div>
                       </div>
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${f.is_used
@@ -574,7 +618,13 @@ export default function LicenseUsagePage() {
 
           {/* ─── Tab: Licensed Features Table ─── */}
           {activeTab === 'licensed' && (
-            <ChartContainer title="Enterprise Licensed Features — Detailed Breakdown" id="license-table">
+            <ChartContainer title="Enterprise Licensed Features — Usage Details" id="license-table">
+              <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                <p>
+                  <strong className="font-semibold">Active Features ({(data as LicenseData | undefined)?.licensed?.length ?? 0}):</strong> Enterprise features with active usage in the last 90 days.<br/>
+                  <strong className="font-semibold">Inactive Features ({(data as LicenseData | undefined)?.unused_licensed?.length ?? 0}):</strong> Pre-provisioned enterprise licenses not yet activated by users.
+                </p>
+              </div>
               <div className="overflow-x-auto mt-2">
                 <table className="w-full text-left text-sm text-gray-600">
                   <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
@@ -593,8 +643,8 @@ export default function LicenseUsagePage() {
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
                             <div>
-                              <p className="font-semibold text-gray-900 text-sm">{featureLabel(f.feature_name)}</p>
-                              <p className="text-[11px] text-gray-400 mt-0.5">{featureDescription(f.feature_name)}</p>
+                              <p className="font-semibold text-gray-900 text-sm">{f.display_name}</p>
+                              <p className="text-[11px] text-gray-400 mt-0.5">{f.feature_name}</p>
                             </div>
                           </div>
                         </td>
@@ -645,8 +695,9 @@ export default function LicenseUsagePage() {
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-gray-900">
-                                {featureLabel(f.feature_name)}
+                                {f.display_name}
                               </span>
+                              <span className="text-xs text-gray-400 ml-2">({f.feature_name})</span>
                             </div>
                           </td>
                           <td className="px-4 py-3.5 text-right font-mono font-medium">{f.usage_count.toLocaleString()}</td>

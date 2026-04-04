@@ -53,9 +53,6 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
       // Loans
       { pattern: '/loans',            featureName: 'loans.dashboard.view',         category: 'navigation',    funnel: 3 },
 
-      // Pro Features — Granular Routes
-      { pattern: '/pro-feature',      featureName: 'pro.dashboard.view',           category: 'navigation',    funnel: 4 },
-
       // Pro Feature: Finance Library (ai-insights)
       { pattern: '/pro-feature?id=ai-insights',            featureName: 'pro.finance-library.view',     category: 'navigation' },
 
@@ -88,7 +85,6 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
       { pattern: '/transfers',        featureName: 'core.transfers.view',          category: 'navigation',    funnel: 3 },
       { pattern: '/approvals',        featureName: 'core.approvals.view',          category: 'navigation',    funnel: 4 },
       { pattern: '/cards',            featureName: 'core.cards.view',              category: 'navigation' },
-      { pattern: '/pro-feature',      featureName: 'pro.dashboard.view',           category: 'navigation' },
     ],
   },
 };
