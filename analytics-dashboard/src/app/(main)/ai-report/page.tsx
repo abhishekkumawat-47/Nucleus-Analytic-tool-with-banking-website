@@ -202,64 +202,64 @@ export default function AIReportPage() {
       </div>
 
       <section className="rounded-2xl border-gray-200 border bg-white p-5 shadow-sm print:hidden">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Executive Snapshot</h3>
-            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs text-slate-500">Readiness Score</p>
-                <p className="mt-1 text-xl font-semibold text-slate-900">{reportRichnessScore}/100</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs text-slate-500">Sections Covered</p>
-                <p className="mt-1 text-xl font-semibold text-slate-900">{sectionCount}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs text-slate-500">Top Focus</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{topFocus[0] || 'N/A'}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs text-slate-500">Critical Callouts</p>
-                <p className="mt-1 text-xl font-semibold text-slate-900">{Math.round(highlightCount)}</p>
-              </div>
-            </div>
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Executive Snapshot</h3>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs text-slate-500">Readiness Score</p>
+            <p className="mt-1 text-xl font-semibold text-slate-900">{reportRichnessScore}/100</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs text-slate-500">Sections Covered</p>
+            <p className="mt-1 text-xl font-semibold text-slate-900">{sectionCount}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs text-slate-500">Top Focus</p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">{topFocus[0] || 'N/A'}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs text-slate-500">Critical Callouts</p>
+            <p className="mt-1 text-xl font-semibold text-slate-900">{Math.round(highlightCount)}</p>
+          </div>
+        </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <TrendingUp className="h-4 w-4 text-[#1a73e8]" />
-                  Focus Distribution
-                </div>
-                <div className="space-y-3">
-                  {focusData.map((item) => (
-                    <div key={item.label}>
-                      <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-                        <span>{item.label}</span>
-                        <span>{item.score}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100">
-                        <div className={`${item.colorClass} h-2 rounded-full transition-all duration-500`} style={{ width: `${item.normalized}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                  <Lightbulb className="h-4 w-4 text-gray-500" /> Potential Product Ideas
-                </h3>
-                <div className="mt-3 space-y-2">
-                  {potentialIdeas.map((idea, index) => (
-                    <div key={idea} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Idea {index + 1}</p>
-                      <p className="mt-1 text-sm text-slate-700">{idea}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  Ideas are aligned to the report focus areas for stronger UX and retention outcomes.
-                </p>
-              </div>
+        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <TrendingUp className="h-4 w-4 text-[#1a73e8]" />
+              Focus Distribution
             </div>
+            <div className="space-y-3">
+              {focusData.map((item) => (
+                <div key={item.label}>
+                  <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                    <span>{item.label}</span>
+                    <span>{item.score}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100">
+                    <div className={`${item.colorClass} h-2 rounded-full transition-all duration-500`} style={{ width: `${item.normalized}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
+              <Lightbulb className="h-4 w-4 text-gray-500" /> Potential Product Ideas
+            </h3>
+            <div className="mt-3 space-y-2">
+              {potentialIdeas.map((idea, index) => (
+                <div key={idea} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Idea {index + 1}</p>
+                  <p className="mt-1 text-sm text-slate-700">{idea}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Ideas are aligned to the report focus areas for stronger UX and retention outcomes.
+            </p>
+          </div>
+        </div>
       </section>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:hidden">
