@@ -1,4 +1,0 @@
-﻿NAME                                                      IMAGE                               COMMAND                  SERVICE      CREATED       STATUS          PORTS
-nucleus-analytic-tool-with-banking-website-broker-1       confluentinc/cp-kafka:7.4.0         "/etc/confluent/dockΓÇª"   broker       2 hours ago   Up 4 minutes    0.0.0.0:9092->9092/tcp, [::]:9092->9092/tcp, 0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
-nucleus-analytic-tool-with-banking-website-clickhouse-1   clickhouse/clickhouse-server:24.3   "/entrypoint.sh"         clickhouse   2 hours ago   Up 23 minutes   0.0.0.0:8123->8123/tcp, [::]:8123->8123/tcp, 0.0.0.0:9000->9000/tcp, [::]:9000->9000/tcp
-nucleus-analytic-tool-with-banking-website-zookeeper-1    confluentinc/cp-zookeeper:7.4.0     "/etc/confluent/dockΓÇª"   zookeeper    2 hours ago   Up 23 minutes   0.0.0.0:2181->2181/tcp, [::]:2181->2181/tcp

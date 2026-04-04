@@ -1,8 +1,0 @@
-﻿analytics-api-1  | INFO:     Will watch for changes in these directories: ['/app']
-analytics-api-1  | INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-analytics-api-1  | INFO:     Started reloader process [1] using WatchFiles
-analytics-api-1  | INFO:     Started server process [8]
-analytics-api-1  | INFO:     Waiting for application startup.
-analytics-api-1  | INFO:     Application startup complete.
-analytics-api-1  | INFO:     ('172.18.0.1', 44170) - "WebSocket /ws/dashboard/nexabank" [accepted]
-analytics-api-1  | INFO:     connection open
