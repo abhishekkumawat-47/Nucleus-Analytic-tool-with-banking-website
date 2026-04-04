@@ -45,12 +45,18 @@ apiClient.interceptors.request.use(
       const { getSession } = await import('next-auth/react');
       const session = await getSession();
       if (session?.user) {
+        const tenantAliasMap: Record<string, string> = {
+          bank_a: 'nexabank',
+          bank_b: 'safexbank',
+        };
         config.headers.set('X-User-Email', session.user.email);
         if (session.user.role) {
           config.headers.set('X-User-Role', session.user.role);
         }
         if (session.user.adminApps) {
-          config.headers.set('X-Admin-Apps', (session.user.adminApps as string[]).join(','));
+          const normalizedApps = (session.user.adminApps as string[])
+            .map((app) => tenantAliasMap[String(app).toLowerCase()] || String(app).toLowerCase());
+          config.headers.set('X-Admin-Apps', normalizedApps.join(','));
         }
       }
     } catch {
@@ -334,12 +340,33 @@ export const dashboardAPI = {
   async getFunnelData(tenants: string[], range: string): Promise<FunnelStep[]> {
     try {
       const { APP_REGISTRY } = await import('./feature-map');
-      // Use the first tenant for funnel step resolution
-      const primaryTenant = tenants.length > 0 ? tenants[0] : 'nexabank';
-      const appConfig = APP_REGISTRY[primaryTenant];
-      const steps = appConfig?.funnelSteps?.join(',') || 'login,view_feed,post_tweet,like_tweet';
+      const canonicalStepMap: Record<string, string> = {
+        login: 'login.auth.success',
+        dashboard_view: 'dashboard.page.view',
+        transfer_started: 'transaction.pay_now.success',
+        transfer_completed: 'transaction.pay_now.success',
+        loan_applied: 'loan.applied.success',
+        kyc_started: 'loan.kyc_started.success',
+        kyc_completed: 'loan.kyc_completed.success',
+        authorizer_approved: 'transaction.pay_now.success',
+      };
+
+      const selectedConfigs = tenants
+        .map((tenantId) => APP_REGISTRY[tenantId])
+        .filter(Boolean);
+
+      const fallbackSteps = ['login.auth.success', 'dashboard.page.view', 'transaction.pay_now.success', 'loan.applied.success'];
+      const mergedSteps = selectedConfigs.length > 0
+        ? Array.from(
+            new Set(
+              selectedConfigs.flatMap((cfg) => cfg.funnelSteps || []).map((step) => canonicalStepMap[step] || step)
+            )
+          )
+        : fallbackSteps;
+
+      const steps = mergedSteps.length >= 2 ? mergedSteps.join(',') : fallbackSteps.join(',');
       
-      const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenants=${tenants.join(',')}&steps=${steps}&window_minutes=60&range=${range}`);
+      const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenants=${encodeURIComponent(tenants.join(','))}&steps=${encodeURIComponent(steps)}&window_minutes=60&range=${range}`);
       const funnel = response.data.funnel || [];
       
       return funnel.map((step: BackendFunnelStep) => ({
@@ -395,9 +422,9 @@ export const dashboardAPI = {
     }
   },
 
-  async getAvailableTenants(): Promise<AvailableTenant[]> {
+  async getAvailableTenants(range: string = '90d'): Promise<AvailableTenant[]> {
     try {
-      const response = await apiClient.get<AvailableTenant[]>('/tenants/available');
+      const response = await apiClient.get<AvailableTenant[]>(`/tenants/available?range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch available tenants');
@@ -747,9 +774,9 @@ export const dashboardAPI = {
 
   /* ─────────────── User Journey ─────────────── */
 
-  async getUserJourney(tenants: string[], userId: string): Promise<UserJourneyResponse> {
+  async getUserJourney(tenants: string[], userId: string, range: string): Promise<UserJourneyResponse> {
     try {
-      const response = await apiClient.get<UserJourneyResponse>(`/journey/user?tenants=${tenants.join(',')}&user_id=${userId}`);
+      const response = await apiClient.get<UserJourneyResponse>(`/journey/user?tenants=${encodeURIComponent(tenants.join(','))}&user_id=${encodeURIComponent(userId)}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch user journey');
@@ -757,9 +784,9 @@ export const dashboardAPI = {
     }
   },
 
-  async getJourneyUsers(tenants: string[]): Promise<JourneyUsersResponse> {
+  async getJourneyUsers(tenants: string[], range: string): Promise<JourneyUsersResponse> {
     try {
-      const response = await apiClient.get<JourneyUsersResponse>(`/journey/users?tenants=${tenants.join(',')}`);
+      const response = await apiClient.get<JourneyUsersResponse>(`/journey/users?tenants=${encodeURIComponent(tenants.join(','))}&range=${range}`);
       return response.data;
     } catch {
       console.error('Failed to fetch journey users');

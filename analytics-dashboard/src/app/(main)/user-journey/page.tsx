@@ -10,14 +10,14 @@ import ChartContainer from '@/components/ChartContainer';
 import { TableSkeleton, ChartSkeleton } from '@/components/Skeletons';
 
 export default function UserJourneyPage() {
-  const { tenantsParam } = useDashboardData();
+  const { tenantsParam, rangeParam, selectedTenants, timeRange } = useDashboardData();
   const [selectedUser, setSelectedUser] = useState<string>('');
   const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
   const lastRealtimeRefetchAt = useRef(0);
 
   const { data: usersData, isLoading: loadingUsers, refetch: refetchUsers } = useQuery({
-    queryKey: ['journeyUsers', tenantsParam],
-    queryFn: () => dashboardAPI.getJourneyUsers(tenantsParam),
+    queryKey: ['journeyUsers', tenantsParam, rangeParam],
+    queryFn: () => dashboardAPI.getJourneyUsers(tenantsParam, rangeParam),
     staleTime: 15 * 1000,
     refetchInterval: 15 * 1000,
     refetchIntervalInBackground: false,
@@ -25,14 +25,18 @@ export default function UserJourneyPage() {
   });
 
   const { data: journeyData, isLoading: loadingJourney, refetch: refetchJourney } = useQuery({
-    queryKey: ['userJourney', tenantsParam, selectedUser],
-    queryFn: () => dashboardAPI.getUserJourney(tenantsParam, selectedUser),
+    queryKey: ['userJourney', tenantsParam, selectedUser, rangeParam],
+    queryFn: () => dashboardAPI.getUserJourney(tenantsParam, selectedUser, rangeParam),
     enabled: !!selectedUser,
     staleTime: 15 * 1000,
     refetchInterval: 15 * 1000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    setSelectedUser('');
+  }, [tenantsParam, rangeParam]);
 
   // Real-time refetch trigger with 4-second throttle
   useEffect(() => {
@@ -62,7 +66,7 @@ export default function UserJourneyPage() {
     <div className="animate-in fade-in duration-500 space-y-6">
       <div>
         <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">User Journey Mapping</h1>
-        <p className="text-sm text-gray-500 mt-1">Track individual user flows, session breaks, and drop-off points.</p>
+        <p className="text-sm text-gray-500 mt-1">Track individual user flows, session breaks, and drop-off points for <strong className="text-gray-700">{selectedTenants.join(', ')}</strong> in <strong className="text-gray-700">{timeRange}</strong>.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

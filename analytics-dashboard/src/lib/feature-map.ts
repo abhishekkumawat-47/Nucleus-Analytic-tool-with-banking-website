@@ -39,7 +39,7 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     icon: 'wallet',
     color: '#7C3AED',
     appUrl: process.env.NEXT_PUBLIC_NEXABANK_URL || 'http://localhost:3002',
-    funnelSteps: ['login', 'dashboard_view', 'loan_applied', 'kyc_started', 'kyc_completed'],
+    funnelSteps: ['login', 'dashboard_view', 'kyc_started', 'kyc_completed', 'loan_applied'],
     routes: [
       // Core Banking
       { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },

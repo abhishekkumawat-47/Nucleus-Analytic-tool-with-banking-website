@@ -220,11 +220,13 @@ async def websocket_dashboard(websocket: WebSocket, tenant_id: str):
 
 
 @app.get("/tenants/available")
-def get_available_tenants(request: Request):
+def get_available_tenants(
+    request: Request,
+    range: str = Query("90d", description="Time range like 7d, 30d"),
+):
     """Returns all distinct tenants from ClickHouse, filtered by admin access if applicable."""
-    role = request.headers.get("X-User-Role", "")
-    admin_apps_str = request.headers.get("X-Admin-Apps", "")
-    allowed_apps = [a.strip() for a in admin_apps_str.split(",") if a.strip()]
+    _role = request.headers.get("X-User-Role", "")
+    days = parse_range(range)
     # Always include known tenants in the base list so the dropdown is never empty
     KNOWN_TENANTS = [
         {"id": "nexabank", "name": "NexaBank", "eventCount": 0, "uniqueUsers": 0},
@@ -237,11 +239,11 @@ def get_available_tenants(request: Request):
                 count() as event_count,
                 uniq(user_id) as unique_users
             FROM feature_intelligence.events_raw
-            WHERE timestamp >= today() - 90
+            WHERE timestamp >= today() - %(days)s
             GROUP BY tenant_id
             ORDER BY event_count DESC
         """
-        results = ch_client.query(sql)
+        results = ch_client.query(sql, {"days": days})
         found = {}
         for row in results:
             found[row["id"]] = {
@@ -264,10 +266,8 @@ def get_available_tenants(request: Request):
             if tid not in seen:
                 merged.append(tdata)
                 
-        # Filter strictly
-        if role == "app_admin" and allowed_apps:
-            merged = [t for t in merged if t["id"] in allowed_apps]
-            
+        # Tenant selector should reflect actual discovered tenant ids in analytics data.
+        # Do not hard-filter by admin account aliases here, which can hide valid tenants.
         return merged
     except Exception:
         return KNOWN_TENANTS
@@ -351,7 +351,29 @@ def get_funnel_analysis(
     if len(step_events) < 2:
         raise HTTPException(status_code=400, detail="At least two steps required for a funnel.")
 
-    conditions = ", ".join([f"event_name = '{step}'" for step in step_events])
+    def sql_quote(value: str) -> str:
+        return value.replace("'", "''")
+
+    def expand_step_aliases(step_name: str) -> list[str]:
+        canonical = canonicalize_event_name(step_name) or step_name
+        aliases = {
+            step_name,
+            canonical,
+            normalize_event(step_name),
+        }
+        aliases.update({
+            alias
+            for alias, mapped in CANONICAL_EVENT_ALIASES.items()
+            if mapped == canonical and alias
+        })
+        return [a for a in sorted(aliases) if a]
+
+    step_variants = [expand_step_aliases(step) for step in step_events]
+    condition_tokens = []
+    for variants in step_variants:
+        quoted = ", ".join(["'" + sql_quote(v) + "'" for v in variants])
+        condition_tokens.append(f"event_name IN ({quoted})")
+    conditions = ", ".join(condition_tokens)
     
     sql = f"""
         SELECT 
@@ -943,14 +965,15 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/tenants")
-def get_all_tenants(tenant_id: Optional[str] = None):
+def get_all_tenants(tenant_id: Optional[str] = None, range: str = Query("7d", description="Time range like 7d, 30d")):
     """
     Returns list of distinct tenants with real metrics from ClickHouse.
     If tenant_id is provided, returns only that tenant's data (for app_admin).
     """
     try:
+        days = parse_range(range)
         where_clause = ""
-        params = {}
+        params = {"days": days}
         # We explicitly remove the restriction on tenant_id so that app_admins 
         # can see all tenants for comparison as requested by the user.
 
@@ -964,6 +987,7 @@ def get_all_tenants(tenant_id: Optional[str] = None):
                 countIf(lower(event_name) LIKE '%%error%%' OR lower(event_name) LIKE '%%fail%%') as errorCount
             FROM feature_intelligence.events_raw
             {where_clause}
+            WHERE timestamp >= today() - %(days)s
             GROUP BY tenant_id
             ORDER BY featureUsage DESC
         """
@@ -2051,6 +2075,10 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
             
         # Build lists based strictly on catalog mapping
         total_usage_count = sum(int(r["usage_count"]) for r in used_map.values()) or 1
+        total_pro_usage_count = sum(
+            int(used_map.get(fname, {}).get("usage_count", 0))
+            for fname in pro_features_set
+        ) or 1
         
         licensed_list = []
         unused_licensed = []
@@ -2066,7 +2094,7 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
                 "is_used": fname in used_map,
                 "usage_count": uc,
                 "unique_users": int(used_map.get(fname, {}).get("unique_users", 0)),
-                "usage_pct": round((uc / total_usage_count) * 100, 1),
+                "usage_pct": round((uc / total_pro_usage_count) * 100, 1),
                 "trend": trends_map.get(fname, []),
             }
             if item["is_used"]:
@@ -2269,19 +2297,34 @@ def get_config_audit_log(tenants: str = Query(..., description="Comma-separated 
 # ═══════════════════════════════════════════════════════════
 
 @app.get("/journey/user")
-def get_user_journey(tenants: str = Query(..., description="Comma-separated list of tenants"), user_id: str = Query(..., description="User ID")):
+def get_user_journey(
+    tenants: str = Query(..., description="Comma-separated list of tenants"),
+    user_id: str = Query(..., description="User ID"),
+    range: str = Query("30d", description="Time range like 7d, 30d"),
+):
     """Returns a single user's complete event timeline with session detection."""
-    tenant_id = tenants  # Use first tenant for journey lookup
-    require_tenant_access(tenant_id)
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
+    require_tenant_access(",".join(tenant_list))
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {
+        "tenant_id": tenant_list[0],
+        "user_id": user_id,
+        "days": days,
+    } if len(tenant_list) == 1 else {
+        "tenant_ids": tuple(tenant_list),
+        "user_id": user_id,
+        "days": days,
+    }
     try:
-        sql = """
+        sql = f"""
             SELECT event_name, channel, timestamp, metadata
             FROM feature_intelligence.events_raw
-            WHERE tenant_id = %(tenant_id)s AND user_id = %(user_id)s
+            WHERE {cond} AND user_id = %(user_id)s AND timestamp >= today() - %(days)s
             ORDER BY timestamp ASC
             LIMIT 500
         """
-        results = ch_client.query(sql, {"tenant_id": tenant_id, "user_id": user_id})
+        results = ch_client.query(sql, params)
         
         events = []
         sessions = []
@@ -2331,7 +2374,7 @@ def get_user_journey(tenants: str = Query(..., description="Comma-separated list
             drop_off_point = last_event
         
         return {
-            "tenant_id": tenant_id,
+            "tenant_id": tenants,
             "user_id": user_id,
             "total_events": len(events),
             "total_sessions": len(sessions),
@@ -2343,20 +2386,32 @@ def get_user_journey(tenants: str = Query(..., description="Comma-separated list
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/journey/users")
-def list_journey_users(tenants: str = Query(..., description="Comma-separated list of tenants")):
+def list_journey_users(
+    tenants: str = Query(..., description="Comma-separated list of tenants"),
+    range: str = Query("30d", description="Time range like 7d, 30d"),
+):
     """Returns list of users with event counts for journey selection."""
-    tenant_id = tenants
-    require_tenant_access(tenant_id)
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
+    require_tenant_access(",".join(tenant_list))
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {
+        "tenant_id": tenant_list[0],
+        "days": days,
+    } if len(tenant_list) == 1 else {
+        "tenant_ids": tuple(tenant_list),
+        "days": days,
+    }
     try:
-        sql = """
+        sql = f"""
             SELECT user_id, count() as event_count, min(timestamp) as first_seen, max(timestamp) as last_seen
             FROM feature_intelligence.events_raw
-            WHERE tenant_id = %(tenant_id)s
+            WHERE {cond} AND timestamp >= today() - %(days)s
             GROUP BY user_id
             ORDER BY event_count DESC
             LIMIT 50
         """
-        results = ch_client.query(sql, {"tenant_id": tenant_id})
+        results = ch_client.query(sql, params)
         users = []
         for r in results:
             import datetime
@@ -2371,7 +2426,7 @@ def list_journey_users(tenants: str = Query(..., description="Comma-separated li
                 "first_seen": fs_str,
                 "last_seen": ls_str,
             })
-        return {"tenant_id": tenant_id, "users": users}
+        return {"tenant_id": tenants, "users": users}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

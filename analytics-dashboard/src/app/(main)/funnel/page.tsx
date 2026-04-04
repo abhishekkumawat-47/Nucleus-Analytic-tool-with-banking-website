@@ -110,7 +110,17 @@ export default function FunnelPage() {
         }, 0) / (stageDiagnostics.length - 1)
       : 0;
 
-    const healthScore = Math.max(0, Math.round(100 - dropOff * 1.05 - leak.step.dropOff * 0.35 - Math.max(avgDrop - 20, 0) * 0.4));
+    const healthScore = Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(
+          conversion * 0.55 +
+          Math.max(0, 100 - leak.step.dropOff) * 0.25 +
+          Math.max(0, 100 - avgDrop) * 0.2,
+        ),
+      ),
+    );
     const recovered = Math.round(leak.usersLostToNext * 0.2);
     const projectedNewCompletions = completed + recovered;
     const projected = entry > 0 ? (projectedNewCompletions / entry) * 100 : 0;
@@ -335,7 +345,7 @@ export default function FunnelPage() {
 
           <div className="mt-6 space-y-4">
             {diagnostics.map((item) => {
-              const barWidth = Math.max(item.reachesPct, 18);
+              const barWidth = item.reachesPct <= 0 ? 0 : Math.max(item.reachesPct, 8);
               const stageLabel = toTitleCase(item.step.label);
 
               return (

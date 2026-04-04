@@ -16,6 +16,7 @@ import ChartContainer from '@/components/ChartContainer';
 import { TenantsPageSkeleton } from '@/components/Skeletons';
 import { dashboardAPI } from '@/lib/api';
 import { APP_REGISTRY } from '@/lib/feature-map';
+import { useDashboardData } from '@/hooks/useDashboard';
 
 type TenantId = 'nexabank' | 'safexbank';
 type TenantKey = { id: TenantId; name: string; accent: string; subtle: string };
@@ -31,12 +32,6 @@ const TENANTS: TenantKey[] = [
   { id: 'nexabank', name: APP_REGISTRY.nexabank.displayName, accent: '#1a73e8', subtle: '#93c5fd' },
   { id: 'safexbank', name: APP_REGISTRY.safexbank.displayName, accent: '#0f172a', subtle: '#64748b' },
 ];
-
-const RANGE_OPTIONS = [
-  { label: '7D', value: '7d' },
-  { label: '30D', value: '30d' },
-  { label: '90D', value: '90d' },
-] as const;
 
 function toTitleCase(value: string): string {
   return value
@@ -185,14 +180,14 @@ function SectionHeader({
 }
 
 export default function TenantsPage() {
-  const [range, setRange] = useState<'7d' | '30d' | '90d'>('30d');
+  const { rangeParam, timeRange } = useDashboardData();
   const [trendMode, setTrendMode] = useState<'events' | 'users'>('events');
   const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
   const lastRealtimeRefetchAt = useRef(0);
 
   const comparisonQuery = useQuery({
-    queryKey: ['tenant-comparison', range],
-    queryFn: () => dashboardAPI.getTenantComparison(['nexabank', 'safexbank'], range),
+    queryKey: ['tenant-comparison', rangeParam],
+    queryFn: () => dashboardAPI.getTenantComparison(['nexabank', 'safexbank'], rangeParam),
     staleTime: 20 * 1000,
     refetchInterval: 20 * 1000,
     refetchIntervalInBackground: false,
@@ -200,8 +195,8 @@ export default function TenantsPage() {
   });
 
   const trafficQuery = useQuery({
-    queryKey: ['tenant-traffic', range],
-    queryFn: () => dashboardAPI.getTrafficData(['nexabank', 'safexbank'], range),
+    queryKey: ['tenant-traffic', rangeParam],
+    queryFn: () => dashboardAPI.getTrafficData(['nexabank', 'safexbank'], rangeParam),
     staleTime: 20 * 1000,
     refetchInterval: 20 * 1000,
     refetchIntervalInBackground: false,
@@ -210,8 +205,8 @@ export default function TenantsPage() {
 
   const kpiQueries = useQueries({
     queries: TENANTS.map((tenant) => ({
-      queryKey: ['tenant-kpis', tenant.id, range],
-      queryFn: () => dashboardAPI.getKPIMetrics([tenant.id], range),
+      queryKey: ['tenant-kpis', tenant.id, rangeParam],
+      queryFn: () => dashboardAPI.getKPIMetrics([tenant.id], rangeParam),
       staleTime: 20 * 1000,
       refetchInterval: 20 * 1000,
       refetchIntervalInBackground: false,
@@ -221,8 +216,8 @@ export default function TenantsPage() {
 
   const secondaryQueries = useQueries({
     queries: TENANTS.map((tenant) => ({
-      queryKey: ['tenant-secondary-kpis', tenant.id, range],
-      queryFn: () => dashboardAPI.getSecondaryKPIMetrics([tenant.id], range),
+      queryKey: ['tenant-secondary-kpis', tenant.id, rangeParam],
+      queryFn: () => dashboardAPI.getSecondaryKPIMetrics([tenant.id], rangeParam),
       staleTime: 20 * 1000,
       refetchInterval: 20 * 1000,
       refetchIntervalInBackground: false,
@@ -232,8 +227,8 @@ export default function TenantsPage() {
 
   const licenseQueries = useQueries({
     queries: TENANTS.map((tenant) => ({
-      queryKey: ['tenant-license-usage', tenant.id, range],
-      queryFn: () => dashboardAPI.getLicenseUsage([tenant.id], range),
+      queryKey: ['tenant-license-usage', tenant.id, rangeParam],
+      queryFn: () => dashboardAPI.getLicenseUsage([tenant.id], rangeParam),
       staleTime: 20 * 1000,
       refetchInterval: 20 * 1000,
       refetchIntervalInBackground: false,
@@ -243,8 +238,8 @@ export default function TenantsPage() {
 
   const retentionQueries = useQueries({
     queries: TENANTS.map((tenant) => ({
-      queryKey: ['tenant-retention', tenant.id, range],
-      queryFn: () => dashboardAPI.getRetentionData([tenant.id], range),
+      queryKey: ['tenant-retention', tenant.id, rangeParam],
+      queryFn: () => dashboardAPI.getRetentionData([tenant.id], rangeParam),
       staleTime: 20 * 1000,
       refetchInterval: 20 * 1000,
       refetchIntervalInBackground: false,
@@ -254,8 +249,8 @@ export default function TenantsPage() {
 
   const funnelQueries = useQueries({
     queries: TENANTS.map((tenant) => ({
-      queryKey: ['tenant-funnel', tenant.id, range],
-      queryFn: () => dashboardAPI.getFunnelData([tenant.id], range),
+      queryKey: ['tenant-funnel', tenant.id, rangeParam],
+      queryFn: () => dashboardAPI.getFunnelData([tenant.id], rangeParam),
       staleTime: 20 * 1000,
       refetchInterval: 20 * 1000,
       refetchIntervalInBackground: false,
@@ -533,20 +528,8 @@ export default function TenantsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1.5">
-            {RANGE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setRange(option.value)}
-                className={`rounded-full cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
-                  range === option.value
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
+            {timeRange}
           </div>
         </div>
 

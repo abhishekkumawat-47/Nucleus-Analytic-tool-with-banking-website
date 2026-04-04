@@ -52,7 +52,9 @@ export default function PredictivePage() {
     [data?.predictions],
   );
   const anomalies = useMemo(
-    () => predictions.filter((p) => p.anomaly),
+    () => predictions
+      .filter((p) => p.anomaly)
+      .sort((a, b) => (b.growth_rate ?? 0) - (a.growth_rate ?? 0)),
     [predictions],
   );
 
