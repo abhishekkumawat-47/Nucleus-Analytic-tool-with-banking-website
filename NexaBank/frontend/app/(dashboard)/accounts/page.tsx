@@ -146,7 +146,7 @@ const Accounts = () => {
   const renderAccountCards = (accountsList: any[]) => {
     if (accountsList.length === 0) {
        return (
-         <Card className="border-dashed border-2 p-8 text-center bg-gray-50 flex items-center justify-center min-h-[200px]">
+         <Card className="border-dashed border-2 p-8 text-center bg-gray-100 flex items-center justify-center min-h-[200px]">
            <p className="text-muted-foreground">No accounts found in this category.</p>
          </Card>
        )
@@ -171,7 +171,7 @@ const Accounts = () => {
                 )}
               </div>
               
-              <div className="mt-4 bg-gray-50 p-4 rounded-xl">
+              <div className="mt-4 bg-gray-100 p-4 rounded-xl">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Available Balance</p>
                 <p className={`text-2xl font-bold tracking-tight ${account.balance < 0 ? 'text-rose-600' : 'text-zinc-900'}`}>
                   {account.balance < 0 ? '-' : ''}{formatBalance(account.balance)}
@@ -186,7 +186,7 @@ const Accounts = () => {
         ))}
         <Card 
           onClick={() => setShowOpenAccountModal(true)} 
-          className="h-auto border-dashed border-2 hover:border-violet-300 transition-colors flex items-center justify-center p-5 bg-gray-50 hover:bg-violet-50/30 cursor-pointer group"
+          className="h-auto border-dashed border-2 hover:border-violet-300 transition-colors flex items-center justify-center p-5 bg-gray-100 hover:bg-violet-50/30 cursor-pointer group"
         >
           <div className="flex flex-col items-center justify-center py-6">
             <div className="h-12 w-12 rounded-full bg-violet-100 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">

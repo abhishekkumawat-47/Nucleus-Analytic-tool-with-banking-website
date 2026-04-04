@@ -71,7 +71,7 @@ export default function RBACManager() {
       )}
 
       {/* Add New App Admin */}
-      <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6">
+      <div className="bg-gray-100 p-4 rounded-xl border border-gray-100 mb-6">
         <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
           <UserPlus size={16} /> Assign New App Admin
         </h4>
@@ -108,12 +108,12 @@ export default function RBACManager() {
           <div className="space-y-4">
             {Object.entries(config.app_admins).map(([appId, emails]) => (
               <div key={appId} className="border border-gray-100 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-100">
+                <div className="bg-gray-100 px-4 py-2 border-b border-gray-100">
                   <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">App: {appId}</span>
                 </div>
                 <ul className="divide-y divide-gray-100">
                   {(emails as string[]).map(email => (
-                    <li key={email} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50">
+                    <li key={email} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-100">
                       <span className="text-sm text-gray-900 font-medium">{email}</span>
                       <button
                         onClick={() => handleUpdateRole('remove', email, appId)}

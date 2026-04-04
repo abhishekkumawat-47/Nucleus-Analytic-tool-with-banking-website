@@ -225,7 +225,7 @@ export default function HistoryPage() {
         </div>
         <Card className="border border-violet-100 shadow-sm overflow-hidden">
           <CardContent className='p-6 bg-white'>
-            <div className='flex flex-col sm:flex-row gap-4 mb-8 bg-gray-50/50 p-4 rounded-xl border border-gray-100'>
+            <div className='flex flex-col sm:flex-row gap-4 mb-8 bg-gray-100/50 p-4 rounded-xl border border-gray-100'>
               <Skeleton className="h-10 flex-1 rounded-lg bg-zinc-200" />
               <div className='flex flex-wrap gap-2'>
                 <Skeleton className="h-10 w-[140px] rounded-lg bg-zinc-200" />
@@ -283,7 +283,7 @@ export default function HistoryPage() {
 
       <Card className="border border-violet-100 shadow-sm overflow-hidden">
         <CardContent className='p-6 bg-white'>
-          <div className='flex flex-col sm:flex-row gap-4 mb-8 bg-gray-50/50 p-4 rounded-xl border border-gray-100'>
+          <div className='flex flex-col sm:flex-row gap-4 mb-8 bg-gray-100/50 p-4 rounded-xl border border-gray-100'>
             <div className='relative flex-1'>
               <Search className='absolute left-3 top-3 h-4 w-4 text-muted-foreground' />
               <Input
@@ -335,7 +335,7 @@ export default function HistoryPage() {
                 </Button>
               </div>
             ) : paginatedTransactions.length === 0 ? (
-              <div className='text-center py-16 bg-gray-50/50 rounded-xl border border-dashed border-gray-200'>
+              <div className='text-center py-16 bg-gray-100/50 rounded-xl border border-dashed border-gray-200'>
                 <div className="h-16 w-16 bg-violet-100 rounded-full flex flex-col items-center justify-center mx-auto mb-4">
                    <ArrowLeftRight className="h-6 w-6 text-violet-500" />
                 </div>
@@ -367,7 +367,7 @@ export default function HistoryPage() {
                         <div className='flex flex-wrap gap-2 text-xs text-muted-foreground mt-1'>
                           <span>{transaction.timestamp ? format(new Date(transaction.timestamp), "MMM dd, yyyy") : "No date"}</span>
                           <span>•</span>
-                          <span className="font-mono bg-gray-50 px-1.5 rounded text-gray-500">
+                          <span className="font-mono bg-gray-100 px-1.5 rounded text-gray-500">
                              {isSender ? "Sent to" : "Received from"} {isSender ? (transaction.receiverAccount?.accNo || transaction.receiverAccNo) : (transaction.senderAccount?.accNo || transaction.senderAccNo)}
                           </span>
                         </div>

@@ -363,7 +363,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
             </div>
             
             <div className="pt-6 flex gap-4">
-              <Button variant="outline" onClick={prevStep} className="flex-1 h-11 rounded-2xl border-gray-200 font-bold text-zinc-600 hover:bg-gray-50 cursor-pointer">
+              <Button variant="outline" onClick={prevStep} className="flex-1 h-11 rounded-2xl border-gray-200 font-bold text-zinc-600 hover:bg-gray-100 cursor-pointer">
                 <ChevronLeft className="mr-2 h-5 w-5" /> Back
               </Button>
               <Button onClick={nextStep} className="flex-[2] h-11 rounded-2xl bg-zinc-900 hover:bg-black text-white shadow-xl hover:shadow-zinc-300 transition-all font-bold text-base cursor-pointer">
@@ -392,7 +392,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Left Column: Loan Info */}
               <div className="space-y-4">
-                <div className="bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
+                <div className="bg-gray-100/70 p-4 rounded-2xl border border-gray-100">
                   <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200/60">
                      <div className="p-2 bg-violet-100 text-violet-600 rounded-lg">
                        <FileText className="h-4 w-4" />
@@ -434,7 +434,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
                   </div>
                 </div>
 
-                <div className="bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
+                <div className="bg-gray-100/70 p-4 rounded-2xl border border-gray-100">
                    <div className="space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400 flex"><IdCard className="h-3.5 w-3.5 mr-1" /> PAN</span>
@@ -455,7 +455,7 @@ export function ApplyLoanForm({ userId, onSuccess, initialLoanType = "PERSONAL" 
             </div>
 
             <div className="pt-2 flex gap-4">
-              <Button variant="outline" onClick={prevStep} className="flex-1 h-11 rounded-2xl border-gray-200 font-bold text-zinc-600 hover:bg-gray-50 cursor-pointer" disabled={loading}>
+              <Button variant="outline" onClick={prevStep} className="flex-1 h-11 rounded-2xl border-gray-200 font-bold text-zinc-600 hover:bg-gray-100 cursor-pointer" disabled={loading}>
                 <ChevronLeft className="mr-2 h-5 w-5" /> Back
               </Button>
               <Button 

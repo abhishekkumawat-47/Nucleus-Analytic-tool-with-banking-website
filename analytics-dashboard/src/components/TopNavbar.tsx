@@ -199,7 +199,7 @@ function TopNavbar() {
           <div ref={tenantRef} className="hidden md:flex relative">
             <button
               onClick={() => setShowTenantDropdown(!showTenantDropdown)}
-              className="flex items-center cursor-pointer gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-300 transition-colors min-w-[130px]"
+              className="flex items-center border border-gray-400 cursor-pointer gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-300 transition-colors min-w-[130px]"
               id="tenant-selector"
             >
               {isFetching ? (
@@ -219,7 +219,7 @@ function TopNavbar() {
                   }}
                   className={`w-full cursor-pointer text-left px-4 py-2.5 text-sm transition-colors ${isAllTenantsSelected
                       ? 'bg-blue-50 text-blue-600 font-semibold'
-                      : 'text-gray-700 hover:bg-gray-50'
+                      : 'text-gray-700 hover:bg-gray-100'
                     }`}
                 >
                   <span className="flex items-center gap-2">
@@ -242,7 +242,7 @@ function TopNavbar() {
                       }}
                       className={`w-full cursor-pointer text-left px-4 py-2.5 text-sm transition-colors ${isSelected
                           ? 'bg-blue-50 text-blue-600 font-semibold'
-                          : 'text-gray-700 hover:bg-gray-50'
+                          : 'text-gray-700 hover:bg-gray-100'
                         }`}
                     >
                       <span className="flex items-center justify-between">
@@ -270,7 +270,7 @@ function TopNavbar() {
           <div ref={timeRef} className="relative">
             <button
               onClick={() => setShowTimeDropdown(!showTimeDropdown)}
-              className="flex items-center cursor-pointer gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-gray-300 transition-colors"
+              className="flex items-center border border-gray-400 cursor-pointer gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-gray-300 transition-colors"
               id="time-range-selector"
             >
               <Calendar className="w-4 h-4 text-gray-400" />
@@ -289,7 +289,7 @@ function TopNavbar() {
                     }}
                     className={`w-full cursor-pointer text-left px-4 py-2 text-sm transition-colors ${range === timeRange
                         ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        : 'text-gray-700 hover:bg-gray-100'
                       }`}
                   >
                     {range}
@@ -304,7 +304,7 @@ function TopNavbar() {
         <div className="hidden md:flex relative" ref={transparencyRef}>
           <button
             onClick={handleTransparencyClick}
-            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer rounded-md text-xs font-medium transition-all duration-200 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer rounded-md text-xs font-medium transition-all duration-200 border border-gray-200 bg-white hover:bg-gray-100 text-gray-700 shadow-sm"
           >
             <span className='italic'>Data Sync &amp; Transparency</span>
           </button>
@@ -331,7 +331,7 @@ function TopNavbar() {
                   </div>
                 ) : transparencyData ? (
                   <div className="space-y-4">
-                    <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 font-medium">
+                    <p className="text-xs text-gray-600 bg-gray-100 p-2 rounded border border-gray-100 font-medium">
                       {transparencyData.message}
                     </p>
                     <div className="space-y-3">
@@ -389,7 +389,7 @@ function TopNavbar() {
                 <div className="border-t border-gray-100 py-1">
                   <button
                     onClick={() => signOut()}
-                    className="w-full cursor-pointer text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50"
+                    className="w-full cursor-pointer text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                   >
                     Sign Out
                   </button>

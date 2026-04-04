@@ -65,7 +65,7 @@ function formatYAxis(value: number): string {
 
 function TrafficChart({ data, timeRange, onTimeRangeChange }: TrafficChartProps) {
   const timeRangeActions = (
-    <div className="flex items-center bg-gray-50 rounded-lg p-0.5 border border-gray-200 cursor-pointer">
+    <div className="flex items-center bg-gray-100 rounded-lg p-0.5 border border-gray-200 cursor-pointer">
       {timeRangeOptions.map((range) => (
         <button
           key={range}

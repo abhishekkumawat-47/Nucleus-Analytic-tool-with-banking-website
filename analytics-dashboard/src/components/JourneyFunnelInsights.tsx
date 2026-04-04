@@ -52,11 +52,11 @@ function JourneyFunnelInsights({ data }: JourneyFunnelInsightsProps) {
     <ChartContainer title="User Journey Intelligence" id="journey-funnel-intelligence">
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="rounded-lg border border-gray-200 bg-gray-100 p-3">
             <p className="text-[11px] uppercase tracking-wide text-gray-500">Entry Users</p>
             <p className="mt-1 text-xl font-semibold text-gray-900">{entry.toLocaleString()}</p>
           </div>
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="rounded-lg border border-gray-200 bg-gray-100 p-3">
             <p className="text-[11px] uppercase tracking-wide text-gray-500">Final Step Users</p>
             <p className="mt-1 text-xl font-semibold text-gray-900">{completion.toLocaleString()}</p>
           </div>
@@ -77,7 +77,7 @@ function JourneyFunnelInsights({ data }: JourneyFunnelInsightsProps) {
                   <span className="font-medium text-gray-700">Stage {stage.index + 1}: {titleCase(stage.label)}</span>
                   <span>{stage.value.toLocaleString()} users</span>
                 </div>
-                <div className="h-8 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden relative">
+                <div className="h-8 rounded-lg border border-gray-200 bg-gray-100 overflow-hidden relative">
                   <div
                     className="h-full rounded-lg bg-gradient-to-r from-[#1a73e8] to-[#4285F4]"
                     style={{ width: `${width}%` }}

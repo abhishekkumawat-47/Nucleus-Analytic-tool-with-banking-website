@@ -55,7 +55,7 @@ export default function AppOverviewPage({ params }: { params: { appId: string } 
           </div>
         )}
 
-        <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 mt-6">
+        <div className="bg-gray-100 p-6 rounded-xl border border-gray-200 mt-6">
           <h3 className="font-medium text-gray-700 mb-2">Note on Super Admin Access</h3>
           <p className="text-sm text-gray-500">
             As a Super Admin, you are restricted to this aggregated view to protect data privacy. 

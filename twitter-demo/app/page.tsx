@@ -22,7 +22,7 @@ export default function LoginPage() {
 
   if (status === 'loading' || status === 'authenticated') {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-screen items-center justify-center bg-gray-100">
         <Zap className="w-8 h-8 text-blue-500 animate-pulse" />
       </div>
     );

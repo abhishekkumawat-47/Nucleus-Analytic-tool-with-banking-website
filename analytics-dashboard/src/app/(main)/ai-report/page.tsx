@@ -178,7 +178,7 @@ export default function AIReportPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => refetch()}
-            className="flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            className="flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100"
           >
             <Clock3 className="mr-2 h-4 w-4" />
             Load latest
@@ -271,11 +271,11 @@ export default function AIReportPage() {
           <h2 className="text-2xl font-semibold leading-none tracking-tight">Detailed Analytics Summary</h2>
           <p className="text-sm text-gray-500 mt-2">Generated for {selectedTenants.join(', ').toUpperCase()}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1">
+            <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1">
               {cached ? 'Last saved snapshot' : 'Freshly generated'}
             </span>
             {generatedAt && (
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1">
+              <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1">
                 {new Date(generatedAt).toLocaleString()}
               </span>
             )}
@@ -335,7 +335,7 @@ export default function AIReportPage() {
               <div className="space-y-2" dangerouslySetInnerHTML={{ __html: buildHybridReportHtml(report) }} />
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-100 p-10 text-center">
               <h3 className="text-lg font-semibold text-gray-900">No report snapshot found</h3>
               <p className="mt-2 text-sm text-gray-500">
                 Generate a report to store the current snapshot and reuse it across the dashboard.

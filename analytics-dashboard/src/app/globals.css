@@ -180,6 +180,19 @@ body {
 
 /* ─────────────── Focus States ─────────────── */
 
+/* Improve neutral border visibility across cards/panels */
+.border-gray-100 {
+  border-color: #d1d5db !important;
+}
+
+.border-gray-200 {
+  border-color: #cbd5e1 !important;
+}
+
+.border-gray-200\/80 {
+  border-color: rgba(203, 213, 225, 0.8) !important;
+}
+
 *:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;

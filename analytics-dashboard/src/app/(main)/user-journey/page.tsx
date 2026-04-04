@@ -85,7 +85,7 @@ export default function UserJourneyPage() {
                     onClick={() => loadJourney(u.user_id)}
                     className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${selectedUser === u.user_id
                         ? 'border-blue-500 bg-blue-50 shadow-sm'
-                        : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                        : 'border-gray-100 hover:border-gray-200 hover:bg-gray-100'
                       }`}
                   >
                     <div className="flex items-center gap-2 mb-1">

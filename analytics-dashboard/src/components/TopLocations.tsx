@@ -79,7 +79,7 @@ function TopLocations({ data }: TopLocationsProps) {
       <div className="flex flex-col lg:flex-row gap-6 mt-4">
         
         {/* Left: Interactive Map */}
-        <div className="relative flex-1 h-[400px] bg-gray-50/50 rounded-xl overflow-hidden border border-gray-100 group cursor-move">
+        <div className="relative flex-1 h-[400px] bg-gray-100/50 rounded-xl overflow-hidden border border-gray-100 group cursor-move">
           
           {/* Zoom Controls */}
           <div className="absolute right-3 top-3 flex flex-col gap-1.5 z-10">
@@ -189,7 +189,7 @@ function TopLocations({ data }: TopLocationsProps) {
               [...data].sort((a, b) => b.visits - a.visits).slice(0, 6).map((item, idx) => (
                 <div 
                   key={item.country} 
-                  className="flex flex-col p-2 rounded-lg hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100"
+                  className="flex flex-col p-2 rounded-lg hover:bg-gray-100 transition-colors group border border-transparent hover:border-gray-100"
                 >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ function TopLocations({ data }: TopLocationsProps) {
               continentData.map((item) => (
                 <div 
                   key={item.continent} 
-                  className="flex flex-col p-2 rounded-lg hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100"
+                  className="flex flex-col p-2 rounded-lg hover:bg-gray-100 transition-colors group border border-transparent hover:border-gray-100"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">

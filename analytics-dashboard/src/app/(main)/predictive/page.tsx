@@ -229,7 +229,7 @@ export default function PredictivePage() {
               topUpside.map((p) => (
                 <div
                   key={p.feature_name}
-                  className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                  className="rounded-lg border border-gray-200 bg-gray-100 p-3"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-gray-900">
@@ -241,7 +241,7 @@ export default function PredictivePage() {
                       {p.status}
                     </span>
                   </div>
-                  <div className="mt-2 h-2 rounded-full bg-gray-200">
+                  <div className="mt-2 h-2 rounded-full bg-gray-100">
                     <div
                       className={`h-2 rounded-full ${getScoreBarColor(p.score)}`}
                       style={{
@@ -272,7 +272,7 @@ export default function PredictivePage() {
             Model Pulse
           </h2>
           <div className="mt-4 space-y-3">
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="rounded-lg border border-gray-200 bg-gray-100 p-3">
               <p className="text-xs uppercase tracking-wide text-gray-500">
                 Average Growth
               </p>
@@ -283,7 +283,7 @@ export default function PredictivePage() {
                 {summary.avgGrowth.toFixed(1)}%
               </p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="rounded-lg border border-gray-200 bg-gray-100 p-3">
               <p className="text-xs uppercase tracking-wide text-gray-500">
                 Anomalies
               </p>
@@ -294,7 +294,7 @@ export default function PredictivePage() {
                 Spikes or dips beyond normal feature trend bands.
               </p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="rounded-lg border border-gray-200 bg-gray-100 p-3">
               <p className="text-xs uppercase tracking-wide text-gray-500">
                 Confidence Notes
               </p>
@@ -395,7 +395,7 @@ export default function PredictivePage() {
       >
         <div className="overflow-x-auto mt-2 scrollbar-thin scrollbar-thumb-gray-300">
           <table className="min-w-[1200px] w-full text-left text-sm text-gray-600">
-            <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-50/50">
+            <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-100/50">
               <tr>
                 <th className="px-4 py-3 whitespace-nowrap font-medium">
                   Feature
@@ -424,7 +424,7 @@ export default function PredictivePage() {
               {sortedPredictions.map((p) => (
                 <tr
                   key={p.feature_name}
-                  className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${p.anomaly ? "bg-yellow-50 hover:bg-yellow-100" : ""}`}
+                  className={`border-b border-gray-100 hover:bg-gray-100 transition-colors ${p.anomaly ? "bg-yellow-50 hover:bg-yellow-100" : ""}`}
                 >
                   <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900">
                     {p.feature_name}

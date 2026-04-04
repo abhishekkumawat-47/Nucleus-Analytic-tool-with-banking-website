@@ -1423,7 +1423,7 @@ def get_realtime_users(tenants: str = Query(..., description="Comma-separated li
 
 @app.get("/metrics/pages_per_minute")
 def get_pages_per_minute(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    """Returns pages-per-minute data with IST-localized time labels."""
+    """Returns a strict rolling 60-minute pages/minute series with IST-localized labels."""
     tenant_id = tenants
     from datetime import timezone, timedelta
     IST = timezone(timedelta(hours=5, minutes=30))
@@ -1440,20 +1440,28 @@ def get_pages_per_minute(tenants: str = Query(..., description="Comma-separated 
     """
     try:
         results = ch_client.query(sql, params)
-        formatted = []
+        minute_counts = {}
         for r in results:
-            # Convert UTC timestamp to IST for display
             if hasattr(r["min"], "replace"):
                 utc_time = r["min"].replace(tzinfo=timezone.utc)
-                ist_time = utc_time.astimezone(IST)
-                hour_label = ist_time.strftime("%H:%M")
             elif hasattr(r["min"], "strftime"):
-                hour_label = r["min"].strftime("%H:%M")
+                utc_time = r["min"].replace(tzinfo=timezone.utc)
             else:
-                hour_label = str(r["min"])[11:16]
+                # Best effort parsing fallback for string timestamps
+                parsed = str(r["min"]).replace("Z", "")
+                utc_time = datetime.fromisoformat(parsed).replace(tzinfo=timezone.utc)
+
+            minute_key = utc_time.replace(second=0, microsecond=0)
+            minute_counts[minute_key] = int(r["val"])
+
+        now_utc_minute = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        formatted = []
+        for offset in builtins_range(59, -1, -1):
+            bucket_utc = now_utc_minute - timedelta(minutes=offset)
+            ist_time = bucket_utc.astimezone(IST)
             formatted.append({
-                "hour": hour_label,
-                "value": r["val"]
+                "hour": ist_time.strftime("%H:%M"),
+                "value": minute_counts.get(bucket_utc, 0)
             })
         return formatted
     except Exception:

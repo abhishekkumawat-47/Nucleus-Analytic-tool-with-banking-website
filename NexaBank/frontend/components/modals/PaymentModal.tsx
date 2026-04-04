@@ -111,7 +111,7 @@ const PaymentModal = ({ isOpen, onClose, accounts, payeeAccNo, payeeName, onSucc
           {/* Payee Account (read-only) */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-zinc-700">To Account</label>
-            <div className="h-12 flex items-center px-3 rounded-xl bg-gray-50 border border-gray-200">
+            <div className="h-12 flex items-center px-3 rounded-xl bg-gray-100 border border-gray-200">
               <span className="text-sm font-mono text-zinc-700">{payeeAccNo}</span>
               {payeeName && (
                 <span className="ml-auto text-xs text-muted-foreground">{payeeName}</span>

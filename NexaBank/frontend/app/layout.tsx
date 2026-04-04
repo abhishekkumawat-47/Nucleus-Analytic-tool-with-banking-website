@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { UserContextProvider } from "@/components/context/UserContext";
+import NavigationLoader from "@/components/NavigationLoader";
 import ProtectedRoute from "@/components/protected";
 import { Toaster } from "sonner";
 
@@ -25,6 +26,7 @@ export default function RootLayout({
     <html lang="en" className="light">
       <body className={`${inter.className} bg-white text-gray-900`}>
         <UserContextProvider>
+          <NavigationLoader />
           <ProtectedRoute>
             {children}
             <Toaster richColors position="top-center" />

@@ -140,7 +140,7 @@ function Sidebar(_props: SidebarProps) {
                   ? 'justify-center px-0 text-gray-600 bg-transparent hover:bg-transparent'
                   : isActive
                     ? 'bg-[#f1f3f4] text-[#1a73e8] px-3'
-                    : 'text-gray-600 px-3 hover:bg-gray-50'
+                    : 'text-gray-600 px-3 hover:bg-gray-100'
                 }`}
               title={sidebarCollapsed ? item.label : undefined}
             >
@@ -167,7 +167,7 @@ function Sidebar(_props: SidebarProps) {
       {/* Collapse Toggle */}
       <button
         onClick={() => dispatch(toggleSidebar())}
-        className="mx-3 mb-4 cursor-pointer p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center"
+        className="mx-3 mb-4 cursor-pointer p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex items-center justify-center"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {sidebarCollapsed ? (

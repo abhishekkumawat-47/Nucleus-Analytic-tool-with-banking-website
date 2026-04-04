@@ -68,7 +68,7 @@ function DeviceBreakdownChart({
   if (!data || data.length === 0) {
     return (
       <ChartContainer title="Device Breakdown" id="device-breakdown">
-        <div className="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center">
+        <div className="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-100 p-6 text-center">
           <p className="text-sm text-gray-600">
             No device fingerprint data found for this selection.
           </p>

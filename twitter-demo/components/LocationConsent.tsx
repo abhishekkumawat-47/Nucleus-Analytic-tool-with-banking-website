@@ -82,7 +82,7 @@ export default function LocationConsent() {
             To improve your experience and provide relevant local trends, we'd like to use your geographic location. This data is fully anonymized for analytics purposes.
           </p>
 
-          <div className="flex bg-gray-50 border border-gray-100 rounded-lg p-3 gap-3 mb-6 items-start">
+          <div className="flex bg-gray-100 border border-gray-100 rounded-lg p-3 gap-3 mb-6 items-start">
             <ShieldAlert className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-gray-500 leading-relaxed">
               <strong>Your privacy matters.</strong> We only process your country-level location. We do not store precise coordinates or share your identity with third parties.
@@ -93,7 +93,7 @@ export default function LocationConsent() {
             <button
               onClick={handleDecline}
               disabled={loading}
-              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-100 transition-colors disabled:opacity-50"
             >
               Not Now
             </button>
