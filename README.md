@@ -192,9 +192,6 @@ To grant the new admin access to the **Nucleus Analytics Dashboard**, add their 
     "omeshmehta70@gmail.com"
   ],
   "app_admins": {
-    "twitter": [
-      "omeshmehta03@gmail.com"
-    ],
     "nexabank": [
       "omeshmehta69@gmail.com",
       "abhishekkumawat1008@gmail.com",
@@ -830,12 +827,12 @@ ws.onerror = (e) => console.log("Error:", e);
 
 ## 👥 Team
 
-Built by [Abhishek Kumawat](https://github.com/abhishekkumawat-47) and [Omesh Mehta](https://github.com/Omesh2004) and [Varada Patel](https://github.com/Varada2908).
+Built by [Abhishek Kumawat](https://github.com/abhishekkumawat-47) , [Omesh Mehta](https://github.com/Omesh2004) and [Varada Patel](https://github.com/Varada2908).
 
-Nucleus powers real-time feature intelligence for **modern fintech and SaaS platforms**.
+FinInsights powers real-time feature intelligence for **modern fintech and SaaS platforms**.
 
 ---
 
 <p align="center">
-  <sub>Built using Python, TypeScript, Kafka, ClickHouse, and Docker containers.</sub>
+  <sub>Built using Python, TypeScript, Kafka, ClickHouse, and Docker containers for FinSpark - Season 1 by Nucleus Softwares.</sub>
 </p>
