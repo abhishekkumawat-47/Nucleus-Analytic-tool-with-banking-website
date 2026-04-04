@@ -257,6 +257,8 @@ export default function LicenseUsagePage() {
     return true;
   });
   const unlicensedFeatures = (data as LicenseData | undefined)?.unlicensed_used || [];
+  const sortedLicensedFeatures = [...licensedFeatures].sort((a, b) => b.usage_count - a.usage_count);
+  const sortedUnlicensedFeatures = [...unlicensedFeatures].sort((a, b) => b.usage_count - a.usage_count);
   const hasData = licensedFeatures.length > 0;
 
   /* ─── Seed Handler ─── */
@@ -502,8 +504,8 @@ export default function LicenseUsagePage() {
               className="lg:col-span-3"
             >
               <div className="space-y-3 py-2">
-                {licensedFeatures.filter(f => f.is_used).length > 0 ? (
-                  licensedFeatures.filter(f => f.is_used).map((f, i) => (
+                {sortedLicensedFeatures.filter(f => f.is_used).length > 0 ? (
+                  sortedLicensedFeatures.filter(f => f.is_used).map((f, i) => (
                     <div key={i} className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
@@ -565,7 +567,7 @@ export default function LicenseUsagePage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
               {/* Licensed Feature Cards */}
-              {licensedFeatures.map((f, i) => (
+              {sortedLicensedFeatures.map((f, i) => (
                 <div key={i} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${!f.is_used ? 'border-red-200 bg-red-50/30' : 'border-gray-100'
                   }`}>
                   <div className="p-5">
@@ -638,7 +640,7 @@ export default function LicenseUsagePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {licensedFeatures.map((f, i) => (
+                    {sortedLicensedFeatures.map((f, i) => (
                       <tr key={i} className={`border-b border-gray-100 transition-colors ${!f.is_used ? 'bg-red-50/50' : 'hover:bg-gray-50'}`}>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
@@ -690,7 +692,7 @@ export default function LicenseUsagePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {unlicensedFeatures.map((f, i) => (
+                      {sortedUnlicensedFeatures.map((f, i) => (
                         <tr key={i} className="border-b border-gray-100 hover:bg-amber-50/30 transition-colors">
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-2">

@@ -29,12 +29,18 @@ export function useDashboardData() {
   const dashboardState = useAppSelector((state) => state.dashboard);
   const { data: session } = useSession();
   const lastInvalidateAtRef = useRef(0);
+  const tenantAliasMap: Record<string, string> = {
+    bank_a: 'nexabank',
+    bank_b: 'safexbank',
+  };
 
   // Auto-pin app_admins to their assigned tenants
   useEffect(() => {
     if (session?.user?.role === 'app_admin') {
-      const adminApps = (session.user.adminApps || []).filter(Boolean);
-      if (adminApps.length > 0 && !adminApps.some(app => dashboardState.selectedTenants.includes(app))) {
+      const adminApps = (session.user.adminApps || [])
+        .filter(Boolean)
+        .map((app) => tenantAliasMap[String(app).toLowerCase()] || String(app).toLowerCase());
+      if (adminApps.length > 0 && dashboardState.selectedTenants.length === 0) {
         dispatch(setSelectedTenants([adminApps[0]]));
       }
     }

@@ -30,6 +30,14 @@ import type { TimeRange, AvailableTenant } from '@/types';
 
 const timeRanges: TimeRange[] = ['Last 7 Days', 'Last 30 Days', 'Last 90 Days'];
 
+function timeRangeToParam(tr: TimeRange): string {
+  switch (tr) {
+    case 'Last 30 Days': return '30d';
+    case 'Last 90 Days': return '90d';
+    default: return '7d';
+  }
+}
+
 interface TransparencyCategory {
   category: string;
   is_synced: boolean;
@@ -48,25 +56,43 @@ function TopNavbar() {
     selectedTenants,
     deploymentMode,
   } = useAppSelector((state) => state.dashboard);
+  const rangeParam = useMemo(() => timeRangeToParam(timeRange), [timeRange]);
   const { data: session } = useSession();
 
   const { data: availableTenants = [], isFetching } = useQuery({
-    queryKey: ['availableTenants'],
-    queryFn: async () => await dashboardAPI.getAvailableTenants(),
+    queryKey: ['availableTenants', rangeParam],
+    queryFn: async () => await dashboardAPI.getAvailableTenants(rangeParam),
     staleTime: 5 * 60 * 1000,
   });
+
+  const TENANT_LABELS: Record<string, string> = {
+    nexabank: 'NexaBank (bank_a)',
+    safexbank: 'SafeXBank (bank_b)',
+  };
 
   /**
    * Build the tenant options list:
    *  - "All Tenants" → all tenant IDs
    */
   const tenantOptions = useMemo((): AvailableTenant[] => {
-    return availableTenants.length > 0
-      ? availableTenants
-      : [
-        { id: 'nexabank', name: 'NexaBank', eventCount: 0, uniqueUsers: 0 },
-        { id: 'safexbank', name: 'SafexBank', eventCount: 0, uniqueUsers: 0 },
-      ];
+    const defaults: AvailableTenant[] = [
+      { id: 'nexabank', name: 'NexaBank', eventCount: 0, uniqueUsers: 0 },
+      { id: 'safexbank', name: 'SafeXBank', eventCount: 0, uniqueUsers: 0 },
+    ];
+
+    const indexed = new Map<string, AvailableTenant>();
+    [...defaults, ...availableTenants].forEach((tenant) => {
+      if (tenant.id === 'nexabank' || tenant.id === 'safexbank') {
+        indexed.set(tenant.id, {
+          ...tenant,
+          name: TENANT_LABELS[tenant.id] || tenant.name,
+        });
+      }
+    });
+
+    return ['nexabank', 'safexbank']
+      .map((id) => indexed.get(id))
+      .filter(Boolean) as AvailableTenant[];
   }, [availableTenants]);
 
   // Log for debugging
@@ -133,13 +159,12 @@ function TopNavbar() {
   /** Compute display label for the currently-selected tenant */
   const selectedLabel = useMemo(() => {
     if (!selectedTenants || selectedTenants.length === 0) return 'Select Tenant';
-    if (isAllTenantsSelected) return 'All Tenants';
+    if (isAllTenantsSelected) return 'Both Banks';
     if (selectedTenants.length > 1) return `${selectedTenants.length} Tenants`;
     const singleTenantId = selectedTenants[0];
     const found = availableTenants.find((t) => t.id === singleTenantId);
-    return found
-      ? found.name
-      : singleTenantId.charAt(0).toUpperCase() + singleTenantId.slice(1);
+    if (found?.name) return TENANT_LABELS[singleTenantId] || found.name;
+    return TENANT_LABELS[singleTenantId] || singleTenantId.charAt(0).toUpperCase() + singleTenantId.slice(1);
   }, [selectedTenants, availableTenants, isAllTenantsSelected]);
 
   return (
@@ -185,7 +210,7 @@ function TopNavbar() {
             </button>
 
             {showTenantDropdown && (
-              <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150 max-h-[60vh] overflow-y-auto custom-scrollbar">
+              <div className="absolute top-full cursor-pointer left-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150 max-h-[60vh] overflow-y-auto custom-scrollbar">
                 {/* All Tenants option */}
                 <button
                   onClick={() => {
@@ -199,7 +224,7 @@ function TopNavbar() {
                 >
                   <span className="flex items-center gap-2">
                     <span className={`inline-block w-2 h-2 rounded-full ${isAllTenantsSelected ? 'bg-blue-500' : 'bg-gray-300'}`} />
-                    All Tenants
+                    Both Banks
                   </span>
                 </button>
 
@@ -215,7 +240,7 @@ function TopNavbar() {
                         dispatch(setSelectedTenants([tenant.id]));
                         setShowTenantDropdown(false);
                       }}
-                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${isSelected
+                      className={`w-full cursor-pointer text-left px-4 py-2.5 text-sm transition-colors ${isSelected
                           ? 'bg-blue-50 text-blue-600 font-semibold'
                           : 'text-gray-700 hover:bg-gray-50'
                         }`}

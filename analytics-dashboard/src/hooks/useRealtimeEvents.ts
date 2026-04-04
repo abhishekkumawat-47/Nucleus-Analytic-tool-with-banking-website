@@ -31,9 +31,15 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}) {
   const [lastEvent, setLastEvent] = useState<RealtimeEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const selectedTenants = useAppSelector((state) => state.dashboard.selectedTenants);
-  const selectedTenant = selectedTenants.length > 0 ? selectedTenants[0] : 'nexabank';
+  const tenantAliasMap: Record<string, string> = {
+    bank_a: 'nexabank',
+    bank_b: 'safexbank',
+  };
+  const selectedTenantRaw = selectedTenants.length > 0 ? selectedTenants[0] : 'nexabank';
+  const selectedTenant = tenantAliasMap[String(selectedTenantRaw).toLowerCase()] || String(selectedTenantRaw).toLowerCase();
 
   const connect = useCallback(() => {
     if (!selectedTenant) return;
@@ -46,6 +52,12 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}) {
 
       ws.onopen = () => {
         setIsConnected(true);
+        if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+        pingTimerRef.current = setInterval(() => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send('ping');
+          }
+        }, 15000);
       };
 
       ws.onmessage = (event) => {
@@ -77,6 +89,10 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}) {
       ws.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
+        if (pingTimerRef.current) {
+          clearInterval(pingTimerRef.current);
+          pingTimerRef.current = null;
+        }
         if (reconnectDelay > 0) {
           reconnectTimerRef.current = setTimeout(connect, reconnectDelay);
         }
@@ -94,6 +110,7 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}) {
     connect();
     return () => {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
       if (wsRef.current) wsRef.current.close();
     };
   }, [connect]);
