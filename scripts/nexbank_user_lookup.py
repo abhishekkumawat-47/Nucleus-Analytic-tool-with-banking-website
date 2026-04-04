@@ -125,7 +125,12 @@ def lookup_user(email: str):
         print(f"\n  ❌  No customer found with email: {email}")
         cur.close()
         conn.close()
-        return
+        return {
+            "email": email,
+            "found": False,
+            "promoted": False,
+            "already_admin": False,
+        }
 
     customer_id = customer["id"]
     old_role = customer["role"]
@@ -138,8 +143,10 @@ def lookup_user(email: str):
         )
         conn.commit()
         print(f"\n  🔄  Role updated: {old_role} → ADMIN")
+        promoted = True
     else:
         print(f"\n  ✅  User is already ADMIN")
+        promoted = False
 
     print_section("👤  Customer Profile")
     profile_rows = [
@@ -398,30 +405,117 @@ def lookup_user(email: str):
 
     cur.close()
     conn.close()
+    return {
+        "email": email,
+        "found": True,
+        "promoted": promoted,
+        "already_admin": not promoted,
+    }
+
+
+def list_tenant_admins(tenant: str):
+    """Query database and return all users with ADMIN role for a tenant."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    try:
+        cur.execute(
+            """
+            SELECT email FROM "Customer"
+            WHERE role = 'ADMIN' AND "tenantId" = (SELECT id FROM "Tenant" WHERE name = %s LIMIT 1)
+            ORDER BY email
+            """,
+            (tenant,),
+        )
+        admins = [row["email"] for row in cur.fetchall()]
+        return {"admins": admins}
+    except Exception as e:
+        return {"admins": [], "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python nexbank_user_lookup.py <email>")
-        print('Example: python nexbank_user_lookup.py "omeshmehta03@gmail.com"')
+    args = [arg.strip() for arg in sys.argv[1:] if arg.strip()]
+
+    if not args:
+        print("Usage:")
+        print("  1. Lookup user: python nexbank_user_lookup.py <email> [--json]")
+        print('     Example: python nexbank_user_lookup.py "omeshmehta03@gmail.com" --json')
+        print("  2. List admins: python nexbank_user_lookup.py --list-admins <tenant>")
+        print('     Example: python nexbank_user_lookup.py --list-admins nexabank')
         sys.exit(1)
 
-    email = sys.argv[1].strip()
+    # Handle --list-admins command
+    if args[0] == "--list-admins":
+        if len(args) < 2:
+            print("Error: --list-admins requires a tenant name")
+            print('Usage: python nexbank_user_lookup.py --list-admins <nexabank|safexbank>')
+            sys.exit(1)
+
+        tenant = args[1].lower().strip()
+        if tenant not in ("nexabank", "safexbank"):
+            print(json.dumps({"admins": [], "error": f"Unknown tenant: {tenant}"}))
+            sys.exit(1)
+
+        try:
+            print(f"\n🔗  Connecting to NexBank Supabase database to list admins for {tenant}...")
+            result = list_tenant_admins(tenant)
+            print(json.dumps(result))
+            sys.exit(0)
+        except psycopg2.OperationalError as e:
+            print(json.dumps({"admins": [], "error": str(e)}))
+            sys.exit(1)
+        except Exception as e:
+            print(json.dumps({"admins": [], "error": str(e)}))
+            sys.exit(1)
+
+    # Handle email lookup (original behavior)
+    json_mode = "--json" in args
+    email_args = [arg for arg in args if arg != "--json"]
+
+    if not email_args:
+        print("Usage: python nexbank_user_lookup.py <email> [--json]")
+        print('Example: python nexbank_user_lookup.py "omeshmehta03@gmail.com" --json')
+        sys.exit(1)
+
+    email = email_args[0]
     if not email or "@" not in email:
-        print(f"❌ Invalid email address: {email}")
+        if json_mode:
+            print(json.dumps({"email": email, "found": False, "error": "invalid_email"}))
+        else:
+            print(f"❌ Invalid email address: {email}")
         sys.exit(1)
 
-    print(f"\n🔗  Connecting to NexBank Supabase database...")
+    if not json_mode:
+        print(f"\n🔗  Connecting to NexBank Supabase database...")
     try:
-        lookup_user(email)
+        result = lookup_user(email)
+        if result is None:
+            result = {
+                "email": email,
+                "found": False,
+                "promoted": False,
+                "already_admin": False,
+            }
+        if json_mode:
+            print(json.dumps(result))
+        sys.exit(0 if result.get("found") else 2)
     except psycopg2.OperationalError as e:
-        print(f"\n❌ Connection failed: {e}")
-        print("   Check network/VPN and that the Supabase project is active.")
+        if json_mode:
+            print(json.dumps({"email": email, "found": False, "error": str(e)}))
+        else:
+            print(f"\n❌ Connection failed: {e}")
+            print("   Check network/VPN and that the Supabase project is active.")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        if json_mode:
+            print(json.dumps({"email": email, "found": False, "error": str(e)}))
+        else:
+            print(f"\n❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 

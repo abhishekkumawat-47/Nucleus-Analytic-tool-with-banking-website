@@ -1,15 +1,20 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Plus, Trash2, UserPlus } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Shield, Database, Info } from 'lucide-react';
+import { dashboardAPI } from '@/lib/api';
+
+type RbacConfig = {
+  super_admins: string[];
+  app_admins: Record<string, string[]>;
+};
 
 export default function RBACManager() {
-  const [config, setConfig] = useState<any>(null);
+  const [config, setConfig] = useState<RbacConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [targetApp, setTargetApp] = useState('twitter');
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState<'nexabank' | 'safexbank'>('nexabank');
 
   useEffect(() => {
     fetchConfig();
@@ -31,29 +36,17 @@ export default function RBACManager() {
     }
   };
 
-  const handleUpdateRole = async (action: 'add' | 'remove', email: string, appId: string) => {
-    setIsUpdating(true);
-    setError('');
-    try {
-      const res = await fetch('/api/rbac', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, email, appId })
-      });
-      
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setConfig(data.config);
-        if (action === 'add') setNewEmail('');
-      } else {
-        setError(data.error || 'Failed to update roles');
-      }
-    } catch (e) {
-      setError('Network error updating roles');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
+  const { data: tenantView, isLoading: tenantLoading } = useQuery({
+    queryKey: ['superadmin-tenant-view', selectedTenant],
+    queryFn: async () => {
+      const [kpi, insights] = await Promise.all([
+        dashboardAPI.getKPIMetrics([selectedTenant], '7d'),
+        dashboardAPI.getAIInsights([selectedTenant], '7d'),
+      ]);
+      return { kpi, insights };
+    },
+    staleTime: 30 * 1000,
+  });
 
   if (loading) return <div className="animate-pulse bg-gray-100 h-48 rounded-xl"></div>;
 
@@ -70,70 +63,84 @@ export default function RBACManager() {
         </div>
       )}
 
-      {/* Add New App Admin */}
-      <div className="bg-gray-100 p-4 rounded-xl border border-gray-100 mb-6">
-        <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-          <UserPlus size={16} /> Assign New App Admin
-        </h4>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="email"
-            placeholder="admin@company.com"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <select 
-            value={targetApp} 
-            onChange={(e) => setTargetApp(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-          >
-            <option value="twitter">Twitter Demo</option>
-            {/* Can be dynamic based on APP_REGISTRY in the future */}
-          </select>
-          <button
-            onClick={() => handleUpdateRole('add', newEmail, targetApp)}
-            disabled={!newEmail || isUpdating}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium transition-colors"
-          >
-            <Plus size={16} /> Add Admin
-          </button>
-        </div>
-      </div>
-
-      {/* List existing App Admins */}
-      <div>
+      {/* List existing App Admins from RBAC Configuration (Read-only) */}
+      <div className="mb-8">
         <h4 className="text-sm font-medium text-gray-700 mb-3">Current App Admins</h4>
-        {config?.app_admins && Object.keys(config.app_admins).length > 0 ? (
+        <p className="text-xs text-gray-500 mb-3">Configured admins per application.</p>
+        {config ? (
           <div className="space-y-4">
-            {Object.entries(config.app_admins).map(([appId, emails]) => (
+            {(['nexabank', 'safexbank'] as const).map((appId) => (
               <div key={appId} className="border border-gray-100 rounded-lg overflow-hidden">
                 <div className="bg-gray-100 px-4 py-2 border-b border-gray-100">
-                  <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">App: {appId}</span>
+                  <span className="text-xs font-bold uppercase text-gray-700 tracking-wider">App: {appId}</span>
                 </div>
                 <ul className="divide-y divide-gray-100">
-                  {(emails as string[]).map(email => (
-                    <li key={email} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-100">
-                      <span className="text-sm text-gray-900 font-medium">{email}</span>
-                      <button
-                        onClick={() => handleUpdateRole('remove', email, appId)}
-                        disabled={isUpdating}
-                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                        title="Remove Access"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </li>
-                  ))}
-                  {(emails as string[]).length === 0 && (
-                    <li className="px-4 py-3 text-sm text-gray-500 italic">No admins assigned to this app.</li>
+                  {(config.app_admins?.[appId] || []).length > 0 ? (
+                    (config.app_admins?.[appId] || []).map((email) => (
+                      <li key={email} className="px-4 py-3 bg-white">
+                        <span className="text-sm text-gray-900 font-medium">{email}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="px-4 py-3 text-sm text-gray-500 italic">No admins configured for this app.</li>
                   )}
                 </ul>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No app admins configured.</p>
+          <div className="animate-pulse space-y-4">
+            <div className="h-24 bg-gray-100 rounded-lg"></div>
+            <div className="h-24 bg-gray-100 rounded-lg"></div>
+          </div>
+        )}
+      </div>
+
+      {/* Superadmin per-tenant data */}
+      <div className="mt-8 border-t border-gray-100 pt-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <Database className="w-4 h-4" />
+            Tenant Data Received by Super Admin
+          </h4>
+          <select
+            value={selectedTenant}
+            onChange={(e) => setSelectedTenant(e.target.value as 'nexabank' | 'safexbank')}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+          >
+            <option value="nexabank">NexaBank</option>
+            <option value="safexbank">SafexBank</option>
+          </select>
+        </div>
+
+        {tenantLoading ? (
+          <div className="animate-pulse bg-gray-100 h-32 rounded-xl" />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {(tenantView?.kpi || []).map((metric) => (
+                <div key={metric.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                  <p className="text-xs text-gray-500">{metric.label}</p>
+                  <p className="text-xl font-bold text-gray-900">{metric.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-100 p-4">
+              <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <Info className="w-3.5 h-3.5" /> AI Insights
+              </p>
+              {(tenantView?.insights || []).length > 0 ? (
+                <ul className="space-y-2">
+                  {(tenantView?.insights || []).slice(0, 4).map((ins) => (
+                    <li key={ins.id} className="text-sm text-gray-700">{ins.message}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500">No insights available for this tenant right now.</p>
+              )}
+            </div>
+          </div>
         )}
       </div>
       

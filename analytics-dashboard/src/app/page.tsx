@@ -32,7 +32,7 @@ import AuthGuard from '@/components/AuthGuard';
 export default function AppSelectorPage() {
   const dispatch = useAppDispatch();
   const { deploymentMode } = useAppSelector((state) => state.dashboard);
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
 
   // Deployment info is now fetched via React Query / API — no thunk needed
@@ -46,10 +46,27 @@ export default function AppSelectorPage() {
   const userRole = session?.user?.role || 'user';
   const adminApps: string[] = session?.user?.adminApps || [];
 
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    if (userRole === 'super_admin') {
+      router.replace('/admin');
+    }
+  }, [status, userRole, router]);
+
   const apps =
     userRole === 'super_admin'
       ? allApps
       : allApps.filter((app) => adminApps.includes(app.appId));
+
+  if (status === 'authenticated' && userRole === 'super_admin') {
+    return (
+      <AuthGuard>
+        <div className="flex h-screen items-center justify-center bg-white">
+          <Image src="/logo1.png" alt="Nucleus" width={48} height={48} className="animate-pulse" />
+        </div>
+      </AuthGuard>
+    );
+  }
 
   return (
     <AuthGuard>
