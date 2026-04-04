@@ -24,7 +24,6 @@ import AIInsightsPanel from '@/components/AIInsightsPanel';
 import RealTimeUsers from '@/components/RealTimeUsers';
 import TopPages from '@/components/TopPages';
 import DeviceBreakdownChart from '@/components/DeviceBreakdownChart';
-import UserAcquisitionChart from '@/components/UserAcquisitionChart';
 import TopLocations from '@/components/TopLocations';
 import FeatureUsageChart from '@/components/FeatureUsageChart';
 import TopFeaturesChart from '@/components/TopFeaturesChart';
@@ -593,9 +592,8 @@ export default function TransparencyPage() {
 
                   <section className="flex-col" id="detail-section" aria-label="Detailed Analytics">
                           <TopPages data={dashboardData.topPages} />
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mt-8">
+                          <div className="grid grid-cols-1 gap-10 mt-8">
                             <DeviceBreakdownChart data={dashboardData.deviceBreakdown} />
-                            <UserAcquisitionChart data={dashboardData.acquisitionChannels} />
                           </div>
                         </section>
 

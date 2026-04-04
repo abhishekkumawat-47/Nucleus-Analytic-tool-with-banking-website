@@ -16,7 +16,6 @@ import AIInsightsPanel from '@/components/AIInsightsPanel';
 import RealTimeUsers from '@/components/RealTimeUsers';
 import TopPages from '@/components/TopPages';
 import DeviceBreakdownChart from '@/components/DeviceBreakdownChart';
-import UserAcquisitionChart from '@/components/UserAcquisitionChart';
 import TopLocations from '@/components/TopLocations';
 
 export default function DashboardContent() {
@@ -32,8 +31,8 @@ export default function DashboardContent() {
     pagesPerMinute,
     topPages,
     deviceBreakdown,
-    acquisitionChannels,
     locations,
+    selectedTenants,
     timeRange,
     changeTimeRange,
   } = useDashboardData();
@@ -89,12 +88,15 @@ export default function DashboardContent() {
         <TopLocations data={locations} />
       </section>
 
-      {/* ═══════════ TOP PAGES + DEVICE + ACQUISITION ═══════════ */}
+      {/* ═══════════ TOP PAGES + DEVICE ═══════════ */}
       <section className="flex-col" id="detail-section" aria-label="Detailed Analytics">
         <TopPages data={topPages} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mt-8">
-          <DeviceBreakdownChart data={deviceBreakdown} />
-          <UserAcquisitionChart data={acquisitionChannels} />
+        <div className="mt-8">
+          <DeviceBreakdownChart
+            data={deviceBreakdown}
+            timeRangeLabel={timeRange}
+            tenantLabel={selectedTenants.join(', ')}
+          />
         </div>
       </section>
 

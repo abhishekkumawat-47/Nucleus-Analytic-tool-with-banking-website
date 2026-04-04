@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { dashboardAPI } from '@/lib/api';
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { DashboardSkeleton, TableSkeleton } from '@/components/Skeletons';
 import ChartContainer from '@/components/ChartContainer';
 import { Shield, ToggleLeft, ToggleRight, History, Loader2 } from 'lucide-react';
@@ -14,6 +15,8 @@ export default function GovernancePage() {
   const { data: session } = useSession();
   const actorEmail = session?.user?.email || 'admin@unknown.com';
   const queryClient = useQueryClient();
+  const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
+  const lastRealtimeRefetchAt = useRef(0);
 
   const [activeTab, setActiveTab] = useState<'toggles' | 'audit' | 'logs'>('toggles');
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
@@ -26,7 +29,7 @@ export default function GovernancePage() {
   ];
 
   // Fetch tracking toggles
-  const { data: toggles = [], isLoading: loadingToggles } = useQuery({
+  const { data: toggles = [], isLoading: loadingToggles, refetch: refetchToggles } = useQuery({
     queryKey: ['trackingToggles', tenantsParam],
     queryFn: async () => {
       const result = await dashboardAPI.getTrackingToggles(tenantsParam);
@@ -48,18 +51,36 @@ export default function GovernancePage() {
         }
       });
       return mergedToggles;
-    }
+    },
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   // Fetch config audit log
-  const { data: configLogs = [], isLoading: loadingConfigLogs } = useQuery({
+  const { data: configLogs = [], isLoading: loadingConfigLogs, refetch: refetchConfigLogs } = useQuery({
     queryKey: ['configAuditLogs', tenantsParam],
     queryFn: async () => {
       const result = await dashboardAPI.getConfigAuditLog(tenantsParam);
       return result.logs || [];
     },
     enabled: activeTab === 'audit',
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
+
+  // Real-time refetch trigger with 5-second throttle
+  useEffect(() => {
+    if (!lastEvent) return;
+    const now = Date.now();
+    if (now - lastRealtimeRefetchAt.current < 5000) return;
+    lastRealtimeRefetchAt.current = now;
+    void refetchToggles();
+    if (activeTab === 'audit') void refetchConfigLogs();
+  }, [lastEvent, refetchToggles, refetchConfigLogs, activeTab]);
 
   const handleToggle = async (featureName: string, currentState: boolean) => {
     setTogglingFeature(featureName);

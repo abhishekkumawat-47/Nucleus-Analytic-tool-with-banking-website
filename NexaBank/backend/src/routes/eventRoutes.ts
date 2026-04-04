@@ -418,11 +418,24 @@ function locationMeta(loc: WorldCity, persona: UserPersona) {
 router.post(
   "/events/simulate",
   async (req: Request, res: Response): Promise<void> => {
-    const { count = 50, tenantId = "bank_a", days = 30 } = req.body as {
-      count?: number;
-      tenantId?: string;
-      days?: number;
+    const tenantAliasMap: Record<string, string> = {
+      nexabank: "bank_a",
+      safexbank: "bank_b",
     };
+
+    const rawCount = Number((req.body as { count?: unknown })?.count);
+    const rawDays = Number((req.body as { days?: unknown })?.days);
+    const rawTenant = String((req.body as { tenantId?: unknown })?.tenantId || "")
+      .trim()
+      .toLowerCase();
+
+    const tenantId = tenantAliasMap[rawTenant] || rawTenant || "bank_a";
+    const count = Number.isFinite(rawCount)
+      ? Math.max(1, Math.min(Math.floor(rawCount), 100))
+      : 50;
+    const days = Number.isFinite(rawDays)
+      ? Math.max(1, Math.min(Math.floor(rawDays), 60))
+      : 30;
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
@@ -432,9 +445,14 @@ router.post(
 
     try {
       const bcrypt = await import("bcryptjs");
+      const startedAt = Date.now();
       let usersCreated = 0;
       let transactionsCreated = 0;
       let eventsCreated = 0;
+      let applicationsCreated = 0;
+      let compliantUsers = 0;
+      let analyticsOptInUsers = 0;
+      let skippedUsers = 0;
       const createdUserIds: string[] = [];
 
       const simDays = Math.min(days, 60);
@@ -466,17 +484,26 @@ router.post(
         const streets = STREET_NAMES[location.continent] || STREET_NAMES["Asia"];
         let customer;
         try {
+          const hasAnalyticsOptIn = Math.random() < 0.78;
           customer = await prisma.customer.create({
             data: {
               name, email, phone, password: hashedPw, pan, tenantId,
               dateOfBirth: new Date(1975 + Math.floor(Math.random() * 30), Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28)),
-              settingConfig: {},
+              settingConfig: {
+                analyticsOptIn: hasAnalyticsOptIn,
+                theme: Math.random() < 0.5 ? "light" : "dark",
+              },
               address: { street: `${Math.floor(1 + Math.random() * 500)}, ${pick(streets)}`, city: location.city, state: location.country, zip: `${400000 + Math.floor(Math.random() * 200000)}` },
               kycStatus: "NOT_STARTED",
             },
           });
+
+          if (hasAnalyticsOptIn) {
+            analyticsOptInUsers++;
+          }
         } catch (e) {
           // Duplicate phone/email/pan — skip
+          skippedUsers++;
           continue;
         }
         usersCreated++;
@@ -495,6 +522,7 @@ router.post(
             },
           });
         } catch (e) {
+          skippedUsers++;
           continue;
         }
 
@@ -502,6 +530,10 @@ router.post(
         await trackEvent("free.auth.register.success", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs);
         await trackEvent("free.auth.login.success", customer.id, tenantId, { channel: persona.preferredChannel, ...lMeta }, baseTs + 60);
         eventsCreated += 2;
+        if ((customer.settingConfig as Record<string, unknown>)?.analyticsOptIn === true) {
+          await trackEvent("core.analytics.opt_in", customer.id, tenantId, { source: "simulation", ...lMeta }, baseTs + 90);
+          eventsCreated++;
+        }
 
         // ─── 6. Initial salary deposit ──────────────────────
         const salary = Math.floor(persona.salaryRange[0] + Math.random() * (persona.salaryRange[1] - persona.salaryRange[0]));
@@ -624,6 +656,7 @@ router.post(
                 data: { kycStatus: "VERIFIED", kycCompletedAt: new Date((dayTs + 500) * 1000) }
               });
               await trackEvent("free.loan.kyc_completed", customer.id, tenantId, { ...lMeta }, dayTs + 500);
+              compliantUsers++;
             } else {
               kycState = "REJECTED";
               await prisma.customer.update({ where: { id: customer.id }, data: { kycStatus: "REJECTED" } });
@@ -692,40 +725,68 @@ router.post(
           const userPlan = persona.isEnterprise ? "enterprise" : "free";
 
           if (userPlan === "enterprise") {
-            await trackEvent("pro.features.view", customer.id, tenantId, { ...lMeta }, dayTs + 1300);
+            await trackEvent("pro.features.view", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, dayTs + 1300);
             eventsCreated++;
 
-            // Use Controlled Fixed Distribution as requested by user
-            const rn = Math.random();
-            
-            // crypto_trade_execution -> 5%
-            if (rn < 0.05) {
-                await trackEvent("pro.crypto_trade_execution.success", customer.id, tenantId, { amount: 500, symbol: "BTC", ...lMeta, tier: "enterprise" }, dayTs + 1400);
-                eventsCreated++;
-                if (Math.random() < 0.1) {
-                   await trackEvent("pro.crypto_trade_execution.failed", customer.id, tenantId, { reason: "Insufficient Funds", ...lMeta, tier: "enterprise" }, dayTs + 1410);
-                   eventsCreated++;
-                }
-            } 
-            // wealth_rebalance -> 3%
-            else if (rn >= 0.05 && rn < 0.08) {
-                await trackEvent("pro.wealth_rebalance.success", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, dayTs + 1500);
-                eventsCreated++;
+            // Simulate a realistic enterprise user session that touches multiple pro modules.
+            const proTimelineBase = dayTs + 1340;
+
+            // Crypto suite
+            if (Math.random() < 0.22) {
+              await trackEvent("pro.crypto_price_feeds.view", customer.id, tenantId, { source: pick(["live", "cache"]), ...lMeta, tier: "enterprise" }, proTimelineBase + 10);
+              eventsCreated++;
             }
-            // payroll -> 2%
-            else if (rn >= 0.08 && rn < 0.10) {
-                await trackEvent("pro.payroll_batch.success", customer.id, tenantId, { employees: 42, ...lMeta, tier: "enterprise" }, dayTs + 1600);
+            if (Math.random() < 0.14) {
+              await trackEvent("pro.crypto_portfolio.view", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, proTimelineBase + 20);
+              eventsCreated++;
+            }
+            if (Math.random() < 0.11) {
+              await trackEvent("pro.crypto_trade_execution.success", customer.id, tenantId, { amount: Math.floor(500 + Math.random() * 4500), symbol: pick(["BTC", "ETH", "SOL", "XRP"]), ...lMeta, tier: "enterprise" }, proTimelineBase + 30);
+              eventsCreated++;
+              if (Math.random() < 0.09) {
+                await trackEvent("pro.crypto_trade_execution.failed", customer.id, tenantId, { reason: pick(["Insufficient Funds", "Price Slippage", "Exchange Timeout"]), ...lMeta, tier: "enterprise" }, proTimelineBase + 35);
                 eventsCreated++;
+              }
             }
 
-            // Other Pro features with micro distributions
-            if (Math.random() < 0.04) {
-               await trackEvent("pro.wealth_insights.view", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, dayTs + 1350);
-               eventsCreated++;
+            // Wealth suite
+            if (Math.random() < 0.16) {
+              await trackEvent("pro.wealth_insights.view", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, proTimelineBase + 45);
+              eventsCreated++;
             }
-            if (Math.random() < 0.03) {
-               await trackEvent("pro.crypto_portfolio.view", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, dayTs + 1250);
-               eventsCreated++;
+            if (Math.random() < 0.08) {
+              await trackEvent("pro.wealth_rebalance.success", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, proTimelineBase + 55);
+              eventsCreated++;
+              if (Math.random() < 0.06) {
+                await trackEvent("pro.wealth_rebalance.failed", customer.id, tenantId, { reason: pick(["Allocation Constraint", "Market Halt"]), ...lMeta, tier: "enterprise" }, proTimelineBase + 58);
+                eventsCreated++;
+              }
+            }
+
+            // Payroll suite
+            if (Math.random() < 0.13) {
+              await trackEvent("pro.payroll_payees.view", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, proTimelineBase + 70);
+              eventsCreated++;
+            }
+            if (Math.random() < 0.1) {
+              const payrollSearchSuccess = Math.random() > 0.12;
+              await trackEvent(payrollSearchSuccess ? "pro.payroll_search.success" : "pro.payroll_search.failed", customer.id, tenantId, { queryLength: Math.floor(3 + Math.random() * 7), ...lMeta, tier: "enterprise" }, proTimelineBase + 78);
+              eventsCreated++;
+            }
+            if (Math.random() < 0.07) {
+              const payrollBatchSuccess = Math.random() > 0.1;
+              await trackEvent(payrollBatchSuccess ? "pro.payroll_batch.success" : "pro.payroll_batch.failed", customer.id, tenantId, { employees: Math.floor(10 + Math.random() * 190), ...lMeta, tier: "enterprise" }, proTimelineBase + 86);
+              eventsCreated++;
+            }
+
+            // AI insights suite
+            if (Math.random() < 0.15) {
+              await trackEvent("pro.finance_library_stats.view", customer.id, tenantId, { ...lMeta, tier: "enterprise" }, proTimelineBase + 96);
+              eventsCreated++;
+            }
+            if (Math.random() < 0.09) {
+              await trackEvent("pro.finance_library_book.access", customer.id, tenantId, { title: pick(["The Intelligent Investor", "The Psychology of Money", "Rich Dad Poor Dad", "A Random Walk Down Wall Street"]), ...lMeta, tier: "enterprise" }, proTimelineBase + 104);
+              eventsCreated++;
             }
           }
 
@@ -782,6 +843,7 @@ router.post(
               },
             });
             hasAppliedLoan = true;
+            applicationsCreated++;
 
             await trackEvent("lending.loan.applied", customer.id, tenantId, { loanType, amount: principalAmount, term, ...lMeta }, dayTs + 3000);
             if (kycComplete) {
@@ -827,6 +889,13 @@ router.post(
               } catch (e) {
                 // License already exists — skip
               }
+            } else {
+              await trackEvent("pro.features.unlock_failed", customer.id, tenantId, {
+                featureId,
+                reason: currentBalance <= 5000 ? "insufficient_funds" : "not_ready_to_upgrade",
+                ...lMeta,
+              }, dayTs + 4505);
+              eventsCreated++;
             }
           }
 
@@ -1015,14 +1084,42 @@ router.post(
         }
       }
 
+      const runMs = Date.now() - startedAt;
+      const throughput = runMs > 0 ? Number(((eventsCreated / runMs) * 1000).toFixed(2)) : 0;
+
       res.status(200).json({
         message: "Stochastic worldwide simulation complete",
+        requestedUsers: userCount,
+        requestedTenant: rawTenant || "bank_a",
+        resolvedTenant: tenantId,
         usersCreated,
         totalUsers: await prisma.customer.count({ where: { tenantId } }),
         transactionsCreated,
         eventsCreated,
+        applicationsCreated,
+        loansApplied: applicationsCreated,
+        compliantUsers,
+        kycCompleted: compliantUsers,
+        analyticsOptInUsers,
+        fullyCompleted: analyticsOptInUsers,
+        skippedUsers,
         payeesCreated,
         simulatedDays: simDays,
+        runMs,
+        throughputEventsPerSec: throughput,
+        processingSummary: {
+          users: { requested: userCount, created: usersCreated, skipped: skippedUsers },
+          funnel: {
+            compliantUsers,
+            analyticsOptInUsers,
+            applicationsCreated,
+          },
+          generated: {
+            eventsCreated,
+            transactionsCreated,
+            payeesCreated,
+          },
+        },
         continentDistribution: Object.keys(CONTINENT_WEIGHTS).reduce((acc, c) => {
           acc[c] = `${CONTINENT_WEIGHTS[c]}%`;
           return acc;

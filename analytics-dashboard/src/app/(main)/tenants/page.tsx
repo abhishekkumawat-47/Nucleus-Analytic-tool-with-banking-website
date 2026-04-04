@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import {
   ResponsiveContainer,
   LineChart,
@@ -60,7 +61,7 @@ function formatCount(value: number): string {
 }
 
 function formatCurrency(value: number): string {
-  return `$${value.toLocaleString()}`;
+  return `Rs ${value.toLocaleString('en-IN')}`;
 }
 
 function formatPercent(value: number): string {
@@ -186,24 +187,35 @@ function SectionHeader({
 export default function TenantsPage() {
   const [range, setRange] = useState<'7d' | '30d' | '90d'>('30d');
   const [trendMode, setTrendMode] = useState<'events' | 'users'>('events');
+  const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
+  const lastRealtimeRefetchAt = useRef(0);
 
   const comparisonQuery = useQuery({
     queryKey: ['tenant-comparison', range],
     queryFn: () => dashboardAPI.getTenantComparison(['nexabank', 'safexbank'], range),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 20 * 1000,
+    refetchInterval: 20 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const trafficQuery = useQuery({
     queryKey: ['tenant-traffic', range],
     queryFn: () => dashboardAPI.getTrafficData(['nexabank', 'safexbank'], range),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 20 * 1000,
+    refetchInterval: 20 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const kpiQueries = useQueries({
     queries: TENANTS.map((tenant) => ({
       queryKey: ['tenant-kpis', tenant.id, range],
       queryFn: () => dashboardAPI.getKPIMetrics([tenant.id], range),
-      staleTime: 5 * 60 * 1000,
+      staleTime: 20 * 1000,
+      refetchInterval: 20 * 1000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
     })),
   });
 
@@ -211,7 +223,10 @@ export default function TenantsPage() {
     queries: TENANTS.map((tenant) => ({
       queryKey: ['tenant-secondary-kpis', tenant.id, range],
       queryFn: () => dashboardAPI.getSecondaryKPIMetrics([tenant.id], range),
-      staleTime: 5 * 60 * 1000,
+      staleTime: 20 * 1000,
+      refetchInterval: 20 * 1000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
     })),
   });
 
@@ -219,7 +234,10 @@ export default function TenantsPage() {
     queries: TENANTS.map((tenant) => ({
       queryKey: ['tenant-license-usage', tenant.id, range],
       queryFn: () => dashboardAPI.getLicenseUsage([tenant.id], range),
-      staleTime: 5 * 60 * 1000,
+      staleTime: 20 * 1000,
+      refetchInterval: 20 * 1000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
     })),
   });
 
@@ -227,7 +245,10 @@ export default function TenantsPage() {
     queries: TENANTS.map((tenant) => ({
       queryKey: ['tenant-retention', tenant.id, range],
       queryFn: () => dashboardAPI.getRetentionData([tenant.id], range),
-      staleTime: 5 * 60 * 1000,
+      staleTime: 20 * 1000,
+      refetchInterval: 20 * 1000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
     })),
   });
 
@@ -235,9 +256,25 @@ export default function TenantsPage() {
     queries: TENANTS.map((tenant) => ({
       queryKey: ['tenant-funnel', tenant.id, range],
       queryFn: () => dashboardAPI.getFunnelData([tenant.id], range),
-      staleTime: 5 * 60 * 1000,
+      staleTime: 20 * 1000,
+      refetchInterval: 20 * 1000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
     })),
   });
+
+  // Real-time refetch trigger with 4-second throttle
+  useEffect(() => {
+    if (!lastEvent) return;
+    const now = Date.now();
+    if (now - lastRealtimeRefetchAt.current < 4000) return;
+    lastRealtimeRefetchAt.current = now;
+    void comparisonQuery.refetch();
+    void trafficQuery.refetch();
+    [...kpiQueries, ...secondaryQueries, ...licenseQueries, ...retentionQueries, ...funnelQueries].forEach(q => {
+      if (q.refetch) void q.refetch();
+    });
+  }, [lastEvent, comparisonQuery, trafficQuery, kpiQueries, secondaryQueries, licenseQueries, retentionQueries, funnelQueries]);
 
   const isLoading =
     comparisonQuery.isLoading ||
@@ -309,7 +346,7 @@ export default function TenantsPage() {
       const allRows = [...tenant.license.licensed, ...tenant.license.unused_licensed];
 
       allRows.forEach((row) => {
-        if (!row.feature_name.startsWith('pro.')) return;
+        if ((row.plan_tier || '').toLowerCase() !== 'enterprise') return;
         const current = featureMap.get(row.feature_name) || {
           feature: row.feature_name,
           nexabank: { usage: 0, users: 0, totalUsers: 0 },
@@ -395,7 +432,7 @@ export default function TenantsPage() {
   const retentionSummary = tenantSnapshots.map((tenant) => {
     const latest = tenant.retention[0] || null;
     const averageRetention = tenant.retention.length
-      ? tenant.retention.reduce((sum, row) => sum + ((row.month2 + row.month3) / 2), 0) / tenant.retention.length
+      ? tenant.retention.reduce((sum: number, row: any) => sum + ((row.month2 + row.month3) / 2), 0) / tenant.retention.length
       : 0;
 
     return {
@@ -407,7 +444,7 @@ export default function TenantsPage() {
   });
 
   const performanceSummary = tenantSnapshots.map((tenant) => {
-    const avgResponseTime = toNumber(tenant.kpiMap['Avg Response Time']);
+    const avgResponseTime = toNumber(tenant.kpiMap['Avg. Response Time'] || tenant.kpiMap['Avg Response Time']);
     const errorRate = toNumber(tenant.kpiMap['Error Rate']);
     return {
       ...tenant,
@@ -423,8 +460,8 @@ export default function TenantsPage() {
     const wasteDelta = toNumber(leftTenant.license.summary.waste_pct) - toNumber(rightTenant.license.summary.waste_pct);
     const growthDelta = toNumber(leftTenant.comparison?.growth_rate) - toNumber(rightTenant.comparison?.growth_rate);
 
-    const topFeatureGap = featureRows.find((row) => Math.max(row.nexaAdoption, row.safexAdoption) >= 20 && Math.abs(row.nexaAdoption - row.safexAdoption) >= 15);
-    const underusedFeature = featureRows.find((row) => row.nexaAdoption < 10 && row.safexAdoption < 10);
+    const topFeatureGap = featureRows.find((row: any) => Math.max(row.nexaAdoption, row.safexAdoption) >= 20 && Math.abs(row.nexaAdoption - row.safexAdoption) >= 15);
+    const underusedFeature = featureRows.find((row: any) => row.nexaAdoption < 10 && row.safexAdoption < 10);
 
     items.push({
       title: 'Revenue Opportunity',

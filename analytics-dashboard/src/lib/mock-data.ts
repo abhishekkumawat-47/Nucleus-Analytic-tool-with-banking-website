@@ -16,7 +16,6 @@ import {
   PagesPerMinuteDataPoint,
   TopPage,
   DeviceBreakdown,
-  AcquisitionChannel,
   LocationData,
   AuditLog,
   FeatureConfig,

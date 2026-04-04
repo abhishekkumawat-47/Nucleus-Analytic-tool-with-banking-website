@@ -317,7 +317,7 @@ export default function FunnelPage() {
         {metricCards.map((card) => (
           <article
             key={card.label}
-            className={`rounded-xl border bg-white p-4 shadow-sm ${card.border}`}
+            className={`rounded-xl border bg-blue-50 p-4 shadow-sm ${card.border}`}
           >
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{card.label}</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">{card.value}</p>
