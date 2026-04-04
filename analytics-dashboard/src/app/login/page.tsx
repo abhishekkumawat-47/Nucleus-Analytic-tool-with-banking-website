@@ -45,7 +45,7 @@ export default function LoginPage() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <Image src="/logo1.png" alt="Nucleus Logo" width={40} height={40} className="object-contain" />
-            <span className="text-2xl font-bold tracking-tight">Nucleus</span>
+            <span className="text-2xl font-bold tracking-tight">FinInsights</span>
           </div>
           <p className="text-white/60 text-sm mt-1">Feature Intelligence Platform</p>
         </div>
