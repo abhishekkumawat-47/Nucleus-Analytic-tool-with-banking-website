@@ -36,7 +36,7 @@ export default function GovernancePage() {
         changed_by: 'system',
         changed_at: '-'
       }));
-      
+
       const mergedToggles = DEFAULT_FEATURES.map(f => {
         const override = apiToggles.find((a: any) => a.feature_name === f.feature_name);
         return override || f;
@@ -44,7 +44,7 @@ export default function GovernancePage() {
 
       apiToggles.forEach((a: any) => {
         if (!mergedToggles.find(m => m.feature_name === a.feature_name)) {
-            mergedToggles.push(a);
+          mergedToggles.push(a);
         }
       });
       return mergedToggles;
@@ -93,9 +93,8 @@ export default function GovernancePage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all cursor-pointer ${
-              activeTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all cursor-pointer ${activeTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
           >
             <tab.icon className="h-4 w-4" />
             {tab.label}
@@ -235,8 +234,8 @@ export default function GovernancePage() {
               </thead>
               <tbody>
                 {auditLogs.map((log, index) => (
-                  <tr 
-                    key={log.id} 
+                  <tr
+                    key={log.id}
                     className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${index === auditLogs.length - 1 ? 'border-b-0' : ''}`}
                   >
                     <td className="px-4 py-3 text-gray-400 font-medium whitespace-nowrap">{log.timestamp}</td>
@@ -255,4 +254,5 @@ export default function GovernancePage() {
       )}
     </div>
   );
+}
 }

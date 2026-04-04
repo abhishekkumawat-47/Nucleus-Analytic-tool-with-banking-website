@@ -58,11 +58,10 @@ export default function UserJourneyPage() {
                   <button
                     key={u.user_id}
                     onClick={() => loadJourney(u.user_id)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
-                      selectedUser === u.user_id 
-                        ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                    className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${selectedUser === u.user_id
+                        ? 'border-blue-500 bg-blue-50 shadow-sm'
                         : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <User className="h-4 w-4 text-gray-400" />
@@ -113,7 +112,7 @@ export default function UserJourneyPage() {
                         <div className="w-4 h-4 bg-[#1a73e8] rounded-full border-2 border-white shadow z-10"></div>
                         <span className="text-xs font-bold text-[#1a73e8] uppercase tracking-wider bg-white border border-[#1a73e8]/30 px-2 py-0.5 rounded">Session {sIdx + 1}</span>
                       </div>
-                      
+
                       {session.map((evt: any, eIdx: number) => (
                         <div key={eIdx} className="relative mb-4 -ml-[25px] flex items-start gap-3">
                           <div className="w-3 h-3 mt-1.5 bg-white border-2 border-gray-300 rounded-full z-10 flex-shrink-0"></div>
