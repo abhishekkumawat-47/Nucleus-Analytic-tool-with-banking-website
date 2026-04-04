@@ -63,6 +63,78 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   );
 }
 
+export function HeatmapTableSkeleton({ rows = 8, cols = 7 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+      {/* Legend and Description */}
+      <div className="px-5 pt-5 pb-4 border-b border-gray-100 space-y-3">
+        <SkeletonBlock className="h-4 w-64" />
+        <div className="flex items-center gap-2 pt-2">
+          <SkeletonBlock className="h-3 w-20" />
+          <div className="flex h-3 items-center gap-0.5">
+            {Array.from({ length: 11 }).map((_, i) => (
+              <div key={i} className="h-3 w-3 bg-gray-50 rounded-sm" />
+            ))}
+          </div>
+          <SkeletonBlock className="h-3 w-16" />
+        </div>
+      </div>
+
+      {/* Table Structure */}
+      <div className="px-5 py-4 max-w-full overflow-x-auto">
+        <table className="w-full min-w-[920px] table-fixed lg:min-w-full border-collapse">
+          <colgroup>
+            <col style={{ width: '16%' }} />
+            {Array.from({ length: cols }).map((_, i) => (
+              <col key={`col-${i}`} style={{ width: `${78 / cols}%` }} />
+            ))}
+            <col style={{ width: '6%' }} />
+          </colgroup>
+
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-white/95 backdrop-blur-sm">
+              <th className="sticky left-0 z-20 border-b border-gray-100 bg-white px-3 py-3 text-left">
+                <SkeletonBlock className="h-3 w-12" />
+              </th>
+              {Array.from({ length: cols }).map((_, i) => (
+                <th
+                  key={`header-${i}`}
+                  className="border-b border-gray-100 px-1 py-3 text-center"
+                >
+                  <SkeletonBlock className="h-3 w-14 mx-auto" />
+                </th>
+              ))}
+              <th className="border-b border-gray-100 px-3 py-3 text-right">
+                <SkeletonBlock className="h-3 w-10" />
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {Array.from({ length: rows }).map((_, rowIdx) => (
+              <tr key={rowIdx} className="group align-middle border-b border-gray-50">
+                <td className="sticky left-0 z-20 border-r border-gray-100 bg-white px-3 py-3">
+                  <SkeletonBlock className="h-3 w-16" />
+                </td>
+                {Array.from({ length: cols }).map((_, colIdx) => (
+                  <td key={`cell-${rowIdx}-${colIdx}`} className="p-0">
+                    <div className="flex h-11 w-full items-center justify-center border-r border-gray-50 bg-gray-50">
+                      <SkeletonBlock className="h-3 w-6" />
+                    </div>
+                  </td>
+                ))}
+                <td className="border-l border-gray-100 px-3 py-3">
+                  <SkeletonBlock className="h-3 w-10" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function SidebarSkeleton() {
   return (
     <div className="w-56 bg-white border-r border-gray-100 p-4 space-y-6">
@@ -125,12 +197,40 @@ export function DashboardSkeleton() {
 export function FeaturePageSkeleton() {
   return (
     <div className="animate-in fade-in duration-300 space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartSkeleton height="h-80" />
-        <ChartSkeleton height="h-80" />
+      {/* Info Cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-lg border border-gray-100 bg-white px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <SkeletonBlock className="h-3.5 w-3.5 rounded" />
+              <SkeletonBlock className="h-3 w-20" />
+            </div>
+            <SkeletonBlock className="h-4 w-28" />
+          </div>
+        ))}
       </div>
-      <ChartSkeleton height="h-64" />
-      <TableSkeleton rows={6} />
+
+      {/* Filter & Controls Row */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <SkeletonBlock className="h-9 w-40 rounded-lg" />
+          <SkeletonBlock className="h-9 w-32 rounded-lg" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <SkeletonBlock className="h-6 w-32 rounded-md" />
+          <SkeletonBlock className="h-6 w-28 rounded-md" />
+          <SkeletonBlock className="h-6 w-36 rounded-md" />
+        </div>
+      </div>
+
+      {/* Feature Usage & Top Features Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartSkeleton height="h-72" />
+        <ChartSkeleton height="h-72" />
+      </div>
+
+      {/* Heatmap Table */}
+      <HeatmapTableSkeleton rows={8} cols={7} />
     </div>
   );
 }

@@ -25,8 +25,32 @@ def parse_range(range_str: str) -> int:
     try: return int(range_str)
     except ValueError: return 7
 
+def build_heatmap_group_labels(days: int, groups: List[str], is_compare: bool) -> List[str]:
+    if is_compare:
+        return [g.replace('_', ' ').title() for g in groups]
+
+    safe_days = max(days, 1)
+    bucket_count = max(len(groups), 1)
+    bucket_span = safe_days / bucket_count
+    start_date = datetime.utcnow().date() - timedelta(days=safe_days)
+    labels: List[str] = []
+
+    for index, _ in enumerate(groups):
+        bucket_start = start_date + timedelta(days=int(round(index * bucket_span)))
+        bucket_end = start_date + timedelta(days=max(int(round((index + 1) * bucket_span)) - 1, 0))
+
+        if bucket_end < bucket_start:
+            bucket_end = bucket_start
+
+        if bucket_start == bucket_end:
+            labels.append(bucket_start.strftime('%b %d'))
+        else:
+            labels.append(f"{bucket_start.strftime('%b %d')} - {bucket_end.strftime('%b %d')}")
+
+    return labels
+
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # In-memory dictionary to cache AI reports: { tenant_id: { "timestamp": float, "report": str } }
 AI_REPORT_CACHE = {}
@@ -747,10 +771,9 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
     try:
         activities = {}
         if is_compare:
-            compare_tenants = tenants[:2]
             cond = "tenant_id IN %(tenant_ids)s"
-            params = {"tenant_ids": tuple(compare_tenants), "days": days}
-            groups = compare_tenants
+            params = {"tenant_ids": tuple(tenants), "days": days}
+            groups = tenants
             
             sql = f"""
                 SELECT 
@@ -832,6 +855,7 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
         return {
             "is_compare": is_compare,
             "groups": groups,
+            "group_labels": build_heatmap_group_labels(days, groups, is_compare),
             "activities": formatted_activities
         }
 
@@ -1379,8 +1403,9 @@ def get_feature_activity(tenants: str = Query(..., description="Comma-separated 
         return []
 
 @app.get("/features/heatmap")
-def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated list of tenants")):
+def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
     tenant_id = tenants
+    days = parse_range(range)
     """
     Returns grid-based heatmap matrix for features.
     If multiple tenants provided, matrix is Feature x Tenant.
@@ -1396,19 +1421,19 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
         sql = """
             SELECT event_name as feature, tenant_id as group_key, count() as total
             FROM feature_intelligence.events_raw
-            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - 14
+            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - %(days)s
             GROUP BY feature, group_key
         """
     else:
         sql = """
             SELECT event_name as feature, toString(toDate(timestamp)) as group_key, count() as total
             FROM feature_intelligence.events_raw
-            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - 7
+            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - %(days)s
             GROUP BY feature, group_key
         """
         
     try:
-        results = ch_client.query(sql, {"tenant_ids": tenant_ids})
+        results = ch_client.query(sql, {"tenant_ids": tenant_ids, "days": days})
         
         # Organize data
         features = {}
@@ -1479,6 +1504,7 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
         return {
             "is_compare": is_compare,
             "groups": sorted_groups,
+            "group_labels": build_heatmap_group_labels(days, sorted_groups, is_compare),
             "activities": activities
         }
     except Exception as e:

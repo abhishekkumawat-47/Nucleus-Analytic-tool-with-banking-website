@@ -111,7 +111,7 @@ export default function HomePage() {
                     <div className="flex justify-between items-center mb-8">
                       <div className="text-white">
                         <p className="text-sm opacity-80">Current Balance</p>
-                        <h3 className="text-2xl font-bold">$8,256.42</h3>
+                        <h3 className="text-2xl font-bold">₹8,256.42</h3>
                       </div>
                       <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
                         <Shield className="h-5 w-5 text-white" />
@@ -119,8 +119,8 @@ export default function HomePage() {
                     </div>
                     <div className="grid grid-cols-2 gap-4 mb-6">
                       {[
-                        { label: "Savings", value: "$3,285.90" },
-                        { label: "Checking", value: "$4,970.52" },
+                        { label: "Savings", value: "₹3,285.90" },
+                        { label: "Checking", value: "₹4,970.52" },
                       ].map((account, i) => (
                         <div
                           key={i}
@@ -143,17 +143,17 @@ export default function HomePage() {
                         {[
                           {
                             name: "Starbucks",
-                            amount: "-$4.50",
+                            amount: "-₹450",
                             time: "9:32 AM",
                           },
                           {
                             name: "Amazon",
-                            amount: "-$29.99",
+                            amount: "-₹299",
                             time: "Yesterday",
                           },
                           {
                             name: "Salary Deposit",
-                            amount: "+$2,850.00",
+                            amount: "+₹2,850.00",
                             time: "Jun 1",
                           },
                         ].map((tx, i) => (
@@ -203,7 +203,7 @@ export default function HomePage() {
                       Send to:
                     </span>
                     <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                      John D.
+                      Aryan Raj
                     </span>
                   </div>
                   <div className="mt-1 flex justify-between items-center">
@@ -211,7 +211,7 @@ export default function HomePage() {
                       Amount:
                     </span>
                     <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
-                      $120.00
+                      ₹1200.00
                     </span>
                   </div>
                 </div>
@@ -379,7 +379,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Payment Complete</p>
-                    <p className="font-medium text-sm">$250.00</p>
+                    <p className="font-medium text-sm">₹2500</p>
                   </div>
                 </div>
               </div>
@@ -391,7 +391,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Interest Added</p>
-                    <p className="font-medium text-sm">+$12.42</p>
+                    <p className="font-medium text-sm">+₹124.20</p>
                   </div>
                 </div>
               </div>
