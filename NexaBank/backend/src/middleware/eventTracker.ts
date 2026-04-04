@@ -122,66 +122,140 @@ function normalizeChannel(channel: unknown): "web" | "mobile" | "api" | "batch" 
 }
 
 /**
- * Validates and auto-corrects event names to [domain].[feature].[status] taxonomy.
+ * Validates and auto-corrects event names to strict [page].[feature].[status] taxonomy.
  * Logs a warning when correction happens so developers can fix instrumentation.
  */
 function enforceTaxonomy(eventName: string): string {
-  const taxonomyRegex = /^[a-z0-9_-]+(\.[a-z0-9_-]+){2,}$/;
+  const strictRegex = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
+  const normalizePart = (part: string): string => part.replace(/[^a-z0-9_]/g, "_").replace(/^_+|_+$/g, "") || "core";
+  const normalizeStatus = (status: string): string => {
+    if (status === "error" || status === "fail") return "failed";
+    if (status === "viewed") return "view";
+    if (status === "access") return "success";
+    return status;
+  };
+  const splitFeatureStatus = (token: string): { feature: string; status: string } => {
+    const t = normalizePart(token);
+    const suffixMap: Array<[string, string]> = [
+      ["_success", "success"],
+      ["_failed", "failed"],
+      ["_error", "failed"],
+      ["_view", "view"],
+      ["_access", "success"],
+      ["_action", "action"],
+    ];
+    for (const [suffix, status] of suffixMap) {
+      if (t.endsWith(suffix) && t.length > suffix.length) {
+        return { feature: normalizePart(t.slice(0, -suffix.length)), status };
+      }
+    }
+    return { feature: t, status: "action" };
+  };
 
-  if (taxonomyRegex.test(eventName)) {
-    return eventName;
+  const normalizedInput = String(eventName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+
+  if (strictRegex.test(normalizedInput)) {
+    const [page, feature, status] = normalizedInput.split(".");
+    if (["free", "pro", "core", "enterprise", "lending"].includes(page)) {
+      const split = splitFeatureStatus(status);
+      const candidate = `${normalizePart(feature)}.${split.feature}.${normalizeStatus(split.status)}`;
+      if (strictRegex.test(candidate)) {
+        return candidate;
+      }
+    }
+    if (page === "auth" && (feature === "login" || feature === "register")) {
+      return `${feature}.auth.${normalizeStatus(status)}`;
+    }
+    return `${page}.${feature}.${normalizeStatus(status)}`;
   }
 
   // Explicit legacy → canonical mappings
   const LEGACY_MAP: Record<string, string> = {
-    'login':                'free.auth.login.success',
-    'login_success':        'free.auth.login.success',
-    'login_failed':         'free.auth.login.failed',
-    'register':             'free.auth.register.success',
-    'register_success':     'free.auth.register.success',
-    'dashboard_view':       'free.dashboard.view',
-    'accounts_view':        'free.accounts.view',
-    'account_view':         'free.accounts.view',
-    'transactions_view':    'free.transactions.view',
-    'transaction_view':     'free.transactions.view',
-    'payees_view':          'free.payees.view',
-    'payee_added':          'free.payees.add_success',
-    'payee_edited':         'free.payees.edit_success',
-    'payee_deleted':        'free.payees.delete_success',
-    'payee_removed':        'free.payees.delete_success',
-    'payees':               'free.payment.success',
-    'payment_completed':    'free.payment.success',
-    'payment_failed':       'free.payment.failed',
-    'loan_applied':         'free.loan.applied',
-    'loans_page_view':      'free.loans.view',
-    'kyc_started':          'free.loan.kyc_started',
-    'kyc_completed':        'free.loan.kyc_completed',
-    'kyc_failed':           'free.loan.kyc_failed',
-    'kyc_abandoned':        'free.loan.kyc_abandoned',
-    'profile_view':         'free.profile.view',
-    'profile_updated':      'free.profile.edit_success',
-    'pro_unlocked':         'pro.features_unlock.success',
+    'login': 'login.auth.success',
+    'login_success': 'login.auth.success',
+    'login_failed': 'login.auth.failed',
+    'register': 'register.auth.success',
+    'register_success': 'register.auth.success',
+    'dashboard_view': 'dashboard.page.view',
+    'accounts_view': 'accounts.page.view',
+    'account_view': 'accounts.page.view',
+    'transactions_view': 'transactions.page.view',
+    'transaction_view': 'transactions.page.view',
+    'payees_view': 'payees.page.view',
+    'payee_added': 'payees.add_payee.success',
+    'payee_edited': 'payees.edit_payee.success',
+    'payee_deleted': 'payees.remove_payee.success',
+    'payee_removed': 'payees.remove_payee.success',
+    'payees': 'payees.page.view',
+    'payment_completed': 'transactions.pay_now.success',
+    'payment_failed': 'transactions.pay_now.failed',
+    'loan_applied': 'loans.submit_application.success',
+    'loans_page_view': 'loans.page.view',
+    'kyc_started': 'loans.kyc_started.success',
+    'kyc_completed': 'loans.kyc_completed.success',
+    'kyc_failed': 'loans.kyc_failed.failed',
+    'kyc_abandoned': 'loans.kyc_abandoned.failed',
+    'profile_view': 'profile.page.view',
+    'profile_updated': 'profile.edit_details.success',
+    'pro_unlocked': 'pro.features_unlock.success',
     'pro_license_unlocked': 'pro.features_unlock.success',
-    'pro_feature_usage':    'pro.features.view',
-    'feature_view':         'pro.features.view',
-    'wealth_rebalance':     'pro.wealth_rebalance.success',
-    'ai_insight_download':  'pro.finance_library_book.access',
-    'crypto-trading':       'pro.crypto_portfolio.view',
-    'wealth-management-pro': 'pro.wealth_insights.view',
-    'bulk-payroll-processing': 'pro.payroll_payees.view',
-    'ai-insights':          'pro.finance_library_stats.view',
-    'page_view':            'free.dashboard.view',
-    'location_captured':    'free.profile.location',
+    'pro_feature_usage': 'dashboard.feature.view',
+    'feature_view': 'dashboard.feature.view',
+    'wealth_rebalance': 'wealth_management.rebalance.success',
+    'ai_insight_download': 'ai_insights.book.success',
+    'crypto_trading': 'crypto_trading.page.view',
+    'wealth_management_pro': 'wealth_management.page.view',
+    'bulk_payroll_processing': 'payroll.page.view',
+    'ai_insights': 'ai_insights.page.view',
+    'page_view': 'dashboard.page.view',
+    'location_captured': 'profile.location.success',
   };
 
-  const mapped = LEGACY_MAP[eventName];
+  const mapped = LEGACY_MAP[normalizedInput];
   if (mapped) {
     console.warn(`[TAXONOMY] Auto-corrected "${eventName}" → "${mapped}"`);
     return mapped;
   }
 
+  const parts = normalizedInput.split(".").filter(Boolean);
+  while (parts.length >= 3 && ["free", "pro", "core", "enterprise", "lending"].includes(parts[0])) {
+    parts.shift();
+  }
+
+  if (parts.length === 3 && parts[0] === "auth" && (parts[1] === "login" || parts[1] === "register")) {
+    const candidate = `${parts[1]}.auth.${normalizeStatus(parts[2])}`;
+    if (strictRegex.test(candidate)) {
+      console.warn(`[TAXONOMY] Normalized "${eventName}" → "${candidate}"`);
+      return candidate;
+    }
+  }
+
+  if (parts.length === 2) {
+    const page = normalizePart(parts[0]);
+    const { feature, status } = splitFeatureStatus(parts[1]);
+    const candidate = `${page}.${feature}.${normalizeStatus(status)}`;
+    if (strictRegex.test(candidate)) {
+      console.warn(`[TAXONOMY] Upgraded 2-part event "${eventName}" → "${candidate}"`);
+      return candidate;
+    }
+  }
+
+  if (parts.length >= 3) {
+    const page = normalizePart(parts[0]);
+    const status = normalizeStatus(normalizePart(parts[parts.length - 1]));
+    const feature = normalizePart(parts.slice(1, -1).join("_")) || "action";
+    const candidate = `${page}.${feature}.${status}`;
+    if (strictRegex.test(candidate)) {
+      console.warn(`[TAXONOMY] Normalized "${eventName}" → "${candidate}"`);
+      return candidate;
+    }
+  }
+
   // Generic fallback: wrap unknown events so they still have 3 segments
-  const safe = `core.${eventName.replace(/[^a-z0-9_-]/g, '_')}.action`;
+  const safe = `core.${normalizePart(normalizedInput)}.action`;
   console.warn(`[TAXONOMY] Unknown event "${eventName}" → "${safe}"`);
   return safe;
 }
@@ -191,35 +265,57 @@ function enforceTaxonomy(eventName: string): string {
  * Covers all NexaBank and SafexBank pages.
  */
 function derivePathFromEvent(eventName: string): string {
+  const normalized = String(eventName || "").trim().toLowerCase();
+  const [page] = normalized.split(".");
+
+  const pageMap: Record<string, string> = {
+    login: "/login",
+    register: "/register",
+    dashboard: "/dashboard",
+    accounts: "/accounts",
+    transactions: "/transactions",
+    payees: "/payees",
+    loans: "/loans",
+    profile: "/profile",
+    crypto_trading: "/pro-feature?id=crypto-trading",
+    wealth_management: "/pro-feature?id=wealth-management-pro",
+    payroll: "/pro-feature?id=bulk-payroll-processing",
+    ai_insights: "/pro-feature?id=ai-insights",
+  };
+
+  if (page && pageMap[page]) {
+    return pageMap[page];
+  }
+
   // Auth
-  if (eventName.startsWith('auth.login')) return '/login';
-  if (eventName.startsWith('auth.register') || eventName.startsWith('auth.registration')) return '/register';
+  if (normalized.startsWith('auth.login')) return '/login';
+  if (normalized.startsWith('auth.register') || normalized.startsWith('auth.registration')) return '/register';
   // Core pages
-  if (eventName.startsWith('core.dashboard')) return '/dashboard';
-  if (eventName.startsWith('core.accounts')) return '/accounts';
-  if (eventName.startsWith('core.payees') || eventName.includes('payee')) return '/payees';
-  if (eventName.startsWith('core.profile')) return '/profile';
-  if (eventName.startsWith('core.transfers')) return '/transfers';
-  if (eventName.startsWith('core.approvals')) return '/approvals';
-  if (eventName.startsWith('core.cards')) return '/cards';
+  if (normalized.startsWith('core.dashboard')) return '/dashboard';
+  if (normalized.startsWith('core.accounts')) return '/accounts';
+  if (normalized.startsWith('core.payees') || normalized.includes('payee')) return '/payees';
+  if (normalized.startsWith('core.profile')) return '/profile';
+  if (normalized.startsWith('core.transfers')) return '/transfers';
+  if (normalized.startsWith('core.approvals')) return '/approvals';
+  if (normalized.startsWith('core.cards')) return '/cards';
   // Payments / transactions
-  if (eventName.startsWith('payments.history') || eventName.startsWith('core.transactions') || eventName.includes('payment')) return '/transactions';
+  if (normalized.startsWith('payments.history') || normalized.startsWith('core.transactions') || normalized.includes('payment')) return '/transactions';
   // Lending
-  if (eventName.startsWith('lending.') || eventName.startsWith('loans')) return '/loans';
+  if (normalized.startsWith('lending.') || normalized.startsWith('loans')) return '/loans';
   // Pro features
-  if (eventName.startsWith('pro.')) return '/pro-features';
+  if (normalized.startsWith('pro.')) return '/pro-features';
   // Legacy
-  if (eventName === 'dashboard_view' || eventName === 'page_view') return '/dashboard';
-  if (eventName === 'accounts_view') return '/accounts';
-  if (eventName === 'transactions_view') return '/transactions';
-  if (eventName === 'payees_view' || eventName === 'payees') return '/payees';
-  if (eventName === 'loan_applied' || eventName === 'loans_page_view') return '/loans';
-  if (eventName === 'profile_view') return '/profile';
+  if (normalized === 'dashboard_view' || normalized === 'page_view') return '/dashboard';
+  if (normalized === 'accounts_view') return '/accounts';
+  if (normalized === 'transactions_view') return '/transactions';
+  if (normalized === 'payees_view' || normalized === 'payees') return '/payees';
+  if (normalized === 'loan_applied' || normalized === 'loans_page_view') return '/loans';
+  if (normalized === 'profile_view') return '/profile';
   // Generic background or cross-page features map to dashboard
-  if (eventName.includes('.location') || eventName.includes('.stats') || eventName.includes('.features_unlock')) return '/dashboard';
+  if (normalized.includes('.location') || normalized.includes('.stats') || normalized.includes('.features_unlock')) return '/dashboard';
   
   // Derive from second segment, fallback to /dashboard if unexpected segment length
-  const parts = eventName.split('.');
+  const parts = normalized.split('.');
   if (parts.length >= 2) {
       // Map known sub-spaces back to their major pages to avoid fragment paths
       const sub = parts[1];

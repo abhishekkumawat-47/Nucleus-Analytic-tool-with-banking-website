@@ -1,5 +1,6 @@
 import sys
 import os
+from urllib.parse import parse_qsl, urlencode
 from typing import List, Optional
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from storage.client import ch_client
 from api.insights import generate_insights, query_ollama
-from api.page_map import resolve_page, resolve_display_name, normalize_event
+from api.page_map import resolve_page, resolve_display_name, normalize_event, canonicalize_event_name, CANONICAL_EVENT_ALIASES, FEATURE_DISPLAY_NAMES
 from core.config import settings
 from core.middleware import require_cloud_mode, require_tenant_access
 
@@ -24,6 +25,45 @@ def parse_range(range_str: str) -> int:
         except ValueError: return 7
     try: return int(range_str)
     except ValueError: return 7
+
+
+TENANT_ALIAS_MAP = {
+    "bank_a": "nexabank",
+    "bank_b": "safexbank",
+}
+
+
+def normalize_tenant_csv(raw_value: str) -> str:
+    if not raw_value:
+        return raw_value
+    parts = [p.strip() for p in str(raw_value).split(",") if p.strip()]
+    if not parts:
+        return raw_value
+    mapped = [TENANT_ALIAS_MAP.get(p.lower(), p.lower()) for p in parts]
+    return ",".join(mapped)
+
+
+def rewrite_tenant_query_aliases(request: Request) -> None:
+    query_string = request.scope.get("query_string", b"")
+    if not query_string:
+        return
+
+    pairs = parse_qsl(query_string.decode("utf-8", errors="ignore"), keep_blank_values=True)
+    if not pairs:
+        return
+
+    changed = False
+    rewritten = []
+    for key, value in pairs:
+        if key in {"tenants", "tenant_id"}:
+            normalized = normalize_tenant_csv(value)
+            rewritten.append((key, normalized))
+            changed = changed or (normalized != value)
+        else:
+            rewritten.append((key, value))
+
+    if changed:
+        request.scope["query_string"] = urlencode(rewritten).encode("utf-8")
 
 def build_heatmap_group_labels(days: int, groups: List[str], is_compare: bool) -> List[str]:
     if is_compare:
@@ -50,7 +90,7 @@ def build_heatmap_group_labels(days: int, groups: List[str], is_compare: bool) -
     return labels
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # In-memory dictionary to cache AI reports: { tenant_id: { "timestamp": float, "report": str } }
 AI_REPORT_CACHE = {}
@@ -104,6 +144,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
     ]
     
     async def dispatch(self, request: Request, call_next):
+        # Accept backend tenant aliases (bank_a/bank_b) in all analytics query params.
+        rewrite_tenant_query_aliases(request)
         path = request.url.path
         
         # Public paths and CORS Preflight — always accessible
@@ -253,7 +295,37 @@ def get_feature_usage(tenants: str = Query(..., description="Comma-separated lis
     """
     try:
         results = ch_client.query(sql, params)
-        return {"tenant_id": tenants, "period_days": days, "usage": results}
+
+        merged = {}
+        for row in results:
+            raw_event = str(row.get("event_name", ""))
+            canonical = canonicalize_event_name(raw_event)
+            if not canonical:
+                continue
+            total = int(row.get("total_interactions", 0))
+            unique_users = int(row.get("unique_users", 0))
+
+            if canonical not in merged:
+                merged[canonical] = {
+                    "event_name": canonical,
+                    "total_interactions": 0,
+                    "unique_users": 0,
+                }
+
+            merged[canonical]["total_interactions"] += total
+            # Avoid inflated counts when multiple aliases map to one canonical event.
+            merged[canonical]["unique_users"] = max(
+                merged[canonical]["unique_users"],
+                unique_users,
+            )
+
+        usage = sorted(
+            merged.values(),
+            key=lambda item: item["total_interactions"],
+            reverse=True,
+        )
+
+        return {"tenant_id": tenants, "period_days": days, "usage": usage}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -353,11 +425,11 @@ def compare_tenants(feature: str = Query(..., description="Feature event to comp
 
 @app.get("/insights")
 def get_insights(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    tenant_id = tenants
     """
     Returns AI/Rule-based actionable insights for a tenant. 
     Detects features that are not being used or sudden spikes.
     """
+    tenant_id = tenants
     require_tenant_access(tenant_id)
 
     cached_data = AI_REPORT_CACHE.get(tenant_id)
@@ -502,7 +574,7 @@ def get_kpi_metrics(tenants: str = Query(..., description="Comma-separated list 
             },
             {
                 "id": "avg-response",
-                "label": "Avg Response Time",
+                "label": "Avg. Response Time",
                 "value": rt_display,
                 "change": rt_change,
                 "changeDirection": rt_dir,
@@ -514,8 +586,8 @@ def get_kpi_metrics(tenants: str = Query(..., description="Comma-separated list 
                 "value": f"{error_rate}%",
                 "change": err_change,
                 "changeDirection": err_dir,
-                "icon": "alert-triangle",
-            }
+                "icon": "shield-alert",
+            },
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -674,17 +746,17 @@ def get_secondary_kpi(tenants: str = Query(..., description="Comma-separated lis
 
 @app.get("/metrics/traffic")
 def get_traffic_data(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    days = parse_range(range)
-    tenant_id = tenants
     """
     Time series data for traffic overview. Pivot if comma-separated.
     """
+    days = parse_range(range)
+    tenant_id = tenants
     try:
         tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
         if len(tenants) == 1:
             sql = """
                 SELECT 
-                    toDate(timestamp) as date,
+                    toDate(timestamp + INTERVAL 330 MINUTE) as date,
                     count() as pageViews,
                     uniq(user_id) as visitors
                 FROM feature_intelligence.events_raw
@@ -696,7 +768,7 @@ def get_traffic_data(tenants: str = Query(..., description="Comma-separated list
         else:
             sql = """
                 SELECT 
-                    toDate(timestamp) as date,
+                    toDate(timestamp + INTERVAL 330 MINUTE) as date,
                     tenant_id,
                     count() as pageViews,
                     uniq(user_id) as visitors
@@ -720,11 +792,11 @@ def get_traffic_data(tenants: str = Query(..., description="Comma-separated list
 
 @app.get("/metrics/feature_usage_series")
 def get_feature_usage_series(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    days = parse_range(range)
-    tenant_id = tenants
     """
     Time series feature usage data points. Pivot if comma-separated.
     """
+    days = parse_range(range)
+    tenant_id = tenants
     try:
         tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
         if len(tenants) == 1:
@@ -785,13 +857,17 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
                 GROUP BY event_name, tenant_id
             """
             res = ch_client.query(sql, params)
-            max_count = max([r["count"] for r in res]) if res else 1
+            max_count = 1
             
             for row in res:
-                f = row["feature"]
+                f = canonicalize_event_name(str(row["feature"]))
+                if not f:
+                    continue
                 if f not in activities:
                     activities[f] = {g: 0 for g in groups}
-                activities[f][row["group_key"]] = row["count"]
+                activities[f][row["group_key"]] = activities[f].get(row["group_key"], 0) + int(row["count"])
+                if activities[f][row["group_key"]] > max_count:
+                    max_count = activities[f][row["group_key"]]
                 
         else:
             cond = "tenant_id = %(tenant_id)s"
@@ -812,14 +888,18 @@ def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated l
                 ORDER BY group_key ASC
             """
             res = ch_client.query(sql, params)
-            max_count = max([r["count"] for r in res]) if res else 1
+            max_count = 1
             groups = [str(i) for i in builtins_range(1, 8)]
 
             for row in res:
-                f = row["feature"]
+                f = canonicalize_event_name(str(row["feature"]))
+                if not f:
+                    continue
                 if f not in activities:
                     activities[f] = {g: 0 for g in groups}
-                activities[f][row["group_key"]] = row["count"]
+                activities[f][row["group_key"]] = activities[f].get(row["group_key"], 0) + int(row["count"])
+                if activities[f][row["group_key"]] > max_count:
+                    max_count = activities[f][row["group_key"]]
 
         # format response
         formatted_activities = []
@@ -911,39 +991,72 @@ def get_all_tenants(tenant_id: Optional[str] = None):
 
 @app.get("/metrics/devices")
 def get_device_breakdown(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    days = parse_range(range)
-    tenant_id = tenants
     """
     Device breakdown parsed from metadata. Uses Hare-Niemeyer for exact 100% normalization.
     """
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
 
     sql = f"""
-        SELECT 
-            if(JSONHas(metadata, 'device_type') AND length(JSONExtractString(metadata, 'device_type')) > 0, JSONExtractString(metadata, 'device_type'), 'mobile') as device,
+        SELECT
+            if(isValidJSON(metadata), lower(ifNull(JSONExtractString(metadata, 'device_type'), '')), '') as device_type,
+            if(isValidJSON(metadata), lower(ifNull(JSONExtractString(metadata, 'device'), '')), '') as device,
+            if(isValidJSON(metadata), lower(ifNull(JSONExtractString(metadata, 'platform'), '')), '') as platform,
+            if(isValidJSON(metadata), lower(ifNull(JSONExtractString(metadata, 'channel'), '')), '') as channel,
             count() as value
         FROM feature_intelligence.events_raw
         WHERE {cond} AND timestamp >= today() - %(days)s
-        GROUP BY device
+        GROUP BY device_type, device, platform, channel
     """
     try:
         device_res = ch_client.query(sql, params)
-        colors = {"desktop": "#1a73e8", "mobile": "#4285F4", "tablet": "#8AB4F8"}
-        
-        # Merge into canonical device names first
+        device_aliases = {
+            "desktop": "desktop",
+            "web": "desktop",
+            "browser": "desktop",
+            "laptop": "desktop",
+            "mobile": "mobile",
+            "android": "mobile",
+            "ios": "mobile",
+            "app": "mobile",
+            "tablet": "tablet",
+            "ipad": "tablet",
+        }
+
+        def _field(row, key: str, index: int):
+            if isinstance(row, dict):
+                return row.get(key)
+            if isinstance(row, (list, tuple)) and 0 <= index < len(row):
+                return row[index]
+            try:
+                return row[key]
+            except Exception:
+                return None
+
         merged = {}
         for row in device_res:
-            dev = row['device'].lower()
-            if dev not in colors:
-                dev = "mobile"
-            raw_val = int(row['value'])
+            device_type = str(_field(row, "device_type", 0) or "").strip()
+            device_name = str(_field(row, "device", 1) or "").strip()
+            platform = str(_field(row, "platform", 2) or "").strip()
+            channel = str(_field(row, "channel", 3) or "").strip()
+            raw = (
+                device_type
+                or device_name
+                or platform
+                or channel
+            ).lower()
+            dev = device_aliases.get(raw, "unknown")
+            if dev == "unknown":
+                continue
+            raw_val = int(_field(row, "value", 4) or 0)
             if raw_val > 0:
                 merged[dev] = merged.get(dev, 0) + raw_val
         
         if not merged:
-            return []
+            return [{"name": "Unknown", "value": 100, "color": "#9CA3AF"}]
 
         total = sum(merged.values())
         items = list(merged.items())
@@ -955,13 +1068,13 @@ def get_device_breakdown(tenants: str = Query(..., description="Comma-separated 
         remainder_seats = 100 - allocated_sum
         remainders.sort(key=lambda x: x[2], reverse=True)
         final = {name: fl for name, _, fl in floors}
-        for i in range(remainder_seats):
+        for i in builtins_range(remainder_seats):
             final[remainders[i][0]] += 1
 
         breakdown = []
-        base_colors = ['#1a73e8', '#4285F4', '#8AB4F8', '#34A853', '#F59E0B']
+        base_colors = ['#1a73e8', '#4285F4', '#8AB4F8', '#34A853', '#F59E0B', '#9CA3AF']
         i_color = 0
-        for name, _ in remainders:
+        for name, _, _ in remainders:
             if final[name] > 0:
                 breakdown.append({
                     "name": name.capitalize(),
@@ -973,16 +1086,16 @@ def get_device_breakdown(tenants: str = Query(..., description="Comma-separated 
         breakdown.sort(key=lambda x: x["value"], reverse=True)
         return breakdown
     except Exception:
-        return []
+        return [{"name": "Unknown", "value": 100, "color": "#9CA3AF"}]
 
 @app.get("/metrics/channels")
 def get_acquisition_channels(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    days = parse_range(range)
-    tenant_id = tenants
     """
     User acquisition channel breakdown derived from event metadata.
     Classifies events by referrer/channel field and returns % distribution.
     """
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
@@ -991,7 +1104,7 @@ def get_acquisition_channels(tenants: str = Query(..., description="Comma-separa
         SELECT
             if(JSONHas(metadata, 'channel') AND length(JSONExtractString(metadata, 'channel')) > 0,
                JSONExtractString(metadata, 'channel'),
-               'direct') as channel,
+               'unknown') as channel,
             count() as total
         FROM feature_intelligence.events_raw
         WHERE {cond} AND timestamp >= today() - %(days)s
@@ -1013,48 +1126,81 @@ def get_acquisition_channels(tenants: str = Query(..., description="Comma-separa
             "cpc": "Paid Search",
         }
 
+        # Keep acquisition intent clean by filtering device-surface values out.
+        device_surface_values = {
+            "mobile", "web", "desktop", "tablet", "android", "ios", "app", "browser", "kiosk"
+        }
+
         merged: dict = {}
         for row in results:
             raw = str(row["channel"]).lower().strip()
+            if raw in device_surface_values or raw in {"", "unknown", "na", "n/a", "none", "null"}:
+                continue
             label = CHANNEL_LABELS.get(raw, raw.replace("_", " ").title())
             merged[label] = merged.get(label, 0) + int(row["total"])
 
         if not merged:
-            import hashlib
-            from datetime import datetime
-            import random
-            
-            # Deterministic simulation based on hour and tenant if DB is empty
-            current_hour = datetime.utcnow().strftime("%Y-%m-%d-%H")
-            seed_str = f"{tenants[0]}_{current_hour}"
-            seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
-            rng = random.Random(seed)
-            
-            organic = rng.randint(35, 55)
-            direct = rng.randint(20, 35)
-            referral = rng.randint(10, 20)
-            social = rng.randint(5, 12)
-            email = 100 - (organic + direct + referral + social)
-            if email < 1:
-                email = rng.randint(2, 6)
-                
-            mock_channels = [
-                {"name": "Organic Search", "value": organic},
-                {"name": "Direct",         "value": direct},
-                {"name": "Referral",       "value": referral},
-                {"name": "Social",         "value": social},
-                {"name": "Email",          "value": email},
-            ]
-            
-            # Sort by value desc
-            mock_channels.sort(key=lambda x: -x["value"])
-            
+            # If channel metadata is missing/unreliable, derive a meaningful intent mix from feature events.
+            sql_intent = f"""
+                SELECT event_name, count() as total
+                FROM feature_intelligence.events_raw
+                WHERE {cond} AND timestamp >= today() - %(days)s
+                GROUP BY event_name
+                ORDER BY total DESC
+            """
+            feature_rows = ch_client.query(sql_intent, params)
+
+            intent_buckets = {
+                "Returning Sessions": 0,
+                "New Registrations": 0,
+                "High-Intent Actions": 0,
+                "Feature Exploration": 0,
+            }
+
+            for row in feature_rows:
+                event_name = normalize_event(str(row.get("event_name", "")))
+                count = int(row.get("total", 0))
+
+                if event_name.startswith("login."):
+                    intent_buckets["Returning Sessions"] += count
+                elif event_name.startswith("register."):
+                    intent_buckets["New Registrations"] += count
+                elif (
+                    "pay_now" in event_name
+                    or "trade_execution" in event_name
+                    or "batch" in event_name
+                    or "rebalance" in event_name
+                    or event_name.endswith(".success")
+                ):
+                    intent_buckets["High-Intent Actions"] += count
+                else:
+                    intent_buckets["Feature Exploration"] += count
+
+            total_intent = sum(intent_buckets.values())
+            if total_intent == 0:
+                return []
+
+            items = sorted(intent_buckets.items(), key=lambda x: x[1], reverse=True)
+            quotients = [(name, value, (value / total_intent) * 100) for name, value in items if value > 0]
+            if not quotients:
+                return []
+
+            floors = [(name, int(q)) for name, _, q in quotients]
+            allocated = sum(v for _, v in floors)
+            remainder = sorted(quotients, key=lambda x: x[2] - int(x[2]), reverse=True)
+            pct_map = {n: v for n, v in floors}
+
+            for n, _, _ in remainder[:max(0, 100 - allocated)]:
+                pct_map[n] = pct_map.get(n, 0) + 1
+
             return [
                 {
-                    "name": c["name"],
-                    "value": c["value"],
-                    "formattedValue": f"{c['value']}%"
-                } for c in mock_channels
+                    "name": name,
+                    "value": pct_map.get(name, 0),
+                    "formattedValue": f"{pct_map.get(name, 0)}%"
+                }
+                for name, _ in items
+                if pct_map.get(name, 0) > 0
             ]
 
         grand_total = sum(merged.values())
@@ -1073,13 +1219,7 @@ def get_acquisition_channels(tenants: str = Query(..., description="Comma-separa
             for name, _ in items
         ]
     except Exception:
-        return [
-            {"name": "Organic Search", "value": 45, "formattedValue": "45%"},
-            {"name": "Direct",         "value": 28, "formattedValue": "28%"},
-            {"name": "Referral",       "value": 15, "formattedValue": "15%"},
-            {"name": "Social",         "value": 8,  "formattedValue": "8%"},
-            {"name": "Email",          "value": 4,  "formattedValue": "4%"},
-        ]
+        return []
 
 @app.get("/locations")
 
@@ -1209,23 +1349,45 @@ def get_audit_logs(tenants: str = Query(..., description="Comma-separated list o
 
 @app.get("/metrics/realtime_users")
 def get_realtime_users(tenants: str = Query(..., description="Comma-separated list of tenants")):
+    """Returns real-time active user count with IST timestamp context.
+
+    Active users are calculated by latest session state:
+      1) Session seen in the last 5 minutes
+      2) Latest event for that session is NOT a logout/session-end marker
+    """
     tenant_id = tenants
-    """Returns real-time active user count with IST timestamp context."""
     from datetime import timezone, timedelta
+
     IST = timezone(timedelta(hours=5, minutes=30))
 
-    tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
-    cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
-    params = {"tenant_id": tenants[0]} if len(tenants) == 1 else {"tenant_ids": tuple(tenants)}
-    
+    tenant_list = [t.strip() for t in tenant_id.split(",") if t.strip()]
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenant_list[0]} if len(tenant_list) == 1 else {"tenant_ids": tuple(tenant_list)}
+
     sql = f"""
-        SELECT uniqExact(user_id) as users 
-        FROM feature_intelligence.events_raw 
-        WHERE {cond} AND timestamp >= now('Asia/Kolkata') - INTERVAL 5 MINUTE
+        WITH session_states AS (
+            SELECT
+                user_id,
+                if(
+                    JSONHas(metadata, 'session_id') AND length(JSONExtractString(metadata, 'session_id')) > 0,
+                    JSONExtractString(metadata, 'session_id'),
+                    concat('user:', user_id)
+                ) as session_id,
+                max(timestamp) as last_seen,
+                argMax(event_name, timestamp) as last_event
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND timestamp >= now('UTC') - INTERVAL 30 MINUTE
+            GROUP BY user_id, session_id
+        )
+        SELECT uniqExact(user_id) as users
+        FROM session_states
+        WHERE last_seen >= now('UTC') - INTERVAL 5 MINUTE
+          AND NOT match(lower(last_event), '(logout|signout|session_end)')
     """
+
     try:
         results = ch_client.query(sql, params)
-        user_count = results[0]['users'] if results else 0
+        user_count = int(results[0]['users']) if results else 0
         now_ist = datetime.now(IST)
         return {
             "count": user_count,
@@ -1237,8 +1399,8 @@ def get_realtime_users(tenants: str = Query(..., description="Comma-separated li
 
 @app.get("/metrics/pages_per_minute")
 def get_pages_per_minute(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    tenant_id = tenants
     """Returns pages-per-minute data with IST-localized time labels."""
+    tenant_id = tenants
     from datetime import timezone, timedelta
     IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -1275,8 +1437,6 @@ def get_pages_per_minute(tenants: str = Query(..., description="Comma-separated 
 
 @app.get("/metrics/top_pages")
 def get_top_pages(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    days = parse_range(range)
-    tenant_id = tenants
     """
     Returns page-level aggregation: each row is a "page" (URL), with the total
     events across ALL features that fire on that page, plus the list of features.
@@ -1285,6 +1445,8 @@ def get_top_pages(tenants: str = Query(..., description="Comma-separated list of
     Response includes: pageUrl, totalEvents, comparisonPct, rank, features[]
     Each feature includes: feature, displayName, count, inPagePct
     """
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
@@ -1304,37 +1466,36 @@ def get_top_pages(tenants: str = Query(..., description="Comma-separated list of
         # 4. BUILD PROPER PAGE -> FEATURE MODEL
         page_data: dict = {}
         
-        # Exact explicit known pages for the test app
+        # Exact explicit known pages for NexaBank and admin surfaces.
         KNOWN_PAGES = {
             "/register", "/login", "/dashboard", "/accounts", "/payees",
             "/transactions", "/loans", "/pro-feature?id=crypto-trading",
             "/pro-feature?id=ai-insights", "/pro-feature?id=wealth-management-pro",
-            "/pro-feature?id=bulk-payroll-processing", "/profile"
+            "/pro-feature?id=bulk-payroll-processing", "/profile",
+            "/admin/loans", "/admin/feature-toggles", "/admin/simulate",
         }
         
         for r in results:
-            raw_page = r['page']
-            raw_feature = r['raw_feature']
+            raw_page = str(r['page']) if r['page'] is not None else ""
+            raw_feature = str(r['raw_feature']) if r['raw_feature'] is not None else ""
             cnt = int(r['cnt'])
 
-            # 6. HANDLE NULL PATHS CORRECTLY
-            # For legacy simulated events before path ingestion became standard, 
-            # we must fallback to guessing the physical page to prevent dropping data.
-            if not raw_page or raw_page == "null" or raw_page == "":
-                page = resolve_page(raw_feature)
-                if not page:
-                    page = "/dashboard"
-            else:
-                page = str(raw_page)
-                
-            # If the resolved or database path doesn't strictly match a known real page, fallback to dashboard
-            if page not in KNOWN_PAGES:
-                # Some old paths might be /pro-features, which mapping dictates should be one of the query id params
-                # But typically generic unmapped items like location captured bounce to dashboard
-                page = "/dashboard"
+            # Normalize first and use canonical page-based taxonomy everywhere.
+            feature = canonicalize_event_name(raw_feature)
+            if not feature:
+                continue
+            resolved_page = resolve_page(feature)
 
-            # 1. & 5. NORMALIZE EVENTS & FIX DUPLICATES
-            feature = normalize_event(raw_feature)
+            # Prefer canonical page from normalized feature taxonomy.
+            if resolved_page and resolved_page in KNOWN_PAGES:
+                page = resolved_page
+            else:
+                # Keep only real pages; skip unresolved / fake buckets such as /pro-feature.
+                if not raw_page or raw_page == "null" or raw_page == "":
+                    continue
+                page = str(raw_page)
+                if page not in KNOWN_PAGES:
+                    continue
 
             if page not in page_data:
                 page_data[page] = {"totalEvents": 0, "features": {}}
@@ -1387,165 +1548,115 @@ def get_feature_activity(tenants: str = Query(..., description="Comma-separated 
         SELECT event_name, count() as total
         FROM feature_intelligence.events_raw 
         WHERE {cond} AND timestamp >= today() - %(days)s
-        GROUP BY event_name ORDER BY total DESC LIMIT 5
+        GROUP BY event_name ORDER BY total DESC LIMIT 500
     """
     try:
         results = ch_client.query(sql, params)
-        activities = []
+        merged = {}
         for r in results:
+            canonical = canonicalize_event_name(str(r["event_name"]))
+            if not canonical:
+                continue
+            merged[canonical] = merged.get(canonical, 0) + int(r["total"])
+
+        activities = []
+        for feature_name, total in sorted(merged.items(), key=lambda x: x[1], reverse=True)[:5]:
             activities.append({
-                "feature": str(r["event_name"]),
+                "feature": feature_name,
                 "segments": [],
-                "level": "High" if r['total'] > 10 else "Low"
+                "level": "High" if total > 10 else "Low"
             })
         return activities
     except Exception as e:
         return []
 
-@app.get("/features/heatmap")
-def get_feature_heatmap(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    tenant_id = tenants
-    days = parse_range(range)
-    """
-    Returns grid-based heatmap matrix for features.
-    If multiple tenants provided, matrix is Feature x Tenant.
-    If single tenant provided, matrix is Feature x Date.
-    """
-    tenant_ids = [t.strip() for t in tenant_id.split(',')]
-    for t in tenant_ids:
-        require_tenant_access(t)
-        
-    is_compare = len(tenant_ids) > 1
-
-    if is_compare:
-        sql = """
-            SELECT event_name as feature, tenant_id as group_key, count() as total
-            FROM feature_intelligence.events_raw
-            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - %(days)s
-            GROUP BY feature, group_key
-        """
-    else:
-        sql = """
-            SELECT event_name as feature, toString(toDate(timestamp)) as group_key, count() as total
-            FROM feature_intelligence.events_raw
-            WHERE tenant_id IN %(tenant_ids)s AND timestamp >= today() - %(days)s
-            GROUP BY feature, group_key
-        """
-        
-    try:
-        results = ch_client.query(sql, {"tenant_ids": tenant_ids, "days": days})
-        
-        # Organize data
-        features = {}
-        all_groups = set()
-        max_total = 0
-        
-        for r in results:
-            f = r["feature"]
-            g = r["group_key"]
-            t = r["total"]
-            
-            if f not in features:
-                features[f] = {}
-            features[f][g] = t
-            all_groups.add(g)
-            
-            if t > max_total:
-                max_total = t
-                
-        # Fill missing groups with 0 and calculate percentages
-        sorted_groups = sorted(list(all_groups))
-        activities = []
-        
-        for f, groups in features.items():
-            segments = []
-            f_total = sum(groups.values())
-            
-            for g in sorted_groups:
-                count = groups.get(g, 0)
-                # Percentile globally (against max block) OR relative to feature?
-                # Usually heatmap is relative to global max or feature max. Global max is better for absolute intensity.
-                percentile = (count / max_total) if max_total > 0 else 0
-                pct = round(percentile * 100, 1)
-                
-                # Assign level
-                if pct > 75:
-                    lvl = "High"
-                    color = "#1e3a8a" # text-blue-900 equivalent / deep blue
-                elif pct > 40:
-                    lvl = "Med"
-                    color = "#3b82f6" # text-blue-500
-                elif pct > 0:
-                    lvl = "Low"
-                    color = "#bfdbfe" # text-blue-200
-                else:
-                    lvl = "None"
-                    color = "#f1f5f9" # slate-100
-                    
-                segments.append({
-                    "group_key": g,
-                    "count": count,
-                    "percentile": pct,
-                    "level": lvl,
-                    "color": color
-                })
-                
-            activities.append({
-                "feature": f,
-                "raw_feature": f,
-                "total_usage": f_total,
-                "segments": segments,
-                "level": "High" if f_total > 50 else ("Med" if f_total > 10 else "Low")
-            })
-            
-        # Sort features by total usage
-        activities.sort(key=lambda x: x["total_usage"], reverse=True)
-        
-        return {
-            "is_compare": is_compare,
-            "groups": sorted_groups,
-            "group_labels": build_heatmap_group_labels(days, sorted_groups, is_compare),
-            "activities": activities
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.get("/features/configs")
-def get_feature_configs(tenants: str = Query(..., description="Comma-separated list of tenants")):
+def get_feature_configs(
+    tenants: str = Query(..., description="Comma-separated list of tenants"),
+    range: str = Query("30d", description="Time range like 7d, 30d"),
+):
+    days = parse_range(range)
     tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
-    params = {"tenant_id": tenants[0]} if len(tenants) == 1 else {"tenant_ids": tuple(tenants)}
-    
+    params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
+
     sql = f"""
         SELECT event_name as feature, count() as total
-        FROM feature_intelligence.events_raw 
-        WHERE {cond} AND timestamp >= today() - 30
-        GROUP BY feature ORDER BY total DESC LIMIT 10
+        FROM feature_intelligence.events_raw
+        WHERE {cond} AND timestamp >= today() - %(days)s
+        GROUP BY feature
+        ORDER BY total DESC
+        LIMIT 200
     """
+
+    def infer_category(feature_key: str) -> str:
+        key = (feature_key or "").lower()
+        if ".auth." in key or "login" in key or "register" in key:
+            return "system"
+        if ".page.view" in key or key.endswith(".view"):
+            return "navigation"
+        if "pay" in key or "transfer" in key or "loan" in key or "submit" in key:
+            return "transaction"
+        return "interaction"
+
     try:
         results = ch_client.query(sql, params)
-        configs = []
-        for i, r in enumerate(results):
-            f = str(r['feature'])
-            configs.append({
-                "id": f"fc-{i+1}",
-                "pattern": f"/{f.replace('.', '/')}",
-                "featureName": f.capitalize().replace("_", " "),
-                "category": "interaction" if ("view" in f or "dashboard" in f) else "transaction",
-                "isActive": True
-            })
-        if not configs:
+
+        # Canonical dedupe key: normalized feature + resolved route pattern.
+        merged = {}
+
+        for row in results:
+            raw_feature = str(row["feature"])
+            total = int(row["total"])
+
+            normalized = canonicalize_event_name(raw_feature)
+            if not normalized:
+                continue
+            pattern = resolve_page(normalized) or resolve_page(raw_feature) or "/_other"
+
+            # Guardrail for legacy noisy path-like event roots.
+            if pattern in {"/loan/page", "/loans/page", "/lending"}:
+                pattern = "/loans"
+            display_name = resolve_display_name(normalized)
+
+            dedupe_key = (normalized, pattern)
+            if dedupe_key not in merged:
+                merged[dedupe_key] = {
+                    "normalized": normalized,
+                    "pattern": pattern,
+                    "featureName": display_name,
+                    "category": infer_category(normalized),
+                    "count": 0,
+                }
+
+            merged[dedupe_key]["count"] += total
+
+        if not merged:
             return []
+
+        # Sort by Route Pattern (alphabetically) first, then by count
+        ordered = sorted(
+            merged.values(),
+            key=lambda item: (item["pattern"], -item["count"]),
+        )
+
+        configs = []
+        for idx, item in enumerate(ordered, start=1):
+            configs.append({
+                "id": f"fc-{idx}",
+                "pattern": item["pattern"],
+                "featureName": item["featureName"],
+                "category": item["category"],
+                "isActive": True,
+            })
+
         return configs
     except Exception:
         return []
 
 @app.get("/metrics/retention")
 def get_retention(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    days = parse_range(range)
-    tenant_id = tenants
     """
     Real cohort retention analysis.
     For each weekly cohort (users first seen in week W), compute:
@@ -1553,6 +1664,8 @@ def get_retention(tenants: str = Query(..., description="Comma-separated list of
       - month2: % of cohort active in week W+1
       - month3: % of cohort active in week W+2
     """
+    days = parse_range(range)
+    tenant_id = tenants
     tenants = [t.strip() for t in tenant_id.split(",") if t.strip()]
     cond = "tenant_id = %(tenant_id)s" if len(tenants) == 1 else "tenant_id IN %(tenant_ids)s"
     params = {"tenant_id": tenants[0], "days": days} if len(tenants) == 1 else {"tenant_ids": tuple(tenants), "days": days}
@@ -1672,8 +1785,8 @@ def get_admin_summary():
 
 @app.get("/admin/app/{tenant_id}/summary")
 def get_admin_app_summary(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
-    tenant_id = tenants
     """Returns basic KPIs and Insights for a specfic app (Cloud mode only)."""
+    tenant_id = tenants
     require_cloud_mode()
     return {
         "kpi": get_kpi_metrics(tenants=tenant_id, range=range),
@@ -1682,8 +1795,8 @@ def get_admin_app_summary(tenants: str = Query(..., description="Comma-separated
 
 @app.get("/transparency/cloud-data")
 def get_transparency_data(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    tenant_id = tenants
     """Summarizes what data is visible to the cloud/admin."""
+    tenant_id = tenants
     require_tenant_access(tenant_id)
     
     # In a fully deployed setup, this could query exact synced row counts.
@@ -1716,6 +1829,85 @@ def get_transparency_data(tenants: str = Query(..., description="Comma-separated
     }
 
 # ═══════════════════════════════════════════════════════════
+# PRO USERS METRICS
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/metrics/pro_users")
+def get_pro_users(
+    tenants: str = Query(..., description="Comma-separated list of tenants"), 
+    range: str = Query("7d", description="Time range like 7d, 30d")
+):
+    """
+    Returns count of users who have used any pro/enterprise feature in the given time range.
+    Dynamically respects the global time range selector.
+    """
+    days = parse_range(range)
+    tenant_list = [t.strip() for t in tenants.split(",") if t.strip()]
+    cond = "tenant_id = %(tenant_id)s" if len(tenant_list) == 1 else "tenant_id IN %(tenant_ids)s"
+    params = {"tenant_id": tenant_list[0], "days": days} if len(tenant_list) == 1 else {"tenant_ids": tuple(tenant_list), "days": days}
+
+    try:
+        # Pro/Enterprise features from the catalog
+        pro_features = {
+            "crypto-trading.trade_execution.success",
+            "crypto-trading.trade_execution.failure",
+            "crypto-trading.price_feeds.view",
+            "crypto-trading.portfolio.view",
+            "wealth-management-pro.rebalance.success",
+            "wealth-management-pro.rebalance.failure",
+            "wealth-management-pro.insights.view",
+            "bulk-payroll-processing.batch.success",
+            "bulk-payroll-processing.batch.failure",
+            "bulk-payroll-processing.payees.view",
+            "bulk-payroll-processing.search.success",
+            "bulk-payroll-processing.search.failure",
+            "ai-insights.book.access",
+            "ai-insights.book.success",
+            "ai-insights.stats.view",
+        }
+        
+        # Also include raw feature names that map to pro features
+        pro_raw_features = {
+            alias for alias, canonical in CANONICAL_EVENT_ALIASES.items()
+            if canonical in pro_features and alias
+        }
+        pro_raw_features.update(pro_features)
+        
+        # Query unique users who have used any pro feature
+        pro_str = ", ".join([f"'{f}'" for f in sorted(pro_raw_features)])
+        sql = f"""
+            SELECT uniqExact(user_id) as pro_users
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND event_name IN ({pro_str}) AND timestamp >= today() - %(days)s
+        """
+        
+        result = ch_client.query(sql, params)
+        pro_user_count = int(result[0]["pro_users"]) if result and result[0].get("pro_users") else 0
+        
+        # Also get total users for comparison
+        sql_total = f"""
+            SELECT uniqExact(user_id) as total_users
+            FROM feature_intelligence.events_raw
+            WHERE {cond} AND timestamp >= today() - %(days)s
+        """
+        total_result = ch_client.query(sql_total, params)
+        total_users = max(int(total_result[0]["total_users"]) if total_result else 0, 1)
+        
+        pro_adoption_pct = round((pro_user_count / total_users) * 100, 1) if total_users > 0 else 0
+        
+        return {
+            "tenant_id": tenants,
+            "range": range,
+            "period_days": days,
+            "pro_users": pro_user_count,
+            "total_users": total_users,
+            "pro_adoption_pct": pro_adoption_pct,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════
 # LICENSE VS USAGE
 # ═══════════════════════════════════════════════════════════
 
@@ -1734,53 +1926,55 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
         # 1. Single source of truth catalog
         feature_catalog = {
             # Enterprise
-            "pro.crypto_trade_execution.success": {"plan": "enterprise"},
-            "pro.crypto_trade_execution.failed": {"plan": "enterprise"},
-            "pro.crypto_price_feeds.view": {"plan": "enterprise"},
-            "pro.crypto_portfolio.view": {"plan": "enterprise"},
-            "pro.wealth_rebalance.success": {"plan": "enterprise"},
-            "pro.wealth_rebalance.failed": {"plan": "enterprise"},
-            "pro.wealth_insights.view": {"plan": "enterprise"},
-            "pro.payroll_batch.success": {"plan": "enterprise"},
-            "pro.payroll_batch.failed": {"plan": "enterprise"},
-            "pro.payroll_payees.view": {"plan": "enterprise"},
-            "pro.payroll_search.success": {"plan": "enterprise"},
-            "pro.payroll_search.failed": {"plan": "enterprise"},
-            "pro.finance_library_book.access": {"plan": "enterprise"},
-            "pro.finance_library_stats.view": {"plan": "enterprise"},
-            "pro.features.view": {"plan": "enterprise"},
-            "pro.features_unlock.success": {"plan": "enterprise"},
-            "pro.features_unlock.failed": {"plan": "enterprise"},
+            "crypto-trading.page.view": {"plan": "enterprise"},
+            "crypto-trading.trade_execution.success": {"plan": "enterprise"},
+            "crypto-trading.trade_execution.failure": {"plan": "enterprise"},
+            "crypto-trading.price_feeds.view": {"plan": "enterprise"},
+            "crypto-trading.portfolio.view": {"plan": "enterprise"},
+            "wealth-management-pro.page.view": {"plan": "enterprise"},
+            "wealth-management-pro.rebalance.success": {"plan": "enterprise"},
+            "wealth-management-pro.rebalance.failure": {"plan": "enterprise"},
+            "wealth-management-pro.insights.view": {"plan": "enterprise"},
+            "bulk-payroll-processing.page.view": {"plan": "enterprise"},
+            "bulk-payroll-processing.batch.success": {"plan": "enterprise"},
+            "bulk-payroll-processing.batch.failure": {"plan": "enterprise"},
+            "bulk-payroll-processing.payees.view": {"plan": "enterprise"},
+            "bulk-payroll-processing.search.success": {"plan": "enterprise"},
+            "bulk-payroll-processing.search.failure": {"plan": "enterprise"},
+            "ai-insights.page.view": {"plan": "enterprise"},
+            "ai-insights.book.access": {"plan": "enterprise"},
+            "ai-insights.book.success": {"plan": "enterprise"},
+            "ai-insights.stats.view": {"plan": "enterprise"},
             
             # Free / Base
-            "free.dashboard.view": {"plan": "free"},
-            "free.auth.login.success": {"plan": "free"},
-            "free.auth.login.failed": {"plan": "free"},
-            "free.auth.register.success": {"plan": "free"},
-            "free.auth.register.failed": {"plan": "free"},
-            "free.payment.success": {"plan": "free"},
-            "free.payment.failed": {"plan": "free"},
-            "free.accounts.view": {"plan": "free"},
-            "free.transactions.view": {"plan": "free"},
-            "free.payees.view": {"plan": "free"},
-            "free.payees.add_success": {"plan": "free"},
-            "free.payees.add_failed": {"plan": "free"},
-            "free.payees.edit_success": {"plan": "free"},
-            "free.payees.edit_failed": {"plan": "free"},
-            "free.payees.delete_success": {"plan": "free"},
-            "free.payees.delete_failed": {"plan": "free"},
-            "free.loan.applied": {"plan": "free"},
-            "free.loan.approved": {"plan": "free"},
-            "free.loan.rejected": {"plan": "free"},
-            "free.loans.view": {"plan": "free"},
-            "free.loan.kyc_started": {"plan": "free"},
-            "free.loan.kyc_completed": {"plan": "free"},
-            "free.loan.kyc_failed": {"plan": "free"},
-            "free.loan.kyc_abandoned": {"plan": "free"},
-            "free.profile.view": {"plan": "free"},
-            "free.profile.edit_success": {"plan": "free"},
-            "free.profile.edit_failed": {"plan": "free"},
-            "free.profile.location": {"plan": "free"},
+            "dashboard.page.view": {"plan": "free"},
+            "login.auth.success": {"plan": "free"},
+            "login.auth.failure": {"plan": "free"},
+            "register.auth.success": {"plan": "free"},
+            "register.auth.failure": {"plan": "free"},
+            "transaction.pay_now.success": {"plan": "free"},
+            "transaction.pay_now.failure": {"plan": "free"},
+            "account.page.view": {"plan": "free"},
+            "transaction.page.view": {"plan": "free"},
+            "payee.page.view": {"plan": "free"},
+            "payee.add_payee.success": {"plan": "free"},
+            "payee.add_payee.failure": {"plan": "free"},
+            "payee.edit_payee.success": {"plan": "free"},
+            "payee.edit_payee.failure": {"plan": "free"},
+            "payee.remove_payee.success": {"plan": "free"},
+            "payee.remove_payee.failure": {"plan": "free"},
+            "loan.applied.success": {"plan": "free"},
+            "loan.approved.success": {"plan": "free"},
+            "loan.rejected.failure": {"plan": "free"},
+            "loan.page.view": {"plan": "free"},
+            "loan.kyc_started.success": {"plan": "free"},
+            "loan.kyc_completed.success": {"plan": "free"},
+            "loan.kyc_failed.failure": {"plan": "free"},
+            "loan.kyc_abandoned.failure": {"plan": "free"},
+            "profile.page.view": {"plan": "free"},
+            "profile.edit_details.success": {"plan": "free"},
+            "profile.edit_details.failure": {"plan": "free"},
+            "dashboard.location.captured": {"plan": "free"},
         }
         sql_used = f"""
             SELECT 
@@ -1794,9 +1988,39 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
             ORDER BY usage_count DESC
         """
         used = ch_client.query(sql_used, params)
-        used_map = {r["feature_name"]: r for r in used}
+        used_map = {}
+        for r in used:
+            canonical = canonicalize_event_name(str(r["feature_name"]))
+            if not canonical:
+                continue
+            usage_count = int(r["usage_count"])
+            unique_users = int(r["unique_users"])
+            tier_hint = r.get("tier_hint")
+            if canonical not in used_map:
+                used_map[canonical] = {
+                    "feature_name": canonical,
+                    "usage_count": 0,
+                    "unique_users": 0,
+                    "tier_hint": None,
+                }
+            used_map[canonical]["usage_count"] += usage_count
+            # Avoid inflating users when multiple raw aliases map to one canonical feature.
+            used_map[canonical]["unique_users"] = max(int(used_map[canonical]["unique_users"]), unique_users)
+            if not used_map[canonical]["tier_hint"] and tier_hint:
+                used_map[canonical]["tier_hint"] = tier_hint
 
-        pro_features_set = {k for k, v in feature_catalog.items() if v["plan"] == "enterprise"}
+        canonical_catalog = {
+            canonicalize_event_name(key): value
+            for key, value in feature_catalog.items()
+            if canonicalize_event_name(key)
+        }
+
+        pro_features_set = {k for k, v in canonical_catalog.items() if v["plan"] == "enterprise"}
+        pro_raw_features = {
+            alias for alias, canonical in CANONICAL_EVENT_ALIASES.items()
+            if canonical in pro_features_set and alias
+        }
+        pro_raw_features.update(pro_features_set)
 
         # ─── Usage trends (last 7 days) ───
         sql_trends = f"""
@@ -1809,14 +2033,24 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
         trend_rows = ch_client.query(sql_trends, params)
         trends_map = {}
         for r in trend_rows:
-            fname = r["feature_name"]
-            if fname not in trends_map:
-                trends_map[fname] = []
+            fname = canonicalize_event_name(str(r["feature_name"]))
+            if not fname:
+                continue
             date_str = r["date"].strftime("%Y-%m-%d") if hasattr(r["date"], "strftime") else str(r["date"])
-            trends_map[fname].append({"date": date_str, "count": int(r["count"])})
+            if fname not in trends_map:
+                trends_map[fname] = {}
+            trends_map[fname][date_str] = trends_map[fname].get(date_str, 0) + int(r["count"])
+
+        trends_map = {
+            fname: [
+                {"date": d, "count": c}
+                for d, c in sorted(by_date.items())
+            ]
+            for fname, by_date in trends_map.items()
+        }
             
         # Build lists based strictly on catalog mapping
-        total_usage_count = sum(int(r["usage_count"]) for r in used) or 1
+        total_usage_count = sum(int(r["usage_count"]) for r in used_map.values()) or 1
         
         licensed_list = []
         unused_licensed = []
@@ -1827,7 +2061,8 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
             uc = int(used_map.get(fname, {}).get("usage_count", 0))
             item = {
                 "feature_name": fname,
-                "plan_tier": feature_catalog[fname]["plan"],
+                "display_name": FEATURE_DISPLAY_NAMES.get(fname, fname),
+                "plan_tier": canonical_catalog[fname]["plan"],
                 "is_used": fname in used_map,
                 "usage_count": uc,
                 "unique_users": int(used_map.get(fname, {}).get("unique_users", 0)),
@@ -1842,10 +2077,10 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
         # Populate free/unlicensed ONLY from known catalog + what's not Pro
         for fname, r in used_map.items():
             if fname not in pro_features_set:
-                # Do not use raw event names directly, enforce taxonomy where possible
                 uc = int(r["usage_count"])
                 unlicensed_used.append({
                     "feature_name": fname,
+                    "display_name": FEATURE_DISPLAY_NAMES.get(fname, fname),
                     "usage_count": uc,
                     "unique_users": int(r["unique_users"]),
                     "usage_pct": round((uc / total_usage_count) * 100, 1),
@@ -1859,7 +2094,7 @@ def get_license_usage(tenants: str = Query(..., description="Comma-separated lis
         wow_change = 0.0
 
         if pro_features_set:
-            pro_str = ", ".join([f"'{f}'" for f in pro_features_set])
+            pro_str = ", ".join([f"'{f}'" for f in sorted(pro_raw_features)])
             sql_pro_users = f"""
                 SELECT uniqExact(user_id) as pro_users
                 FROM feature_intelligence.events_raw
@@ -1939,8 +2174,8 @@ def sync_licenses(req: LicenseSyncRequest):
 
 @app.get("/tracking/toggles")
 def get_tracking_toggles(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    tenant_id = tenants
     """Get all feature tracking toggles for a tenant."""
+    tenant_id = tenants
     require_tenant_access(tenant_id)
     try:
         sql = """
@@ -2003,8 +2238,8 @@ def set_tracking_toggle(req: TrackingToggleRequest):
 
 @app.get("/config/audit-log")
 def get_config_audit_log(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    tenant_id = tenants
     """Returns configuration change audit trail for a tenant."""
+    tenant_id = tenants
     require_tenant_access(tenant_id)
     try:
         sql = """
@@ -2109,8 +2344,8 @@ def get_user_journey(tenants: str = Query(..., description="Comma-separated list
 
 @app.get("/journey/users")
 def list_journey_users(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    tenant_id = tenants
     """Returns list of users with event counts for journey selection."""
+    tenant_id = tenants
     require_tenant_access(tenant_id)
     try:
         sql = """
@@ -2146,8 +2381,8 @@ def list_journey_users(tenants: str = Query(..., description="Comma-separated li
 
 @app.get("/segmentation/compare")
 def get_segmentation_comparison(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    tenant_id = tenants
     """Group features by plan tier and compare adoption rates."""
+    tenant_id = tenants
     require_tenant_access(tenant_id)
     try:
         # Get license tiers
@@ -2157,7 +2392,11 @@ def get_segmentation_comparison(tenants: str = Query(..., description="Comma-sep
             WHERE tenant_id = %(tenant_id)s AND is_licensed = 1
         """
         tiers = ch_client.query(sql_tiers, {"tenant_id": tenant_id})
-        tier_map = {r["feature_name"]: r["plan_tier"] for r in tiers}
+        tier_map = {}
+        for r in tiers:
+            canonical_license = canonicalize_event_name(str(r["feature_name"]))
+            if canonical_license:
+                tier_map[canonical_license] = r["plan_tier"]
         
         # Get usage
         sql_usage = """
@@ -2167,16 +2406,26 @@ def get_segmentation_comparison(tenants: str = Query(..., description="Comma-sep
             GROUP BY event_name
         """
         usage = ch_client.query(sql_usage, {"tenant_id": tenant_id})
+
+        canonical_usage = {}
+        for u in usage:
+            canonical_feature = canonicalize_event_name(str(u["event_name"]))
+            if not canonical_feature:
+                continue
+            if canonical_feature not in canonical_usage:
+                canonical_usage[canonical_feature] = {"total": 0, "users": 0}
+            canonical_usage[canonical_feature]["total"] += int(u["total"])
+            canonical_usage[canonical_feature]["users"] = max(canonical_usage[canonical_feature]["users"], int(u["users"]))
         
         # Group by segment
         segments = {}
-        for u in usage:
-            tier = tier_map.get(u["event_name"], "unlicensed")
+        for feature_name, stats in canonical_usage.items():
+            tier = tier_map.get(feature_name, "unlicensed")
             if tier not in segments:
                 segments[tier] = {"tier": tier, "features": 0, "total_usage": 0, "unique_users": 0}
             segments[tier]["features"] += 1
-            segments[tier]["total_usage"] += int(u["total"])
-            segments[tier]["unique_users"] += int(u["users"])
+            segments[tier]["total_usage"] += int(stats["total"])
+            segments[tier]["unique_users"] += int(stats["users"])
         
         return {
             "tenant_id": tenant_id,
@@ -2211,6 +2460,15 @@ def get_predictive_adoption(tenants: str = Query(..., description="Comma-separat
             GROUP BY event_name
         """
         trend_data = ch_client.query(sql_trend, {"tenant_ids": tuple(tenant_list)})
+        canonical_trend = {}
+        for row in trend_data:
+            canonical = canonicalize_event_name(str(row["event_name"]))
+            if not canonical:
+                continue
+            if canonical not in canonical_trend:
+                canonical_trend[canonical] = {"recent_7d": 0, "prev_7d": 0}
+            canonical_trend[canonical]["recent_7d"] += int(row["recent_7d"])
+            canonical_trend[canonical]["prev_7d"] += int(row["prev_7d"])
         
         # Total unique users
         sql_total_users = """
@@ -2230,7 +2488,12 @@ def get_predictive_adoption(tenants: str = Query(..., description="Comma-separat
             GROUP BY event_name
         """
         feature_users = ch_client.query(sql_feature_users, {"tenant_ids": tuple(tenant_list)})
-        feature_users_map = {r["event_name"]: int(r["feature_users"]) for r in feature_users}
+        feature_users_map = {}
+        for row in feature_users:
+            canonical = canonicalize_event_name(str(row["event_name"]))
+            if not canonical:
+                continue
+            feature_users_map[canonical] = feature_users_map.get(canonical, 0) + int(row["feature_users"])
         
         # Frequency consistency
         sql_frequency = """
@@ -2240,11 +2503,15 @@ def get_predictive_adoption(tenants: str = Query(..., description="Comma-separat
             GROUP BY event_name
         """
         frequency_data = ch_client.query(sql_frequency, {"tenant_ids": tuple(tenant_list)})
-        frequency_map = {r["event_name"]: int(r["active_days"]) for r in frequency_data}
+        frequency_map = {}
+        for row in frequency_data:
+            canonical = canonicalize_event_name(str(row["event_name"]))
+            if not canonical:
+                continue
+            frequency_map[canonical] = frequency_map.get(canonical, 0) + int(row["active_days"])
         
         predictions = []
-        for row in trend_data:
-            name = row["event_name"]
+        for name, row in canonical_trend.items():
             recent = int(row["recent_7d"])
             prev = int(row["prev_7d"])
             
@@ -2728,7 +2995,7 @@ def get_tenant_comparison(tenants: str = Query(..., description="Comma-separated
             
             # Daily event trend (last 7 days)
             sql_trend = """
-                SELECT toDate(timestamp) as date, count() as events
+                SELECT toDate(timestamp + INTERVAL 330 MINUTE) as date, count() as events
                 FROM feature_intelligence.events_raw
                 WHERE tenant_id = %(tid)s AND timestamp >= today() - 7
                 GROUP BY date

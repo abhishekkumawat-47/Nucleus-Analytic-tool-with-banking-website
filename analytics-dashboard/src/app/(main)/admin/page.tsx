@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { ShieldAlert, Users, Activity, BarChart3, Database } from 'lucide-react';
 import Link from 'next/link';
 import { DashboardSkeleton } from '@/components/Skeletons';
@@ -12,12 +13,27 @@ import RBACManager from '@/components/RBACManager';
 
 export default function AdminSummaryPage() {
   const { deploymentMode } = useAppSelector((state) => state.dashboard);
+  const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
+  const lastRealtimeRefetchAt = useRef(0);
 
-  const { data, isLoading: loading } = useQuery({
+  const { data, isLoading: loading, refetch } = useQuery({
     queryKey: ['adminSummary'],
     queryFn: () => dashboardAPI.getAdminSummary(),
     enabled: deploymentMode === 'cloud',
+    staleTime: 20 * 1000,
+    refetchInterval: 20 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
+
+  // Real-time refetch trigger with 5-second throttle
+  useEffect(() => {
+    if (!lastEvent) return;
+    const now = Date.now();
+    if (now - lastRealtimeRefetchAt.current < 5000) return;
+    lastRealtimeRefetchAt.current = now;
+    void refetch();
+  }, [lastEvent, refetch]);
 
   if (loading) return <DashboardSkeleton />;
 
