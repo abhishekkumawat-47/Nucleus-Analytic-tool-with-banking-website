@@ -695,7 +695,7 @@ export default function TransparencyPage() {
                                   {t.name}
                                 </td>
                                 <td className="px-6 py-4 text-right tabular-nums">
-                                  {t.events.toLocaleString()}
+                                  {t?.events?.toLocaleString()}
                                 </td>
                               </tr>
                             ))}

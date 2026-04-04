@@ -1,24 +1,27 @@
-'use client';
+"use client";
 
-/**
- * Grid-based Feature Activity Heatmap
- * Displays feature usage across time or tenants with intensity cells.
- * Uses a blue-to-red sequential color scale for easy visual comparison.
- */
+import React, { memo, useEffect, useMemo, useState } from "react";
+import {
+  CalendarRange,
+  ChevronDown,
+  Filter,
+  Layers3,
+  Loader2,
+  Sparkles,
+  X,
+} from "lucide-react";
 
-import React, { memo, useState, useMemo, useEffect } from 'react';
-import ChartContainer from './ChartContainer';
-import { ChevronDown, Filter, X, Loader2 } from 'lucide-react';
-import { dashboardAPI } from '@/lib/api';
-import { useDashboardData } from '@/hooks/useDashboard';
-import { useSession } from 'next-auth/react';
+import ChartContainer from "./ChartContainer";
+import { dashboardAPI } from "@/lib/api";
+import { useDashboardData } from "@/hooks/useDashboard";
 
 interface HeatmapSegment {
   group_key: string;
   count: number;
   percentile: number;
   level: string;
-  color_scale: string;
+  color_scale?: string;
+  color?: string;
 }
 
 interface HeatmapActivity {
@@ -31,122 +34,252 @@ interface HeatmapActivity {
 interface HeatmapData {
   is_compare: boolean;
   groups: string[];
+  group_labels?: string[];
   activities: HeatmapActivity[];
 }
 
-/**
- * Returns a background color based on percentile using a sequential blue scale.
- * 0 = light gray (no usage), 100 = deep navy (max usage).
- */
-function getIntensityColor(pct: number, scale: string = 'blue'): string {
-  if (pct <= 0) return '#f3f4f6';        // gray-100, no activity
-  
-  if (scale === 'orange') {
-    // Overridden to use blue scale as per design guidelines
-  }
-
-  // Default blue
-  if (pct <= 15) return '#dbeafe';        // blue-100
-  if (pct <= 30) return '#bfdbfe';        // blue-200
-  if (pct <= 45) return '#93c5fd';        // blue-300
-  if (pct <= 60) return '#60a5fa';        // blue-400
-  if (pct <= 75) return '#3b82f6';        // blue-500
-  if (pct <= 90) return '#2563eb';        // blue-600
-  return '#1e3a8a';                        // blue-900, peak
+function getIntensityColor(percentile: number): string {
+  if (percentile <= 0) return "#f8fafc"; // almost white
+  if (percentile <= 10) return "#e2e8f0"; // very light gray-blue
+  if (percentile <= 20) return "#cbd5f5"; // soft blue tint
+  if (percentile <= 30) return "#a5b4fc"; // light indigo
+  if (percentile <= 40) return "#818cf8"; // medium indigo
+  if (percentile <= 50) return "#6366f1"; // strong indigo
+  if (percentile <= 60) return "#4f46e5"; // deeper
+  if (percentile <= 70) return "#4338ca"; // darker
+  if (percentile <= 80) return "#3730a3"; // deep indigo
+  if (percentile <= 90) return "#1e3a8a"; // navy blue
+  return "#020617"; // near black (extreme values)
 }
 
-function getTextColor(pct: number): string {
-  return pct > 60 ? '#ffffff' : '#1f2937';
+function getTextColor(percentile: number): string {
+  return percentile >= 30 ? "#ffffff" : "#111827";
+}
+
+function formatFallbackLabel(groupKey: string, isCompare: boolean): string {
+  if (isCompare) {
+    return groupKey
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  if (/^\d+$/.test(groupKey)) return `Bucket ${groupKey}`;
+
+  const parsed = new Date(groupKey);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  return groupKey;
+}
+
+function renderFeatureLabel(feature: string) {
+  return (
+    <span className="break-words capitalize leading-tight">
+      {feature.replace(/\./g, " ").replace(/_/g, " ")}
+    </span>
+  );
 }
 
 function FeatureHeatmap() {
-  const { selectedTenants, timeRange } = useDashboardData();
-  const { data: session } = useSession();
+  const { selectedTenants, timeRange, tenantsParam, rangeParam } =
+    useDashboardData();
 
   const [data, setData] = useState<HeatmapData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [compareMode, setCompareMode] = useState(false);
-
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
+
     const fetchHeatmap = async () => {
       setLoading(true);
-      let targetTenants = selectedTenants.length > 0 ? selectedTenants : ['nexabank'];
-      if (compareMode && session?.user?.adminApps) {
-        targetTenants = session.user.adminApps;
-      }
-
-      const rangeStr = timeRange === 'Last 30 Days' ? '30d' : timeRange === 'Last 90 Days' ? '90d' : '7d';
-      
-      const result = await dashboardAPI.getFeatureHeatmap(targetTenants, rangeStr);
-      if (isMounted) {
-        setData(result as HeatmapData);
-        setLoading(false);
+      try {
+        const result = await dashboardAPI.getFeatureHeatmap(
+          tenantsParam,
+          rangeParam,
+        );
+        if (mounted) setData(result as HeatmapData);
+      } catch {
+        if (mounted) setData({ is_compare: false, groups: [], activities: [] });
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
 
     fetchHeatmap();
-    return () => { isMounted = false; };
-  }, [selectedTenants, timeRange, compareMode, session]);
 
-  const activities = data?.activities || [];
-  const groups = data?.groups || [];
-  const allFeatures = useMemo(() => activities.map((r) => r.feature), [activities]);
+    return () => {
+      mounted = false;
+    };
+  }, [tenantsParam, rangeParam]);
+
+  const activities: HeatmapActivity[] = data?.activities || [];
+  const groups: string[] = data?.groups || [];
+  const groupLabels: string[] = data?.group_labels || [];
+  const isCompare = Boolean(data?.is_compare);
+
+  const allFeatures = useMemo<string[]>(
+    () => activities.map((row: HeatmapActivity) => row.feature),
+    [activities],
+  );
+
+  const filteredFeatureOptions = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return allFeatures;
+    return allFeatures.filter((feature: string) =>
+      feature.toLowerCase().includes(term),
+    );
+  }, [allFeatures, searchTerm]);
 
   const filteredData = useMemo(() => {
     if (selectedFeatures.length === 0) return activities;
-    return activities.filter((r) => selectedFeatures.includes(r.feature));
+    return activities.filter((row: HeatmapActivity) =>
+      selectedFeatures.includes(row.feature),
+    );
   }, [activities, selectedFeatures]);
 
+  const insights = useMemo(() => {
+    const totalEvents = filteredData.reduce(
+      (sum: number, row: HeatmapActivity) => sum + (row.total_usage || 0),
+      0,
+    );
+    const topFeature = filteredData[0];
+    const activeRows = filteredData.filter(
+      (row: HeatmapActivity) => row.total_usage > 0,
+    ).length;
+    const adoptionCoverage =
+      filteredData.length > 0
+        ? Math.round((activeRows / filteredData.length) * 100)
+        : 0;
+
+    return {
+      totalEvents,
+      topFeatureName: topFeature?.feature
+        ? topFeature.feature.replace(/_/g, " ")
+        : "No data",
+      topFeatureUsage: topFeature?.total_usage || 0,
+      adoptionCoverage,
+    };
+  }, [filteredData]);
+
   const toggleFeature = (feature: string) => {
-    setSelectedFeatures((prev) =>
-      prev.includes(feature) ? prev.filter((f) => f !== feature) : [...prev, feature]
+    setSelectedFeatures((prev: string[]) =>
+      prev.includes(feature)
+        ? prev.filter((item) => item !== feature)
+        : [...prev, feature],
     );
   };
 
   const clearFilters = () => {
     setSelectedFeatures([]);
+    setSearchTerm("");
     setDropdownOpen(false);
   };
 
+  const resolveGroupLabel = (groupKey: string, index: number) => {
+    return groupLabels[index] || formatFallbackLabel(groupKey, isCompare);
+  };
+
+  const gridColWidth = groups.length > 0 ? `${78 / groups.length}%` : "78%";
+
   return (
     <ChartContainer title="Feature Adoption Heatmap" id="feature-heatmap">
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-3 mb-6">
+      <div className="mt-2 mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+            <Layers3 className="h-3.5 w-3.5" />
+            Scope
+          </div>
+          <p className="mt-1 break-words text-sm font-semibold text-gray-800">
+            {selectedTenants.length > 0
+              ? selectedTenants.join(", ").toUpperCase()
+              : "NEXABANK"}
+          </p>
+        </div>
 
-        {/* Dropdown Filter */}
-        <div className="flex items-center gap-2">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+            <CalendarRange className="h-3.5 w-3.5" />
+            Time Range
+          </div>
+          <p className="mt-1 text-sm font-semibold text-gray-800">
+            {timeRange}
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-violet-100 bg-violet-50/70 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+            <Sparkles className="h-3.5 w-3.5" />
+            Insight
+          </div>
+          <p
+            className="mt-1 truncate text-sm font-semibold text-gray-800"
+            title={insights.topFeatureName}
+          >
+            {insights.topFeatureName} (
+            {insights.topFeatureUsage.toLocaleString()})
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              onClick={() => setDropdownOpen((open: boolean) => !open)}
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
             >
               <Filter className="h-3.5 w-3.5 text-gray-500" />
               {selectedFeatures.length > 0
                 ? `${selectedFeatures.length} selected`
-                : 'All Features'}
-              <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                : "All Features"}
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-gray-400 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+              />
             </button>
 
             {dropdownOpen && (
-              <div className="absolute z-20 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 max-h-56 overflow-y-auto">
-                {allFeatures.map((feature) => (
-                  <label
-                    key={feature}
-                    className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedFeatures.includes(feature)}
-                      onChange={() => toggleFeature(feature)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
-                    />
-                    {feature}
-                  </label>
-                ))}
+              <div className="absolute z-20 mt-1 w-72 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                <div className="border-b border-gray-100 px-2 pb-2 pt-1">
+                  <input
+                    value={searchTerm}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSearchTerm(e.target.value)
+                    }
+                    placeholder="Search features..."
+                    className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+
+                <div className="max-h-60 overflow-y-auto py-1">
+                  {filteredFeatureOptions.map((feature) => (
+                    <label
+                      key={feature}
+                      className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedFeatures.includes(feature)}
+                        onChange={() => toggleFeature(feature)}
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="truncate">{feature}</span>
+                    </label>
+                  ))}
+
+                  {filteredFeatureOptions.length === 0 && (
+                    <p className="px-3 py-2 text-xs text-gray-400">
+                      No matching features
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -154,107 +287,154 @@ function FeatureHeatmap() {
           {selectedFeatures.length > 0 && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+              className="flex cursor-pointer items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
             >
               <X className="h-3 w-3" /> Clear
             </button>
           )}
         </div>
 
-        {/* Compare Toggle */}
-        <div className="bg-gray-100/80 p-1 rounded-lg flex items-center shadow-inner border border-gray-200/50">
-          <button
-            onClick={() => setCompareMode(false)}
-            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${!compareMode ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'} cursor-pointer`}
-          >
-            Single Tenant
-          </button>
-          <button
-            onClick={() => setCompareMode(true)}
-            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${compareMode ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'} cursor-pointer`}
-          >
-            Compare Tenants
-          </button>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
+            {isCompare ? "Cross-tenant matrix" : "Trend matrix"}
+          </span>
+          <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
+            Coverage {insights.adoptionCoverage}%
+          </span>
+          <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
+            Total {insights.totalEvents.toLocaleString()}
+          </span>
         </div>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center p-12 text-blue-500">
-          <Loader2 className="w-8 h-8 animate-spin" />
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       ) : (
-        <div className="relative overflow-x-auto pb-4">
-          {/* Color Scale Legend */}
-          <div className="flex items-center justify-end gap-2 mb-5 text-xs font-medium text-gray-500">
-            <span>No activity</span>
-            <div className="flex gap-0.5 h-4 items-center">
-              <div className="w-8 h-4 bg-[#f3f4f6] rounded-l border border-gray-200" />
-              <div className="w-8 h-4 bg-[#dbeafe]" />
-              <div className="w-8 h-4 bg-[#93c5fd]" />
-              <div className="w-8 h-4 bg-[#3b82f6]" />
-              <div className="w-8 h-4 bg-[#1e3a8a] rounded-r" />
+        <div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-gray-500">
+            <p className="text-gray-600">
+              {isCompare
+                ? "Tenant comparison intensity"
+                : "Feature adoption across time buckets"}
+            </p>
+            <div className="flex items-center gap-2">
+              <span>No activity</span>
+              <div className="flex h-4 items-center overflow-hidden rounded-full border border-gray-200">
+                <div className="h-4 w-6 bg-[#f8fafc]" />
+                <div className="h-4 w-6 bg-[#e2e8f0]" />
+                <div className="h-4 w-6 bg-[#cbd5f5]" />
+                <div className="h-4 w-6 bg-[#a5b4fc]" />
+                <div className="h-4 w-6 bg-[#818cf8]" />
+                <div className="h-4 w-6 bg-[#6366f1]" />
+                <div className="h-4 w-6 bg-[#4f46e5]" />
+                <div className="h-4 w-6 bg-[#4338ca]" />
+                <div className="h-4 w-6 bg-[#3730a3]" />
+                <div className="h-4 w-6 bg-[#1e3a8a]" />
+                <div className="h-4 w-6 bg-[#020617]" />
+              </div>
+              <span>Peak</span>
             </div>
-            <span>Peak</span>
           </div>
-
-          <table className="w-full text-left text-sm whitespace-nowrap border-spacing-1 border-separate" style={{ minWidth: groups.length * 72 + 200 }}>
-            <thead>
-              <tr>
-                <th className="font-semibold text-gray-600 pb-3 w-48 sticky left-0 bg-white z-10 border-b border-gray-100 text-xs uppercase tracking-wider">
-                  Feature
-                </th>
-                {groups.map((g) => (
-                  <th key={g} className="font-medium text-gray-500 pb-3 text-center text-[11px] border-b border-gray-100">
-                    {g.length > 10 ? g.substring(5) : g}
-                  </th>
+          <div className="relative max-w-full overflow-x-auto pb-3">
+            <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-sm lg:min-w-full">
+              <colgroup>
+                <col style={{ width: "16%" }} />
+                {groups.map((groupKey) => (
+                  <col
+                    key={`col-${groupKey}`}
+                    style={{ width: gridColWidth }}
+                  />
                 ))}
-                <th className="font-semibold text-gray-600 pb-3 text-right text-xs uppercase tracking-wider border-b border-gray-100 pr-2">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((row) => (
-                <tr key={row.feature} className="group">
-                  <td className="font-medium text-gray-800 pr-4 py-1 sticky left-0 bg-white z-10 group-hover:text-[#1a73e8] transition-colors text-[13px]">
-                    {row.feature.replace(/_/g, ' ')}
-                  </td>
+                <col style={{ width: "6%" }} />
+              </colgroup>
 
-                  {row.segments.map((segment, index) => {
-                    const pct = segment.percentile;
-                    const bgColor = getIntensityColor(pct, segment.color_scale);
-                    const textColor = getTextColor(pct);
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-white/95 backdrop-blur-sm">
+                  <th className="sticky left-0 z-20 border-b border-gray-100 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-600">
+                    Feature
+                  </th>
 
-                    return (
-                      <td key={index} className="p-0.5">
-                        <div
-                          className="h-10 w-full rounded-md flex items-center justify-center transition-all duration-200 hover:scale-105 hover:shadow-md cursor-pointer relative group/cell"
-                          style={{ backgroundColor: bgColor, color: textColor }}
-                          title={`${row.feature} x ${segment.group_key}: ${segment.count.toLocaleString()} events (${pct}% intensity)`}
-                        >
-                          <span className="text-[11px] font-semibold opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                            {segment.count > 0 ? segment.count.toLocaleString() : '-'}
-                          </span>
-                        </div>
-                      </td>
-                    );
-                  })}
+                  {groups.map((groupKey, index) => (
+                    <th
+                      key={groupKey}
+                      className="border-b border-gray-100 px-1 py-3 text-center text-[11px] font-medium text-gray-500"
+                    >
+                      <div className="px-1 leading-tight">
+                        {resolveGroupLabel(groupKey, index)}
+                      </div>
+                    </th>
+                  ))}
 
-                  <td className="py-1 pr-2 text-right">
-                    <span className="text-xs font-mono font-semibold text-gray-700">
-                      {row.total_usage?.toLocaleString() || 0}
-                    </span>
-                  </td>
+                  <th className="border-b border-gray-100 px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">
+                    Total
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
 
-          {filteredData.length === 0 && (
-            <div className="text-center py-12 text-gray-400 text-sm bg-gray-50 rounded-lg mt-2">
-              No features match the current filter.
-            </div>
-          )}
+              <tbody>
+                {filteredData.map((row) => (
+                  <tr key={row.feature} className="group align-middle">
+                    <td className="sticky left-0 z-20 border-r border-gray-100 bg-white px-2 py-0.5 align-middle text-[13px] font-medium text-gray-800 shadow-[1px_0_0_0_rgba(229,231,235,0.45)] transition-colors group-hover:text-[#1a73e8]">
+                      <div className="flex min-h-11 items-center whitespace-normal break-words [overflow-wrap:break-word]">
+                        {renderFeatureLabel(row.feature)}
+                      </div>
+                    </td>
+
+                    {groups.map((groupKey, index) => {
+                      const segment = row.segments.find(
+                        (item) => item.group_key === groupKey,
+                      ) || {
+                        group_key: groupKey,
+                        count: 0,
+                        percentile: 0,
+                        level: "Low",
+                      };
+
+                      const pct = segment.percentile;
+                      const bgColor = getIntensityColor(pct);
+                      const textColor = getTextColor(pct);
+                      const label = resolveGroupLabel(groupKey, index);
+
+                      return (
+                        <td key={groupKey} className="p-0">
+                          <div
+                            className="relative flex h-11 w-full cursor-pointer items-center justify-center border-r border-white/25 px-1 transition-all duration-150 hover:brightness-95"
+                            style={{
+                              backgroundColor: bgColor,
+                              color: textColor,
+                            }}
+                            title={`${row.feature} x ${label}: ${segment.count.toLocaleString()} events (${pct}% intensity)`}
+                          >
+                            <span className="text-[10px] font-semibold leading-none tabular-nums drop-shadow-sm">
+                              {segment.count > 0
+                                ? segment.count.toLocaleString()
+                                : "—"}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
+
+                    <td className="align-middle border-l border-gray-100 px-3 py-2 text-right">
+                      <div className="flex h-11 items-center justify-end">
+                        <span className="text-xs font-mono font-semibold tabular-nums text-gray-700">
+                          {row.total_usage?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {filteredData.length === 0 && (
+              <div className="mt-2 rounded-lg bg-gray-50 py-12 text-center text-sm text-gray-400">
+                No features match the current filter.
+              </div>
+            )}
+          </div>
         </div>
       )}
     </ChartContainer>

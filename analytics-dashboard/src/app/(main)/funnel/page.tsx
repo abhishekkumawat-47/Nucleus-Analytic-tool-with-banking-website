@@ -208,21 +208,21 @@ export default function FunnelPage() {
       label: 'Entry Users',
       value: entryCount.toLocaleString(),
       note: `${funnelData.length}-step journey`,
-      color: 'bg-white',
+      color: 'bg-blue-50',
       border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
       label: 'Overall Conversion',
       value: formatPercent(overallConversion),
       note: `${completedCount.toLocaleString()} users reached final step`,
-      color: 'bg-white',
+      color: 'bg-blue-50',
       border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
       label: 'Biggest Leak',
       value: `${toTitleCase(largestLeak.step.label)} (${largestLeak.step.dropOff}%)`,
       note: `${largestLeak.usersLostToNext.toLocaleString()} users lost to next stage`,
-      color: 'bg-white',
+      color: 'bg-blue-50',
       border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
@@ -234,21 +234,21 @@ export default function FunnelPage() {
           : funnelHealthScore >= 60
             ? 'Stable but with clear optimization headroom'
             : 'Urgent intervention needed at critical leaks',
-      color: 'bg-white',
+      color: 'bg-blue-50',
       border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
       label: 'Avg Stage Drop',
       value: formatPercent(averageStageDrop),
       note: 'Mean drop-off across actionable stages',
-      color: 'bg-white',
+      color: 'bg-blue-50',
       border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
     {
       label: 'Stage Momentum',
       value: formatPercent(stageMomentum),
       note: 'Average transition retention between steps',
-      color: 'bg-white',
+      color: 'bg-blue-50',
       border: 'border-gray-200 border-t-4 border-t-[#1a73e8]',
     },
   ];
@@ -349,7 +349,7 @@ export default function FunnelPage() {
                       className="h-full rounded-lg bg-linear-to-r from-[#1a73e8] to-[#4285F4] transition-all duration-700"
                       style={{ width: `${barWidth}%` }}
                     />
-                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs font-medium text-gray-300">
+                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs font-medium text-orange-400">
                       <span>{stageLabel}</span>
                       {item.nextStepLabel ? <span>Drop: {item.step.dropOff}%</span> : <span>Final step</span>}
                     </div>

@@ -371,7 +371,7 @@ export const dashboardAPI = {
   },
 
   /** Fetch grid-based heatmap matrix for multi-tenant or time-based single tenant */
-  async getFeatureHeatmap(tenants: string[], range: string): Promise<{ is_compare: boolean; groups: string[]; activities: unknown[] }> {
+  async getFeatureHeatmap(tenants: string[], range: string): Promise<{ is_compare: boolean; groups: string[]; group_labels?: string[]; activities: unknown[] }> {
     try {
       const response = await apiClient.get(`/features/heatmap?tenants=${tenants.join(',')}&range=${range}`);
       return response.data;

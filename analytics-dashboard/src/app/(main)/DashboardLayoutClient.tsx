@@ -47,7 +47,7 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
           sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-56'
         }`}
       >
-        <div className="print:hidden">
+        <div className="print:hidden sticky top-0 z-30">
           <TopNavbar />
         </div>
 
