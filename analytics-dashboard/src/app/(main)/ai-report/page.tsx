@@ -296,9 +296,9 @@ export default function AIReportPage() {
               <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 not-prose">
                 <div className="flex flex-wrap items-center gap-2">
                   {reportSections.length > 0 ? (
-                    reportSections.map((section) => (
+                    reportSections.map((section, idx) => (
                       <span
-                        key={section}
+                        key={idx}
                         className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
                       >
                         {section}
@@ -314,8 +314,8 @@ export default function AIReportPage() {
                 <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm border-t-4 border-t-[#1a73e8]">
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-700">Key Takeaways</h4>
                   <ul className="mt-3 space-y-2 text-sm text-gray-800">
-                    {strategicBullets.slice(0, 3).map((item) => (
-                      <li key={item} className="flex items-start gap-2">
+                    {strategicBullets.slice(0, 3).map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
                         <span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#1a73e8]" />
                         <span>{item}</span>
                       </li>

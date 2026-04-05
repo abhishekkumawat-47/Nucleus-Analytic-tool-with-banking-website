@@ -2904,7 +2904,7 @@ def get_ai_report(
             ]
         }
         retention_compact = retention if isinstance(retention, str) else {
-            "cohorts": (retention or {}).get("retention", [])[:6],
+            "cohorts": retention[:6] if isinstance(retention, list) else [],
         }
         predictive_compact = pred_adoption if isinstance(pred_adoption, str) else {
             "total_users": (pred_adoption or {}).get("total_users", 0),

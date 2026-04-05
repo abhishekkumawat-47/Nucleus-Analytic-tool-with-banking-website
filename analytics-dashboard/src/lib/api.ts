@@ -606,7 +606,7 @@ export const dashboardAPI = {
     try {
       const response = await apiClient.get<BackendAIReportResponse>(
         `/ai_report?tenants=${tenants.join(',')}&range=${range}&force_refresh=true`,
-        { timeout: 120000 } // 120 seconds for report generation
+        { timeout: 300000 } // 300 seconds for report generation
       );
       const insights: AIInsight[] = (response.data.insights || []).map((ins: BackendInsight, i: number) => ({
         id: `ai-${i}`,

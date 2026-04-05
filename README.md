@@ -34,7 +34,8 @@ cd Nucleus-Analytic-tool-with-banking-website
 # Start all 11 services
 docker compose up --build
 ```
-⏳ **First run: 5–10 minutes** (downloads images & Ollama LLM). Subsequent runs are faster.
+⏳ **First run: 10-15 minutes** (downloads images & Ollama LLM). Subsequent runs are faster.
+Initiation of Ollama takes time so make sure to wait for 10 minutes before running the generate ai report command 
 
 ### 3. Access Applications
 | App | URL | Purpose |
