@@ -64,6 +64,8 @@ interface AdminSummary {
   total_tenants: number;
   total_events: number;
   top_tenants: AdminSummaryTenant[];
+  time_range?: string;
+  available?: boolean;
 }
 
 /** Categories of data and their cloud visibility status */
@@ -90,7 +92,7 @@ const dataCategories = [
     cloudVisible: true,
     description: 'Per-tenant event counts for billing and capacity planning.',
     sensitivity: 'low' as const,
-    examples: 'twitter: 12.4K events, beta-app: 3.1K events',
+    examples: 'nexabank: 12.4K events, acme-corp: 3.1K events',
   },
   {
     name: 'Traffic & Page Views',
@@ -159,22 +161,20 @@ const sensitivityConfig = {
 
 export default function TransparencyPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('on-prem');
+  const dashboardData = useDashboardData();
+  const { selectedTenants, tenantsParam, timeRange, rangeParam } = dashboardData;
   const { data: rawAdminSummaryData, isLoading: adminLoading } = useQuery<AdminSummary>({
-    queryKey: ['adminSummary'],
-    queryFn: () => dashboardAPI.getAdminSummary(),
+    queryKey: ['adminSummary', rangeParam],
+    queryFn: () => dashboardAPI.getAdminSummary(rangeParam),
     enabled: viewMode === 'cloud',
   });
   
   const rawAdminSummary = rawAdminSummaryData || null;
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const { selectedTenants, tenantsParam } = useDashboardData();
   const { data: session } = useSession();
 
   const userRole = session?.user?.role || 'user';
   const isAppAdmin = userRole === 'app_admin';
-
-  // Full dashboard data for on-prem view
-  const dashboardData = useDashboardData();
 
   /**
    * For App Admins: filter the admin summary to only show their own tenant.
@@ -183,6 +183,7 @@ export default function TransparencyPage() {
    */
   const adminSummary = useMemo(() => {
     if (!rawAdminSummary) return null;
+    if (rawAdminSummary.available === false) return rawAdminSummary;
     if (!isAppAdmin || !selectedTenants || selectedTenants.length === 0) return rawAdminSummary;
 
     const myTenants = rawAdminSummary.top_tenants.filter(
@@ -201,8 +202,10 @@ export default function TransparencyPage() {
       total_tenants: myTenants.length || 1,
       total_events: myTotalEvents,
       top_tenants: myTenants,
+      time_range: rawAdminSummary.time_range ?? rangeParam,
+      available: true,
     };
-  }, [rawAdminSummary, isAppAdmin, tenantsParam]);
+  }, [rawAdminSummary, isAppAdmin, selectedTenants, tenantsParam, rangeParam]);
 
   const cloudVisibleCount = dataCategories.filter((c) => c.cloudVisible).length;
   const blockedCount = dataCategories.filter((c) => !c.cloudVisible).length;
@@ -644,7 +647,7 @@ export default function TransparencyPage() {
                           <h2 className="text-3xl font-bold text-gray-900">
                             {isAppAdmin
                               ? (selectedTenants.length > 0 ? selectedTenants.map((t: string) => t.charAt(0).toUpperCase() + t.slice(1)).join(', ') : '—')
-                              : (adminSummary?.total_tenants || 0)}
+                              : (adminSummary?.available === false ? '—' : (adminSummary?.total_tenants ?? '—'))}
                           </h2>
                         </div>
                       </div>
@@ -654,10 +657,12 @@ export default function TransparencyPage() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-500">
-                            {isAppAdmin ? `Events (30d) — ${selectedTenants.join(', ')}` : 'Total Events (30d)'}
+                            {isAppAdmin ? `Events (${timeRange}) — ${selectedTenants.join(', ')}` : `Total Events (${adminSummary?.time_range ?? timeRange})`}
                           </p>
                           <h2 className="text-3xl font-bold text-gray-900">
-                            {(adminSummary?.total_events || 0).toLocaleString()}
+                            {adminSummary?.available === false
+                              ? '—'
+                              : (adminSummary?.total_events ?? 0).toLocaleString()}
                           </h2>
                         </div>
                       </div>
@@ -674,7 +679,11 @@ export default function TransparencyPage() {
                        </span>
                     </h3>
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      {adminSummary?.top_tenants &&
+                      {adminSummary?.available === false ? (
+                        <div className="p-6 text-sm text-gray-500">
+                          Admin summary is temporarily unavailable. Please retry after the backend is ready.
+                        </div>
+                      ) : adminSummary?.top_tenants &&
                       adminSummary.top_tenants.length > 0 ? (
                         <table className="w-full text-sm text-left">
                           <thead className="text-xs text-gray-500 uppercase bg-gray-100">

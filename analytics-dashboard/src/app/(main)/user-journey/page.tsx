@@ -5,9 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
-import { Search, User, Clock, ArrowDown, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, User, Clock, AlertCircle } from 'lucide-react';
 import ChartContainer from '@/components/ChartContainer';
 import { TableSkeleton, ChartSkeleton } from '@/components/Skeletons';
+import type { JourneyEvent } from '@/types';
 
 export default function UserJourneyPage() {
   const { tenantsParam, rangeParam, selectedTenants, timeRange } = useDashboardData();
@@ -130,7 +131,7 @@ export default function UserJourneyPage() {
 
                 {/* Vertical Timeline */}
                 <div className="relative pl-6 border-l-2 border-gray-200 space-y-0">
-                  {(journey?.sessions || []).map((session: any[], sIdx: number) => (
+                  {(journey?.sessions || []).map((session: JourneyEvent[], sIdx: number) => (
                     <div key={sIdx}>
                       {/* Session Header */}
                       <div className="relative mb-4 -ml-[25px] flex items-center gap-2">
@@ -138,7 +139,7 @@ export default function UserJourneyPage() {
                         <span className="text-xs font-bold text-[#1a73e8] uppercase tracking-wider bg-white border border-[#1a73e8]/30 px-2 py-0.5 rounded">Session {sIdx + 1}</span>
                       </div>
 
-                      {session.map((evt: any, eIdx: number) => (
+                      {session.map((evt: JourneyEvent, eIdx: number) => (
                         <div key={eIdx} className="relative mb-4 -ml-[25px] flex items-start gap-3">
                           <div className="w-3 h-3 mt-1.5 bg-white border-2 border-gray-300 rounded-full z-10 flex-shrink-0"></div>
                           <div className="flex-1 p-3 bg-white border border-gray-100 rounded-lg shadow-sm hover:shadow transition-shadow">

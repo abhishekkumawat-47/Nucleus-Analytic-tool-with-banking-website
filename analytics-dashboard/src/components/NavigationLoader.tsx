@@ -1,82 +1,109 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+
+const FALLBACK_TIMEOUT = 8000;
+const COMPLETION_DELAY = 250;
 
 export default function NavigationLoader() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  // Create a unique route key
   const routeKey = useMemo(() => {
-    const query = searchParams?.toString() || '';
+    const query = searchParams?.toString();
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
 
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const pendingRouteRef = useRef<string | null>(null);
-  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Handle link clicks globally
   useEffect(() => {
-    const onDocumentClick = (event: MouseEvent) => {
+    const handleNavigationStart = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+        return;
 
-      const target = event.target as HTMLElement | null;
-      const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+      const anchor = (event.target as HTMLElement)?.closest(
+        "a[href]",
+      ) as HTMLAnchorElement | null;
       if (!anchor) return;
-      if (anchor.target && anchor.target !== '_self') return;
-      if (anchor.hasAttribute('download')) return;
 
-      const href = anchor.getAttribute('href');
-      if (!href || href.startsWith('#')) return;
+      // Ignore special cases
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
 
       try {
         const nextUrl = new URL(anchor.href, window.location.href);
         const currentUrl = new URL(window.location.href);
+
+        // Ignore external links
         if (nextUrl.origin !== currentUrl.origin) return;
 
-        const nextKey = `${nextUrl.pathname}${nextUrl.search}`;
-        const currentKey = `${currentUrl.pathname}${currentUrl.search}`;
-        if (nextKey === currentKey) return;
+        const nextRoute = `${nextUrl.pathname}${nextUrl.search}`;
+        const currentRoute = `${currentUrl.pathname}${currentUrl.search}`;
 
-        pendingRouteRef.current = nextKey;
-        setLoading(true);
+        if (nextRoute === currentRoute) return;
 
+        pendingRouteRef.current = nextRoute;
+        setIsLoading(true);
+
+        // Fallback safety timeout
         if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+
         fallbackTimerRef.current = setTimeout(() => {
-          setLoading(false);
+          setIsLoading(false);
           pendingRouteRef.current = null;
-        }, 8000);
+        }, FALLBACK_TIMEOUT);
       } catch {
-        // Ignore URL parsing errors and skip loader.
+        // Fail silently
       }
     };
 
-    window.addEventListener('click', onDocumentClick, true);
-    return () => window.removeEventListener('click', onDocumentClick, true);
+    window.addEventListener("click", handleNavigationStart, true);
+    return () =>
+      window.removeEventListener("click", handleNavigationStart, true);
   }, []);
 
+  // Stop loader when route changes
   useEffect(() => {
-    if (!loading) return;
+    if (!isLoading) return;
 
-    const doneTimer = setTimeout(() => {
-      setLoading(false);
+    const completionTimer = setTimeout(() => {
+      setIsLoading(false);
       pendingRouteRef.current = null;
+
       if (fallbackTimerRef.current) {
         clearTimeout(fallbackTimerRef.current);
         fallbackTimerRef.current = null;
       }
-    }, 250);
+    }, COMPLETION_DELAY);
 
-    return () => clearTimeout(doneTimer);
-  }, [routeKey, loading]);
+    return () => clearTimeout(completionTimer);
+  }, [routeKey, isLoading]);
 
-  if (!loading) return null;
+  if (!isLoading) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-[9999]">
-      <div className="h-1 w-full bg-blue-100/80">
-        <div className="h-full w-1/2 bg-[#1a73e8] animate-pulse" />
-      </div>
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center bg-white"
+    >
+          {/* Loader */}
+          <div className="flex items-center justify-center">
+            <div className="relative h-10 w-10 shrink-0">
+              <div className="absolute inset-0 rounded-full border-2 border-blue-100" />
+              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-blue-600 border-r-blue-600 animate-spin" />
+            </div>
+          </div>
     </div>
   );
 }

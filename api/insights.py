@@ -7,10 +7,16 @@ from typing import List, Dict, Any
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from storage.client import ch_client
+from api.page_map import normalize_event, resolve_display_name, resolve_page
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434")
 
-def query_ollama(prompt: str, json_format: bool = False) -> str:
+def query_ollama(
+    prompt: str,
+    json_format: bool = False,
+    timeout_seconds: int = 180,
+    max_tokens: int | None = None,
+) -> str:
     """Send a prompt to Ollama and return the response."""
     url = f"{OLLAMA_URL}/api/generate"
     data = {
@@ -20,6 +26,8 @@ def query_ollama(prompt: str, json_format: bool = False) -> str:
     }
     if json_format:
         data["format"] = "json"
+    if max_tokens is not None:
+        data["options"] = {"num_predict": max_tokens}
         
     try:
         req = urllib.request.Request(
@@ -28,7 +36,7 @@ def query_ollama(prompt: str, json_format: bool = False) -> str:
             headers={'Content-Type': 'application/json'}, 
             method='POST'
         )
-        with urllib.request.urlopen(req, timeout=1200) as response:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result.get('response', '')
     except Exception as e:
@@ -43,6 +51,24 @@ def generate_insights(tenant_id: str) -> List[Dict[str, str]]:
     insights = []
     raw_data_context = []
 
+    def build_feature_context(raw_feature: str) -> Dict[str, str]:
+        canonical = normalize_event(raw_feature)
+        display_name = resolve_display_name(canonical) or resolve_display_name(raw_feature) or raw_feature.replace('_', ' ').title()
+        page = resolve_page(canonical) or resolve_page(raw_feature) or 'unknown page'
+        return {"canonical": canonical, "display_name": display_name, "page": page}
+
+    def build_action_hint(canonical: str, display_name: str) -> str:
+        lowered = canonical.lower()
+        if any(token in lowered for token in ["login", "register", "dashboard", "page.view"]):
+            return f"Reduce friction around {display_name.lower()} by shortening the path, improving labels, and surfacing the next expected action earlier."
+        if any(token in lowered for token in ["kyc", "loan"]):
+            return f"Break {display_name.lower()} into smaller steps, preserve state, and show progress so users can resume without rework."
+        if any(token in lowered for token in ["pay", "transfer", "payment", "transactions"]):
+            return f"Add defaults, recent-recipient shortcuts, and inline validation around {display_name.lower()} to reduce completion errors."
+        if "ai" in lowered or "pro-feature" in lowered:
+            return f"Show concrete examples, previews, or starter suggestions around {display_name.lower()} so its value is clear on first use."
+        return f"Review the surrounding UI for {display_name.lower()} and remove any unnecessary steps or ambiguity."
+
     sql_low_adoption = """
         SELECT event_name, sum(total_events) as count
         FROM feature_intelligence.daily_feature_usage
@@ -53,7 +79,11 @@ def generate_insights(tenant_id: str) -> List[Dict[str, str]]:
     try:
         low_adoption = ch_client.query(sql_low_adoption, {"tenant_id": tenant_id})
         for row in low_adoption:
-            raw_data_context.append(f"Low adoption: '{row['event_name']}' with only {row['count']} interactions last 7 days.")
+            context = build_feature_context(str(row['event_name']))
+            raw_data_context.append(
+                f"Low adoption: '{context['display_name']}' ({context['canonical']}) on {context['page']} recorded only {row['count']} interactions in the last 7 days. "
+                f"{build_action_hint(context['canonical'], context['display_name'])}"
+            )
     except Exception as e:
         print(f"Insight Sql Error (Low Adoption): {e}")
 
@@ -69,14 +99,19 @@ def generate_insights(tenant_id: str) -> List[Dict[str, str]]:
     try:
         trending = ch_client.query(sql_trending, {"tenant_id": tenant_id})
         for row in trending:
-            raw_data_context.append(f"Trending: '{row['event_name']}' grew from {row['yesterday_count']} to {row['today_count']} interactions today.")
+            context = build_feature_context(str(row['event_name']))
+            raw_data_context.append(
+                f"Trending: '{context['display_name']}' ({context['canonical']}) on {context['page']} grew from {row['yesterday_count']} to {row['today_count']} interactions today. "
+                f"Use this momentum to place it earlier in the journey or pair it with the next likely action."
+            )
     except Exception as e:
         print(f"Insight Sql Error (Trending): {e}")
 
     context_str = "\n".join(raw_data_context)
     
     prompt = f"""
-You are an expert AI product analyst. Analyze the following daily metrics context for app features and provide exactly 3 succinct, strategic insights.
+You are an expert AI product analyst for a banking product.
+Analyze the following daily metrics context and provide exactly 3 strategic insights that are specific, actionable, and tied to the product journey.
 Context:
 {context_str}
 
@@ -88,9 +123,11 @@ Output the result as a raw JSON array of objects. Example format:
 Rules:
 - severity must be "low", "medium", "high", or "info"
 - only pure json, no markdown blocks, no intro text.
+- Each insight must include the feature name, the user journey context, and a concrete recommendation.
+- Prefer product actions over generic advice.
 """
     
-    llm_response = query_ollama(prompt, json_format=True)
+    llm_response = query_ollama(prompt, json_format=True, timeout_seconds=90, max_tokens=360)
     if llm_response:
         try:
             cleaned = llm_response.strip()
@@ -107,11 +144,11 @@ Rules:
     print("Falling back to rule-based insights.")
     for line in raw_data_context:
         if "stable" in line:
-            insights.append({"type": "Stable", "severity": "info", "feature": "all", "message": line})
+            insights.append({"type": "Stable Health", "severity": "info", "feature": "all", "message": line + " No immediate intervention is needed, but keep monitoring for sudden shifts."})
         elif "Low adoption" in line:
             parts = line.split("'")
             feat = parts[1] if len(parts) > 1 else "unknown"
-            insights.append({"type": "Low Adoption", "severity": "medium", "feature": feat, "message": line + " Consider a tooltip or UI surfacing."})
+            insights.append({"type": "Low Adoption", "severity": "medium", "feature": feat, "message": line})
         elif "Trending" in line:
             parts = line.split("'")
             feat = parts[1] if len(parts) > 1 else "unknown"

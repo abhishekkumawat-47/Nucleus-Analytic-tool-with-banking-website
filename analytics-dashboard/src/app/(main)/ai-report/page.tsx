@@ -118,13 +118,13 @@ function extractStrategicBullets(md: string): string[] {
 }
 
 export default function AIReportPage() {
-  const { tenantsParam, selectedTenants } = useDashboardData();
+  const { tenantsParam, selectedTenants, rangeParam, timeRange } = useDashboardData();
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState<boolean>(false);
 
   const { data = {} as AIReportData, isLoading: loading, refetch } = useQuery<AIReportData>({
-    queryKey: ['aiReport', tenantsParam],
-    queryFn: () => dashboardAPI.getLatestAIReport(tenantsParam),
+    queryKey: ['aiReport', tenantsParam, rangeParam],
+    queryFn: () => dashboardAPI.getLatestAIReport(tenantsParam, rangeParam),
   });
 
   const report = data.report || '';
@@ -134,8 +134,8 @@ export default function AIReportPage() {
 
   const handleGenerate = async () => {
     setGenerating(true);
-    const snapshot = await dashboardAPI.generateAIReport(tenantsParam);
-    queryClient.setQueryData(['aiReport', tenantsParam], snapshot);
+    const snapshot = await dashboardAPI.generateAIReport(tenantsParam, rangeParam);
+    queryClient.setQueryData(['aiReport', tenantsParam, rangeParam], snapshot);
     setGenerating(false);
   };
 
@@ -172,13 +172,13 @@ export default function AIReportPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">AI Summary Report</h1>
           <p className="text-muted-foreground relative text-gray-500 max-w-3xl">
-            The report is reused from the latest stored snapshot until you explicitly generate a new one.
+            The report is reused from the latest stored snapshot for {timeRange} until you explicitly generate a new one.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => refetch()}
-            className="flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100"
+            className="flex cursor-pointer items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100"
           >
             <Clock3 className="mr-2 h-4 w-4" />
             Load latest
@@ -193,7 +193,7 @@ export default function AIReportPage() {
           </button>
           <button
             onClick={handlePrint}
-            className="flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black"
+            className="flex cursor-pointer items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black"
           >
             <Printer className="mr-2 h-5 w-5" />
             Print / Save as PDF

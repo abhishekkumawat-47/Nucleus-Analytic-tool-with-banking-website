@@ -24,7 +24,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
   if (isAuthLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-white">
-        <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#1a73e8]" />
       </div>
     );
   }

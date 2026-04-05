@@ -6,7 +6,7 @@
  * 
  * USAGE:
  *   import { tracker } from '@/lib/tracker';
- *   tracker.track('post_tweet', 'twitter', { length: 280 });
+ *   tracker.track('user_signup', 'app-id', { plan: 'pro' });
  */
 
 import axios from 'axios';
@@ -43,8 +43,8 @@ class FeatureTracker {
 
   /**
    * Track an event.
-   * @param eventName - The business-level event name (e.g., 'login', 'post_tweet')
-   * @param tenantId  - The app/tenant identifier (e.g., 'twitter')
+   * @param eventName - The business-level event name (e.g., 'login', 'feature_used')
+   * @param tenantId  - The app/tenant identifier (e.g., 'nexabank', 'acme-corp')
    * @param metadata  - Extra context (device, location, etc.)
    */
   async track(eventName: string, tenantId: string, metadata: Record<string, any> = {}) {

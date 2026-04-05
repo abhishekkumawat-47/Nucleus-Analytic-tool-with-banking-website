@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
       // Explicit backend API rewrites avoid regex edge-cases that can accidentally
       // capture /api/auth/* and break NextAuth client JSON fetches.
       fallback: [
+        { source: '/api/ai_report', destination: `http://${analyticsApiHost}:8001/ai_report` },
         { source: '/api/metrics/:path*', destination: `http://${analyticsApiHost}:8001/metrics/:path*` },
         { source: '/api/features/:path*', destination: `http://${analyticsApiHost}:8001/features/:path*` },
         { source: '/api/funnels/:path*', destination: `http://${analyticsApiHost}:8001/funnels/:path*` },

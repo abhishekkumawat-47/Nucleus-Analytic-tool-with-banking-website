@@ -20,16 +20,16 @@ export default function UnauthorizedPage() {
           Your account <strong className="text-gray-800">{session?.user?.email}</strong> does not have administrator permissions for the analytics dashboard.
         </p>
         <p className="text-gray-400 text-sm mb-6">
-          Only authorized App Admins and Company Admins can access this area. You can still use the Twitter app normally.
+          Only authorized App Admins and Company Admins can access this area.
         </p>
         
         <div className="space-y-3">
           <a
-            href={process.env.NEXT_PUBLIC_MAIN_APP_URL || "http://localhost:3000"}
+            href={process.env.NEXT_PUBLIC_MAIN_APP_URL || "http://localhost:3002"}
             className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-colors font-medium"
           >
             <ExternalLink className="w-4 h-4" />
-            Go to Twitter App
+            Go to Main App
           </a>
           
           <button

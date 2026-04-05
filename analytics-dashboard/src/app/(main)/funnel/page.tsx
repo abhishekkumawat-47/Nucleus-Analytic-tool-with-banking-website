@@ -61,13 +61,12 @@ function severityStyles(level: 'critical' | 'high' | 'medium' | 'low') {
 
 export default function FunnelPage() {
   const { isLoading, funnelData, selectedTenants, timeRange, topFeatures, featureActivity } = useDashboardData();
-  const safeFunnelData = funnelData ?? [];
+  const safeFunnelData = useMemo(() => funnelData ?? [], [funnelData]);
 
   const {
     entryCount,
     completedCount,
     overallConversion,
-    totalDropOff,
     diagnostics,
     actionableStages,
     largestLeak,
@@ -304,7 +303,7 @@ export default function FunnelPage() {
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-gray-500">Tenant</p>
-            <p className="text-sm font-semibold text-gray-900 mt-1">{selectedTenants.map(t => toTitleCase(t)).join(', ')}</p>
+            <p className="text-sm font-semibold text-gray-900 mt-1">{selectedTenants.map((tenant: string) => toTitleCase(tenant)).join(', ')}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-gray-500">Time Window</p>
@@ -459,8 +458,9 @@ export default function FunnelPage() {
         <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold tracking-tight text-gray-900 flex items-center gap-2">
             <Target className="w-4 h-4 text-[#1a73e8]" />
-            Stage-by-Stage Action Board
+            Stage-by-Stage Action Board ({timeRange})
           </h2>
+          <p className="mt-1 text-xs text-gray-500">Actionable leak analysis for the currently selected analytics window.</p>
           <div className="mt-4 space-y-3">
             {actionableStages.map((stage) => {
               const severity = getSeverity(stage.step.dropOff);

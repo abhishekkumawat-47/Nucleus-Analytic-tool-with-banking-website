@@ -1783,37 +1783,48 @@ def get_deployment_info():
     }
 
 @app.get("/admin/summary")
-def get_admin_summary():
+def get_admin_summary(range: str = Query("30d", description="Time range like 7d, 30d, 90d")):
     """Returns high-level global aggregated stats (Cloud mode only)."""
     require_cloud_mode()
     try:
+        days = parse_range(range)
         sql = """
             SELECT count(distinct tenant_id) as total_tenants, 
                    sum(total_events) as total_events
             FROM feature_intelligence.daily_feature_usage
-            WHERE date >= today() - 30
+            WHERE date >= today() - %(days)s
         """
-        basic = ch_client.query(sql)[0] if ch_client.query(sql) else {"total_tenants": 0, "total_events": 0}
+        basic_rows = ch_client.query(sql, {"days": days})
+        basic = basic_rows[0] if basic_rows else {"total_tenants": 0, "total_events": 0}
         
         sql_top = """
             SELECT tenant_id as name, sum(total_events) as events
             FROM feature_intelligence.daily_feature_usage
+            WHERE date >= today() - %(days)s
             GROUP BY tenant_id
             ORDER BY events DESC LIMIT 5
         """
-        top_tenants_raw = ch_client.query(sql_top)
+        top_tenants_raw = ch_client.query(sql_top, {"days": days})
         top_tenants = [
-            {"name": row["name"].capitalize(), "events": int(row["events"])} 
+            {"id": row["name"], "name": row["name"].capitalize(), "events": int(row["events"])} 
             for row in top_tenants_raw
         ]
         
         return {
             "total_tenants": basic["total_tenants"],
             "total_events": basic["total_events"],
-            "top_tenants": top_tenants
+            "top_tenants": top_tenants,
+            "time_range": range,
+            "available": True,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "total_tenants": 0,
+            "total_events": 0,
+            "top_tenants": [],
+            "time_range": range,
+            "available": False,
+        }
 
 @app.get("/admin/app/{tenant_id}/summary")
 def get_admin_app_summary(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):
@@ -2634,14 +2645,19 @@ def get_predictive_adoption(tenants: str = Query(..., description="Comma-separat
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/ai_report")
-def get_ai_report(tenants: str = Query(..., description="Comma-separated list of tenants"), force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")):
+def get_ai_report(
+    tenants: str = Query(..., description="Comma-separated list of tenants"),
+    range: str = Query("30d", description="Time range like 7d, 30d, 90d"),
+    force_refresh: bool = Query(False, description="Bypass the cache and generate a new report")
+):
     """Generates a comprehensive AI-powered summarization report for the dashboard.
     Reports are persisted in ClickHouse (ai_reports table). Old reports are auto-replaced."""
     tenant_id = tenants  # Alias for backwards compatibility within this function
+    cache_key = f"{tenant_id}:{range}"
     require_tenant_access(tenant_id)
     import json as _json
 
-    def _load_report_from_db(tid: str):
+    def _load_report_from_db(tid: str, expected_range: str):
         """Load the latest stored report from ClickHouse."""
         sql = """
             SELECT report, insights, generated_by, generated_at
@@ -2649,7 +2665,11 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
             WHERE tenant_id = %(tenant_id)s
             LIMIT 1
         """
-        rows = ch_client.query(sql, {"tenant_id": tid})
+        try:
+            rows = ch_client.query(sql, {"tenant_id": tid})
+        except Exception:
+            # If storage is unavailable, continue with on-demand generation.
+            return None
         if not rows:
             return None
         row = rows[0]
@@ -2660,74 +2680,90 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
             insights_parsed = []
         generated_at = row.get("generated_at")
         generated_at_str = generated_at.isoformat() if hasattr(generated_at, "isoformat") else str(generated_at)
+        generated_by = row.get("generated_by", "")
+        stored_range = None
+        if isinstance(generated_by, str) and generated_by.startswith("range:"):
+            stored_range = generated_by.split(":", 1)[1].strip()
+
+        if stored_range and stored_range != expected_range:
+            return None
+
         return {
             "report": row.get("report", ""),
             "insights": insights_parsed,
-            "generated_by": row.get("generated_by", ""),
+            "generated_by": generated_by,
             "generated_at": generated_at_str,
+            "time_range": stored_range or expected_range,
         }
 
     def _save_report_to_db(tid: str, report: str, insights_list: list, generated_by: str = ""):
         """Insert a new report into ClickHouse. ReplacingMergeTree will replace the old one."""
-        client = ch_client._get_client()
-        client.insert(
-            'feature_intelligence.ai_reports',
-            [[tid, generated_by, report, _json.dumps(insights_list), datetime.utcnow()]],
-            column_names=['tenant_id', 'generated_by', 'report', 'insights', 'generated_at']
-        )
+        try:
+            client = ch_client._get_client()
+            client.insert(
+                'feature_intelligence.ai_reports',
+                [[tid, generated_by, report, _json.dumps(insights_list), datetime.utcnow()]],
+                column_names=['tenant_id', 'generated_by', 'report', 'insights', 'generated_at']
+            )
+        except Exception:
+            # Don't fail the report response if persistence is temporarily unavailable.
+            return
 
     try:
         # --- If NOT force refreshing, try to return stored report ---
         if not force_refresh:
             # Fast path: in-memory cache
             now = time.time()
-            if tenant_id in AI_REPORT_CACHE:
-                cached_data = AI_REPORT_CACHE[tenant_id]
+            if cache_key in AI_REPORT_CACHE:
+                cached_data = AI_REPORT_CACHE[cache_key]
                 if now - cached_data["timestamp"] < AI_CACHE_TTL:
                     return {
                         "tenant_id": tenant_id,
                         "report": cached_data.get("report", ""),
                         "cached": True,
                         "generated_at": cached_data.get("generated_at"),
+                        "time_range": cached_data.get("time_range", range),
                         "insights": cached_data.get("insights", []),
                     }
 
             # Slow path: load from ClickHouse
-            db_report = _load_report_from_db(tenant_id)
+            db_report = _load_report_from_db(tenant_id, range)
             if db_report and db_report["report"]:
                 # Populate in-memory cache for fast subsequent reads
-                AI_REPORT_CACHE[tenant_id] = {
+                AI_REPORT_CACHE[cache_key] = {
                     "timestamp": time.time(),
                     "report": db_report["report"],
                     "insights": db_report["insights"],
                     "generated_at": db_report["generated_at"],
+                    "time_range": db_report.get("time_range", range),
                 }
                 return {
                     "tenant_id": tenant_id,
                     "report": db_report["report"],
                     "cached": True,
                     "generated_at": db_report["generated_at"],
+                    "time_range": db_report.get("time_range", range),
                     "insights": db_report["insights"],
                 }
 
         # --- Generate a fresh report ---
-        kpi = get_kpi_metrics(tenants=tenant_id, range="30d")
-        secondary = get_secondary_kpi(tenants=tenant_id, range="30d")
-        locations = get_locations(tenants=tenant_id, range="30d")[:5]
-        activities = get_feature_activity(tenants=tenant_id, range="30d")
+        kpi = get_kpi_metrics(tenants=tenant_id, range=range)
+        secondary = get_secondary_kpi(tenants=tenant_id, range=range)
+        locations = get_locations(tenants=tenant_id, range=range)[:5]
+        activities = get_feature_activity(tenants=tenant_id, range=range)
 
         try:
-            funnels = get_funnel_analysis(tenants=tenant_id, steps="login,dashboard_view,loan_applied,kyc_started,kyc_completed", window_minutes=60, range="30d")
+            funnels = get_funnel_analysis(tenants=tenant_id, steps="login,dashboard_view,loan_applied,kyc_started,kyc_completed", window_minutes=60, range=range)
         except Exception:
             funnels = "No funnel data available."
             
         try:
-            retention = get_retention(tenants=tenant_id, range="30d")
+            retention = get_retention(tenants=tenant_id, range=range)
         except Exception:
             retention = "No retention data available."
             
         try:
-            pred_adoption = get_predictive_adoption(tenants=tenant_id, range="30d")
+            pred_adoption = get_predictive_adoption(tenants=tenant_id, range=range)
         except Exception:
             pred_adoption = "No predictive adoption data available."
             
@@ -2824,11 +2860,70 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
 
         divider = '<hr style="border: 0; height: 1px; background: #e2e8f0; margin: 40px 0;" />'
 
+        def _as_dict_row(value):
+            return value if isinstance(value, dict) else {}
+
+        kpi_compact = [
+            {
+                "label": _as_dict_row(item).get("label"),
+                "value": _as_dict_row(item).get("value"),
+                "change": _as_dict_row(item).get("change"),
+            }
+            for item in (kpi or [])[:8]
+        ]
+        secondary_compact = [
+            {
+                "label": _as_dict_row(item).get("label"),
+                "value": _as_dict_row(item).get("value"),
+            }
+            for item in (secondary or [])[:8]
+        ]
+        locations_compact = [
+            {
+                "country": _as_dict_row(loc).get("country"),
+                "visits": _as_dict_row(loc).get("visits"),
+            }
+            for loc in (locations or [])[:5]
+        ]
+        activities_compact = [
+            {
+                "feature": _as_dict_row(act).get("feature"),
+                "level": _as_dict_row(act).get("level"),
+            }
+            for act in (activities or [])[:8]
+        ]
+        funnel_compact = funnels if isinstance(funnels, str) else {
+            "funnel": [
+                {
+                    "step": _as_dict_row(step).get("step"),
+                    "event_name": _as_dict_row(step).get("event_name"),
+                    "users_completed": _as_dict_row(step).get("users_completed"),
+                    "drop_off_pct": _as_dict_row(step).get("drop_off_pct"),
+                }
+                for step in (funnels or {}).get("funnel", [])[:8]
+            ]
+        }
+        retention_compact = retention if isinstance(retention, str) else {
+            "cohorts": (retention or {}).get("retention", [])[:6],
+        }
+        predictive_compact = pred_adoption if isinstance(pred_adoption, str) else {
+            "total_users": (pred_adoption or {}).get("total_users", 0),
+            "predictions": [
+                {
+                    "feature_name": _as_dict_row(p).get("feature_name"),
+                    "score": _as_dict_row(p).get("score"),
+                    "status": _as_dict_row(p).get("status"),
+                    "growth_rate": _as_dict_row(p).get("growth_rate"),
+                }
+                for p in (pred_adoption or {}).get("predictions", [])[:8]
+            ],
+        }
+
         context_str = (
-            f"KPI Metrics: {kpi}\n\nSecondary Metrics: {secondary}\n\n"
-            f"Top Locations: {locations}\n\nFeature Activities: {activities}\n\n"
-            f"Funnel Step Drop-offs: {funnels}\n\nRetention Loop Metrics: {retention}\n\n"
-            f"Predictive Adoption Scores: {pred_adoption}"
+            f"KPI Metrics: {kpi_compact}\n\nSecondary Metrics: {secondary_compact}\n\n"
+            f"Top Locations: {locations_compact}\n\nFeature Activities: {activities_compact}\n\n"
+            f"Funnel Step Drop-offs: {funnel_compact}\n\nRetention Loop Metrics: {retention_compact}\n\n"
+            f"Predictive Adoption Scores: {predictive_compact}"
         )
 
         prompt = f"""
@@ -2859,13 +2954,51 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
         Do not include any raw JSON or filler content. Do not output anything outside of the markdown itself.
         """
         from api.insights import query_ollama
-        llm_response = query_ollama(prompt)
+        llm_response = query_ollama(prompt, timeout_seconds=180, max_tokens=900)
 
         if not llm_response:
-            raise HTTPException(status_code=503, detail="AI Model currently initializing or unavailable.")
+            # Graceful fallback when the model is unavailable.
+            total_events = 0
+            active_users = 0
+            bounce_rate = None
+            session_duration = None
+            kpi_lookup = {str(item.get("label", "")).lower(): item.get("value") for item in kpi}
+
+            if "total events" in kpi_lookup:
+                total_events = kpi_lookup.get("total events") or 0
+            if "active users" in kpi_lookup:
+                active_users = kpi_lookup.get("active users") or 0
+            if "bounce rate" in kpi_lookup:
+                bounce_rate = kpi_lookup.get("bounce rate")
+            if "avg session duration" in kpi_lookup:
+                session_duration = kpi_lookup.get("avg session duration")
+
+            llm_response = f"""
+## 1. Executive State of Product Strategy
+The AI model is temporarily unavailable, so this report is generated from live telemetry summaries for **{tenant_id}** over **{range}**.
+
+- Total events: **{total_events}**
+- Active users: **{active_users}**
+- Bounce rate: **{bounce_rate if bounce_rate is not None else 'n/a'}**
+- Avg session duration: **{session_duration if session_duration is not None else 'n/a'}**
+
+## 2. Friction Points & Drop-off Telemetry
+Current funnel and retention metrics indicate where users stall. Prioritize screens with the steepest conversion drops and validate form complexity, field count, and error messaging there.
+
+## 3. Feature Interaction & Stickiness Radar
+Feature activity and location distribution suggest where engagement is concentrated. Promote high-utility features earlier in journeys and simplify access to underused but strategic actions.
+
+## 4. Proposed Concrete Product Roadmap
+1. Streamline top drop-off funnel step with fewer required inputs and clearer progress indicators.
+2. Add contextual nudges/tooltips on low-adoption but high-value features.
+3. Introduce follow-up prompts or saved-state recovery for interrupted critical flows.
+""".strip()
 
         final_report = f"{kpi_cards_html}\n{activity_html}\n{geo_html}\n{divider}\n{llm_response}"
-        insights_payload = generate_insights(tenant_id)
+        try:
+            insights_payload = generate_insights(tenant_id)
+        except Exception:
+            insights_payload = []
 
         # Get the user who triggered generation (from request headers)
         generated_by = ""
@@ -2876,15 +3009,17 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
             pass
 
         # Persist to ClickHouse (old report is auto-replaced by ReplacingMergeTree)
+        generated_by = f"range:{range}"
         _save_report_to_db(tenant_id, final_report, insights_payload, generated_by)
 
         # Update in-memory cache
         gen_at = datetime.utcnow().isoformat()
-        AI_REPORT_CACHE[tenant_id] = {
+        AI_REPORT_CACHE[cache_key] = {
             "timestamp": time.time(),
             "report": final_report,
             "insights": insights_payload,
             "generated_at": gen_at,
+            "time_range": range,
         }
 
         return {
@@ -2892,12 +3027,57 @@ def get_ai_report(tenants: str = Query(..., description="Comma-separated list of
             "report": final_report,
             "cached": False,
             "generated_at": gen_at,
+            "time_range": range,
             "insights": insights_payload,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
+
+        # Last-resort safety: never return a hard 500 for AI report rendering.
+        # Prefer latest stored snapshot; otherwise return a compact deterministic fallback.
+        try:
+            db_report = _load_report_from_db(tenant_id, range)
+            if db_report and db_report.get("report"):
+                return {
+                    "tenant_id": tenant_id,
+                    "report": db_report["report"],
+                    "cached": True,
+                    "generated_at": db_report.get("generated_at"),
+                    "time_range": db_report.get("time_range", range),
+                    "insights": db_report.get("insights", []),
+                    "fallback_reason": str(e),
+                }
+        except Exception:
+            pass
+
+        fallback_report = f"""
+## 1. Executive State of Product Strategy
+AI report generation is temporarily degraded for **{tenant_id}** over **{range}**. Core telemetry endpoints are available, but narrative synthesis could not complete in time.
+
+## 2. Friction Points & Drop-off Telemetry
+Review the funnel stages with the highest drop-off and prioritize form simplification and clearer progression cues.
+
+## 3. Feature Interaction & Stickiness Radar
+Prioritize high-frequency features in primary navigation and improve discoverability for strategic low-adoption features.
+
+## 4. Proposed Concrete Product Roadmap
+1. Reduce steps on the top drop-off flow.
+2. Add contextual guidance at abandonment points.
+3. Track post-change conversion to validate impact.
+""".strip()
+
+        return {
+            "tenant_id": tenant_id,
+            "report": fallback_report,
+            "cached": False,
+            "generated_at": datetime.utcnow().isoformat(),
+            "time_range": range,
+            "insights": [],
+            "fallback_reason": str(e),
+        }
 
 @app.get("/insights")
 def get_insights(tenants: str = Query(..., description="Comma-separated list of tenants"), range: str = Query("7d", description="Time range like 7d, 30d")):

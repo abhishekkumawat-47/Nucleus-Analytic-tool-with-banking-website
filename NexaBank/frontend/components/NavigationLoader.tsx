@@ -68,11 +68,26 @@ export default function NavigationLoader() {
 
   if (!loading) return null;
 
-  return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-[9999]">
-      <div className="h-1 w-full bg-blue-100/80">
-        <div className="h-full w-1/2 bg-blue-600 animate-pulse" />
+    return (
+      <div className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center bg-white/80 backdrop-blur-sm">
+        <div className="w-full max-w-md px-6">
+          <div className="rounded-2xl border border-blue-100 bg-white px-6 py-5 shadow-[0_20px_60px_rgba(26,115,232,0.12)]">
+            <div className="flex items-center gap-3">
+              <div className="relative h-10 w-10 shrink-0">
+                <div className="absolute inset-0 rounded-full border-2 border-blue-100" />
+                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#1a73e8] border-r-[#1a73e8] animate-spin" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Loading NexaBank</p>
+                <p className="text-xs text-gray-500">Preparing your next page...</p>
+              </div>
+            </div>
+
+            <div className="mt-5 h-1.5 w-full overflow-hidden rounded-full bg-blue-50">
+              <div className="h-full w-1/2 rounded-full bg-[#1a73e8] animate-pulse" />
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
 }

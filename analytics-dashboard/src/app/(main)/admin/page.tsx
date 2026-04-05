@@ -68,7 +68,7 @@ export default function AdminSummaryPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Total Active Tenants</p>
-            <h2 className="text-3xl font-bold text-gray-900">{data?.total_tenants || 0}</h2>
+            <h2 className="text-3xl font-bold text-gray-900">{data?.available === false ? '—' : (data?.total_tenants ?? '—')}</h2>
           </div>
         </div>
 
@@ -77,8 +77,8 @@ export default function AdminSummaryPage() {
             <Activity size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">Total Events Processed (30d)</p>
-            <h2 className="text-3xl font-bold text-gray-900">{(data?.total_events || 0).toLocaleString()}</h2>
+            <p className="text-sm font-medium text-gray-500">Total Events Processed ({data?.time_range ?? '30d'})</p>
+            <h2 className="text-3xl font-bold text-gray-900">{data?.available === false ? '—' : (data?.total_events ?? 0).toLocaleString()}</h2>
           </div>
         </div>
       </div>
@@ -114,10 +114,10 @@ export default function AdminSummaryPage() {
       </div>
       
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
-        <Database className="w-5 h-5 flex-shrink-0 text-blue-600" />
+        <Database className="w-5 h-5 shrink-0 text-blue-600" />
         <p>
           <strong>Privacy Note:</strong> This view only shows aggregated metadata. User-level PII, exact paths, 
-          and audit logs remain abstracted or strictly within the tenant's own isolated view.
+          and audit logs remain abstracted or strictly within the tenant&apos;s own isolated view.
         </p>
       </div>
 

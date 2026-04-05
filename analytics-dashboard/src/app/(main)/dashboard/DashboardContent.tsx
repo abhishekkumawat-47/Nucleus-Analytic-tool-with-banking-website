@@ -44,11 +44,6 @@ export default function DashboardContent() {
 
   return (
     <div className="animate-in fade-in duration-500 space-y-6 relative">
-      {/* Thin progress bar for background refreshes — non-blocking */}
-      {isFetching && (
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-300 via-blue-500 to-blue-300 animate-pulse rounded-full z-10" />
-      )}
-
       {/* ═══════════ KPI METRICS ROW ═══════════ */}
       <section id="kpi-section" aria-label="Key Performance Indicators">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

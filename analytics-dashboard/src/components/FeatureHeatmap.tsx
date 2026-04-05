@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarRange,
   ChevronDown,
@@ -79,7 +79,7 @@ function formatFallbackLabel(groupKey: string, isCompare: boolean): string {
 
 function renderFeatureLabel(feature: string) {
   return (
-    <span className="break-words capitalize leading-tight">
+    <span className="wrap-break-word capitalize leading-tight">
       {feature.replace(/\./g, " ").replace(/_/g, " ")}
     </span>
   );
@@ -94,6 +94,7 @@ function FeatureHeatmap() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -120,7 +121,10 @@ function FeatureHeatmap() {
     };
   }, [tenantsParam, rangeParam]);
 
-  const activities: HeatmapActivity[] = data?.activities || [];
+  const activities: HeatmapActivity[] = useMemo(
+    () => data?.activities ?? [],
+    [data?.activities],
+  );
   const groups: string[] = data?.groups || [];
   const groupLabels: string[] = data?.group_labels || [];
   const isCompare = Boolean(data?.is_compare);
@@ -138,12 +142,29 @@ function FeatureHeatmap() {
     );
   }, [allFeatures, searchTerm]);
 
+  const selectedFeatureSet = useMemo(
+    () => new Set(selectedFeatures),
+    [selectedFeatures],
+  );
+
   const filteredData = useMemo(() => {
     if (selectedFeatures.length === 0) return activities;
     return activities.filter((row: HeatmapActivity) =>
-      selectedFeatures.includes(row.feature),
+      selectedFeatureSet.has(row.feature),
     );
-  }, [activities, selectedFeatures]);
+  }, [activities, selectedFeatures.length, selectedFeatureSet]);
+
+  // Pre-index segments for O(1) cell lookups during render.
+  const preparedRows = useMemo(
+    () =>
+      filteredData.map((row: HeatmapActivity) => ({
+        ...row,
+        segmentsByKey: new Map(
+          row.segments.map((segment: HeatmapSegment) => [segment.group_key, segment]),
+        ),
+      })),
+    [filteredData],
+  );
 
   const insights = useMemo(() => {
     const totalEvents = filteredData.reduce(
@@ -169,19 +190,45 @@ function FeatureHeatmap() {
     };
   }, [filteredData]);
 
-  const toggleFeature = (feature: string) => {
+  const toggleFeature = useCallback((feature: string) => {
     setSelectedFeatures((prev: string[]) =>
       prev.includes(feature)
         ? prev.filter((item) => item !== feature)
         : [...prev, feature],
     );
-  };
+  }, []);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSelectedFeatures([]);
     setSearchTerm("");
     setDropdownOpen(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    const handleOutsideInteraction = (event: MouseEvent | TouchEvent) => {
+      if (!dropdownOpen || !dropdownRef.current) return;
+      const target = event.target as Node;
+      if (!dropdownRef.current.contains(target)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideInteraction);
+    document.addEventListener("touchstart", handleOutsideInteraction);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideInteraction);
+      document.removeEventListener("touchstart", handleOutsideInteraction);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [dropdownOpen]);
 
   const resolveGroupLabel = (groupKey: string, index: number) => {
     return groupLabels[index] || formatFallbackLabel(groupKey, isCompare);
@@ -197,7 +244,7 @@ function FeatureHeatmap() {
             <Layers3 className="h-3.5 w-3.5" />
             Scope
           </div>
-          <p className="mt-1 break-words text-sm font-semibold text-gray-800">
+          <p className="mt-1 wrap-break-word text-sm font-semibold text-gray-800">
             {selectedTenants.length > 0
               ? selectedTenants.join(", ").toUpperCase()
               : "NEXABANK"}
@@ -231,10 +278,12 @@ function FeatureHeatmap() {
 
       <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+          <div className="relative z-50" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen((open: boolean) => !open)}
               className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+              aria-expanded={dropdownOpen}
+              aria-haspopup="listbox"
             >
               <Filter className="h-3.5 w-3.5 text-gray-500" />
               {selectedFeatures.length > 0
@@ -246,7 +295,7 @@ function FeatureHeatmap() {
             </button>
 
             {dropdownOpen && (
-              <div className="absolute z-20 mt-1 w-72 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+              <div className="absolute z-70 mt-1 w-72 rounded-lg border border-gray-200 bg-white py-1 shadow-lg" role="listbox" aria-multiselectable="true">
                 <div className="border-b border-gray-100 px-2 pb-2 pt-1">
                   <input
                     value={searchTerm}
@@ -266,7 +315,7 @@ function FeatureHeatmap() {
                     >
                       <input
                         type="checkbox"
-                        checked={selectedFeatures.includes(feature)}
+                        checked={selectedFeatureSet.has(feature)}
                         onChange={() => toggleFeature(feature)}
                         className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
@@ -374,18 +423,16 @@ function FeatureHeatmap() {
               </thead>
 
               <tbody>
-                {filteredData.map((row) => (
+                {preparedRows.map((row) => (
                   <tr key={row.feature} className="group align-middle">
                     <td className="sticky left-0 z-20 border-r border-gray-100 bg-white px-2 py-0.5 align-middle text-[13px] font-medium text-gray-800 shadow-[1px_0_0_0_rgba(229,231,235,0.45)] transition-colors group-hover:text-[#1a73e8]">
-                      <div className="flex min-h-11 items-center whitespace-normal break-words [overflow-wrap:break-word]">
+                      <div className="flex min-h-11 items-center whitespace-normal wrap-break-word">
                         {renderFeatureLabel(row.feature)}
                       </div>
                     </td>
 
                     {groups.map((groupKey, index) => {
-                      const segment = row.segments.find(
-                        (item) => item.group_key === groupKey,
-                      ) || {
+                      const segment = row.segmentsByKey.get(groupKey) || {
                         group_key: groupKey,
                         count: 0,
                         percentile: 0,

@@ -14,14 +14,11 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
-  Shield,
   Cloud,
   LayoutDashboard,
   Eye,
   Wallet,
   ExternalLink,
-  Layers,
-  BarChart3,
 } from 'lucide-react';
 import { APP_REGISTRY } from '@/lib/feature-map';
 import { useAppDispatch, useAppSelector } from '@/lib/store';
@@ -83,12 +80,10 @@ export default function AppSelectorPage() {
             <div className="flex items-center gap-3">
               {userRole === 'super_admin' ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">
-                  <Cloud className="w-3 h-3" />
                   Super Admin
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-gray-100 text-gray-700 border border-gray-200">
-                  <Shield className="w-3 h-3" />
                   App Admin
                 </span>
               )}
@@ -149,11 +144,9 @@ export default function AppSelectorPage() {
                 {/* Stats Row */}
                 <div className="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100">
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <Layers className="w-3.5 h-3.5 text-gray-400" />
                     <span>{app.routes.length} routes tracked</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <BarChart3 className="w-3.5 h-3.5 text-gray-400" />
                     <span>{app.funnelSteps.length}-step funnel</span>
                   </div>
                 </div>
