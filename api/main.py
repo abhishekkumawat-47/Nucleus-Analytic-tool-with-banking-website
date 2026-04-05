@@ -2221,61 +2221,246 @@ def sync_licenses(req: LicenseSyncRequest):
 
 @app.get("/tracking/toggles")
 def get_tracking_toggles(tenants: str = Query(..., description="Comma-separated list of tenants")):
-    """Get all feature tracking toggles for a tenant."""
-    tenant_id = tenants
+    """Get dynamic feature tracking toggles for a tenant.
+
+    Source of truth:
+    1) Feature mapping catalog (FEATURE_DISPLAY_NAMES / canonical map)
+    2) Observed tenant features in recent data
+    3) Existing toggle overrides
+    """
+    tenant_list = [t.strip() for t in str(tenants).split(",") if t.strip()]
+    tenant_id = tenant_list[0] if tenant_list else str(tenants).strip()
     require_tenant_access(tenant_id)
+
+    GLOBAL_TOGGLE_TENANTS = ["nexabank", "safexbank"]
+    scope_tenants = sorted(set(GLOBAL_TOGGLE_TENANTS + tenant_list))
+    tenants_sql = ", ".join([f"'{t}'" for t in scope_tenants])
+
+    def normalize_tracking_feature_key(raw_key: str) -> str:
+        key = str(raw_key or "").strip().lower()
+        if not key:
+            return key
+
+        return (
+            key
+            .replace("_page.view", ".page.view")
+            .replace(".page_view", ".page.view")
+            .replace("_dashboard.view", ".dashboard.view")
+            .replace(".dashboard_view", ".dashboard.view")
+            .replace("..", ".")
+        )
+
+    def infer_category(feature_key: str) -> str:
+        key = (feature_key or "").lower()
+        if ".auth." in key or "login" in key or "register" in key:
+            return "system"
+        if ".page.view" in key or key.endswith(".view"):
+            return "navigation"
+        if any(token in key for token in ["pay", "transfer", "loan", "submit", "kyc"]):
+            return "transaction"
+        return "interaction"
+
+    def normalize_display_label(label: str) -> str:
+        return str(label or "").strip().lower()
+
     try:
-        sql = """
-            SELECT feature_name, is_enabled, changed_by, changed_at
+        sql = f"""
+            SELECT tenant_id, feature_name, is_enabled, changed_by, changed_at
             FROM feature_intelligence.tracking_toggles FINAL
-            WHERE tenant_id = %(tenant_id)s
+            WHERE tenant_id IN ({tenants_sql})
         """
-        results = ch_client.query(sql, {"tenant_id": tenant_id})
-        toggles = []
+        results = ch_client.query(sql)
+
+        overrides = {}
         for r in results:
+            feature_name = canonicalize_event_name(str(r.get("feature_name", ""))) or str(r.get("feature_name", ""))
+            feature_name = normalize_tracking_feature_key(feature_name)
+            row_enabled = bool(r.get("is_enabled", 1))
+            row_changed_by = r.get("changed_by") or "system"
+            row_changed_at_raw = r.get("changed_at")
+            row_changed_at = str(row_changed_at_raw) if hasattr(row_changed_at_raw, "strftime") else str(row_changed_at_raw or "-")
+
+            existing = overrides.get(feature_name)
+            if not existing:
+                overrides[feature_name] = {
+                    "is_enabled": row_enabled,
+                    "changed_by": row_changed_by,
+                    "changed_at": row_changed_at,
+                    "_changed_at_raw": row_changed_at_raw,
+                }
+                continue
+
+            # Global semantics: if any tenant has it disabled, it is disabled everywhere.
+            existing["is_enabled"] = bool(existing.get("is_enabled", True)) and row_enabled
+
+            prev_raw = existing.get("_changed_at_raw")
+            if (prev_raw is None and row_changed_at_raw is not None) or (
+                prev_raw is not None and row_changed_at_raw is not None and row_changed_at_raw > prev_raw
+            ):
+                existing["changed_by"] = row_changed_by
+                existing["changed_at"] = row_changed_at
+                existing["_changed_at_raw"] = row_changed_at_raw
+
+        observed_sql = f"""
+            SELECT event_name, count() as total
+            FROM feature_intelligence.events_raw
+            WHERE tenant_id IN ({tenants_sql}) AND timestamp >= today() - 180
+            GROUP BY event_name
+            ORDER BY total DESC
+            LIMIT 1000
+        """
+        observed_rows = ch_client.query(observed_sql)
+
+        feature_catalog = set(FEATURE_DISPLAY_NAMES.keys())
+        for row in observed_rows:
+            canonical = canonicalize_event_name(str(row.get("event_name", "")))
+            if canonical:
+                feature_catalog.add(normalize_tracking_feature_key(canonical))
+        feature_catalog.update(overrides.keys())
+
+        grouped = {}
+        for feature_name in sorted(feature_catalog):
+            if not feature_name:
+                continue
+
+            display_name = FEATURE_DISPLAY_NAMES.get(feature_name, resolve_display_name(feature_name) or feature_name)
+            label_key = normalize_display_label(display_name)
+            ov = overrides.get(feature_name)
+            item_enabled = ov["is_enabled"] if ov else True
+            item_changed_by = ov["changed_by"] if ov else "system"
+            item_changed_at = ov["changed_at"] if ov else "-"
+            item_changed_at_raw = ov.get("_changed_at_raw") if ov else None
+
+            current = grouped.get(label_key)
+            if not current:
+                grouped[label_key] = {
+                    "feature_name": feature_name,
+                    "display_name": display_name,
+                    "category": infer_category(feature_name),
+                    "is_enabled": item_enabled,
+                    "changed_by": item_changed_by,
+                    "changed_at": item_changed_at,
+                    "_changed_at_raw": item_changed_at_raw,
+                }
+                continue
+
+            # Same user-facing feature name: if any alias key is disabled, show disabled.
+            current["is_enabled"] = bool(current.get("is_enabled", True)) and bool(item_enabled)
+
+            # Keep canonical representative key deterministic (shortest key, then lexical).
+            prev_key = str(current.get("feature_name") or "")
+            if len(feature_name) < len(prev_key) or (len(feature_name) == len(prev_key) and feature_name < prev_key):
+                current["feature_name"] = feature_name
+                current["category"] = infer_category(feature_name)
+
+            # Preserve most recent mutation metadata among aliases.
+            prev_raw = current.get("_changed_at_raw")
+            if (prev_raw is None and item_changed_at_raw is not None) or (
+                prev_raw is not None and item_changed_at_raw is not None and item_changed_at_raw > prev_raw
+            ):
+                current["changed_by"] = item_changed_by
+                current["changed_at"] = item_changed_at
+                current["_changed_at_raw"] = item_changed_at_raw
+
+        toggles = []
+        for value in grouped.values():
             toggles.append({
-                "feature_name": r["feature_name"],
-                "is_enabled": bool(r["is_enabled"]),
-                "changed_by": r["changed_by"],
-                "changed_at": str(r["changed_at"]) if hasattr(r["changed_at"], "strftime") else str(r["changed_at"]),
+                "feature_name": value["feature_name"],
+                "display_name": value["display_name"],
+                "category": value["category"],
+                "is_enabled": value["is_enabled"],
+                "changed_by": value["changed_by"],
+                "changed_at": value["changed_at"],
             })
-        return {"tenant_id": tenant_id, "toggles": toggles}
+
+        toggles.sort(key=lambda x: str(x.get("display_name") or x.get("feature_name") or "").lower())
+
+        return {"tenant_id": tenant_id, "scope_tenants": scope_tenants, "toggles": toggles}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tracking/toggles")
 def set_tracking_toggle(req: TrackingToggleRequest):
     """Set a tracking toggle and record it in audit log."""
-    require_tenant_access(req.tenant_id)
+    tenant_list = [t.strip() for t in str(req.tenant_id).split(",") if t.strip()]
+    target_tenant = tenant_list[0] if tenant_list else str(req.tenant_id).strip()
+    require_tenant_access(target_tenant)
+    GLOBAL_TOGGLE_TENANTS = ["nexabank", "safexbank"]
+    scope_tenants = sorted(set(GLOBAL_TOGGLE_TENANTS + tenant_list))
+    tenants_sql = ", ".join([f"'{t}'" for t in scope_tenants])
     try:
         from datetime import datetime
         now = datetime.utcnow()
+        canonical_feature = canonicalize_event_name(req.feature_name) or req.feature_name
+        canonical_feature = (
+            str(canonical_feature or "").strip().lower()
+            .replace("_page.view", ".page.view")
+            .replace(".page_view", ".page.view")
+            .replace("_dashboard.view", ".dashboard.view")
+            .replace(".dashboard_view", ".dashboard.view")
+            .replace("..", ".")
+        )
+
+        target_display = FEATURE_DISPLAY_NAMES.get(canonical_feature, resolve_display_name(canonical_feature) or canonical_feature)
+        target_display_norm = str(target_display or "").strip().lower()
+        alias_features = set([canonical_feature])
+        for key, label in FEATURE_DISPLAY_NAMES.items():
+            if str(label or "").strip().lower() == target_display_norm:
+                alias_features.add(canonicalize_event_name(str(key)) or str(key))
+
+        alias_features = sorted({
+            str(f or "").strip().lower()
+            .replace("_page.view", ".page.view")
+            .replace(".page_view", ".page.view")
+            .replace("_dashboard.view", ".dashboard.view")
+            .replace(".dashboard_view", ".dashboard.view")
+            .replace("..", ".")
+            for f in alias_features if str(f or "").strip()
+        })
+        aliases_sql = ", ".join(["'" + f.replace("'", "''") + "'" for f in alias_features])
         
         # Get existing state for audit
-        sql_old = """
+        sql_old = f"""
             SELECT is_enabled FROM feature_intelligence.tracking_toggles FINAL
-            WHERE tenant_id = %(tenant_id)s AND feature_name = %(feature_name)s
+            WHERE tenant_id IN ({tenants_sql}) AND feature_name IN ({aliases_sql})
         """
-        old = ch_client.query(sql_old, {"tenant_id": req.tenant_id, "feature_name": req.feature_name})
-        old_val = "enabled" if (old and old[0]["is_enabled"]) else "disabled"
+        old = ch_client.query(sql_old)
+        # Default behavior is enabled when no explicit toggle row exists.
+        old_enabled = all(bool(row.get("is_enabled", 1)) for row in old) if old else True
+        old_val = "enabled" if old_enabled else "disabled"
         new_val = "enabled" if req.is_enabled else "disabled"
         
         # Upsert toggle
         client = ch_client._get_client()
+        toggle_rows = [
+            [tenant, feature_name, 1 if req.is_enabled else 0, req.actor_email, now]
+            for tenant in scope_tenants
+            for feature_name in alias_features
+        ]
         client.insert(
             'feature_intelligence.tracking_toggles',
-            [[req.tenant_id, req.feature_name, 1 if req.is_enabled else 0, req.actor_email, now]],
+            toggle_rows,
             column_names=['tenant_id', 'feature_name', 'is_enabled', 'changed_by', 'changed_at']
         )
         
         # Write audit log
+        audit_rows = [[tenant, req.actor_email, "tracking_toggle", canonical_feature, old_val, new_val, now] for tenant in scope_tenants]
         client.insert(
             'feature_intelligence.config_audit_log',
-            [[req.tenant_id, req.actor_email, "tracking_toggle", req.feature_name, old_val, new_val, now]],
+            audit_rows,
             column_names=['tenant_id', 'actor_email', 'action', 'target', 'old_value', 'new_value', 'timestamp']
         )
         
-        return {"status": "ok", "feature_name": req.feature_name, "is_enabled": req.is_enabled}
+        return {
+            "status": "ok",
+            "tenant_id": target_tenant,
+            "scope_tenants": scope_tenants,
+            "feature_name": canonical_feature,
+            "alias_count": len(alias_features),
+            "is_enabled": req.is_enabled,
+            "changed_by": req.actor_email,
+            "changed_at": now.isoformat(),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

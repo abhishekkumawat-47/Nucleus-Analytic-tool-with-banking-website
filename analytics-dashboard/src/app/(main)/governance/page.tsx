@@ -10,66 +10,91 @@ import ChartContainer from '@/components/ChartContainer';
 import { Shield, ToggleLeft, ToggleRight, History, Loader2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
+type GovernanceToggle = {
+  feature_name: string;
+  display_name?: string;
+  category?: string;
+  is_enabled: boolean;
+  changed_by: string;
+  changed_at: string;
+};
+
+function normalizeFeatureKey(rawKey: string): string {
+  const key = String(rawKey || '').trim().toLowerCase();
+  if (!key) return key;
+
+  return key
+    .replace(/_page[._]view$/i, '.page.view')
+    .replace(/\.page_view$/i, '.page.view')
+    .replace(/_dashboard[._]view$/i, '.dashboard.view')
+    .replace(/\.dashboard_view$/i, '.dashboard.view')
+    .replace(/\.{2,}/g, '.');
+}
+
+function dedupeGovernanceToggles(items: GovernanceToggle[]): GovernanceToggle[] {
+  const merged = new Map<string, GovernanceToggle>();
+  for (const item of items) {
+    const normalizedKey = normalizeFeatureKey(item.feature_name);
+    if (!normalizedKey) continue;
+
+    const current: GovernanceToggle = {
+      ...item,
+      feature_name: normalizedKey,
+      display_name: item.display_name || normalizedKey,
+    };
+    const previous = merged.get(normalizedKey);
+
+    if (!previous) {
+      merged.set(normalizedKey, current);
+      continue;
+    }
+
+    const prevChangedAt = previous.changed_at || '';
+    const currChangedAt = current.changed_at || '';
+    const pickCurrent = currChangedAt > prevChangedAt;
+    merged.set(normalizedKey, pickCurrent ? current : previous);
+  }
+
+  return Array.from(merged.values()).sort((a, b) => a.feature_name.localeCompare(b.feature_name));
+}
+
 export default function GovernancePage() {
   const { isLoading, auditLogs, selectedTenants, tenantsParam } = useDashboardData();
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const actorEmail = session?.user?.email || 'admin@unknown.com';
+  const actorRole = session?.user?.role || 'user';
+  const isAdminSession = session?.user?.role === 'super_admin' || session?.user?.role === 'app_admin';
   const queryClient = useQueryClient();
   const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
   const lastRealtimeRefetchAt = useRef(0);
 
-  const [activeTab, setActiveTab] = useState<'toggles' | 'audit' | 'logs'>('toggles');
+  const [activeTab, setActiveTab] = useState<'toggles' | 'logs'>('toggles');
   const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
-
-  const DEFAULT_FEATURES = [
-    { feature_name: "pro.wealth_insights.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "pro.finance_library_stats.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "pro.crypto_portfolio.view", is_enabled: true, changed_by: 'system', changed_at: '-' },
-    { feature_name: "pro.payroll_batch.success", is_enabled: true, changed_by: 'system', changed_at: '-' },
-  ];
+  const [featureSearch, setFeatureSearch] = useState('');
 
   // Fetch tracking toggles
-  const { data: toggles = [], isLoading: loadingToggles, refetch: refetchToggles } = useQuery({
+  const { data: toggles = [], isLoading: loadingToggles, refetch: refetchToggles } = useQuery<GovernanceToggle[]>({
     queryKey: ['trackingToggles', tenantsParam],
     queryFn: async () => {
-      const result = await dashboardAPI.getTrackingToggles(tenantsParam);
-      const apiToggles = (result.toggles || []).map((t: any) => ({
-        feature_name: t.feature,
-        is_enabled: t.enabled,
-        changed_by: 'system',
-        changed_at: '-'
+      const result = await dashboardAPI.getTrackingToggles(tenantsParam, {
+        role: actorRole,
+        email: actorEmail,
+      });
+      const normalized = (result.toggles || []).map((t) => ({
+        feature_name: t.feature_name,
+        display_name: t.display_name,
+        category: t.category,
+        is_enabled: t.is_enabled,
+        changed_by: t.changed_by || 'system',
+        changed_at: t.changed_at || '-',
       }));
-
-      const mergedToggles = DEFAULT_FEATURES.map(f => {
-        const override = apiToggles.find((a: any) => a.feature_name === f.feature_name);
-        return override || f;
-      });
-
-      apiToggles.forEach((a: any) => {
-        if (!mergedToggles.find(m => m.feature_name === a.feature_name)) {
-          mergedToggles.push(a);
-        }
-      });
-      return mergedToggles;
+      return dedupeGovernanceToggles(normalized);
     },
     staleTime: 15 * 1000,
-    refetchInterval: 15 * 1000,
+    refetchInterval: 3 * 1000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
-  });
-
-  // Fetch config audit log
-  const { data: configLogs = [], isLoading: loadingConfigLogs, refetch: refetchConfigLogs } = useQuery({
-    queryKey: ['configAuditLogs', tenantsParam],
-    queryFn: async () => {
-      const result = await dashboardAPI.getConfigAuditLog(tenantsParam);
-      return result.logs || [];
-    },
-    enabled: activeTab === 'audit',
-    staleTime: 15 * 1000,
-    refetchInterval: 15 * 1000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    enabled: sessionStatus === 'authenticated' && isAdminSession,
   });
 
   // Real-time refetch trigger with 5-second throttle
@@ -79,17 +104,31 @@ export default function GovernancePage() {
     if (now - lastRealtimeRefetchAt.current < 5000) return;
     lastRealtimeRefetchAt.current = now;
     void refetchToggles();
-    if (activeTab === 'audit') void refetchConfigLogs();
-  }, [lastEvent, refetchToggles, refetchConfigLogs, activeTab]);
+  }, [lastEvent, refetchToggles, activeTab]);
 
   const handleToggle = async (featureName: string, currentState: boolean) => {
     setTogglingFeature(featureName);
-    await dashboardAPI.setTrackingToggle(tenantsParam, featureName, !currentState, actorEmail);
+    await dashboardAPI.setTrackingToggle(tenantsParam, featureName, !currentState, actorEmail, {
+      role: actorRole,
+      email: actorEmail,
+    });
     // Refresh toggles
     await queryClient.invalidateQueries({ queryKey: ['trackingToggles', tenantsParam] });
-    await queryClient.invalidateQueries({ queryKey: ['configAuditLogs', tenantsParam] });
     setTogglingFeature(null);
   };
+
+  const filteredToggles = toggles.filter((t) => {
+    const q = featureSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      t.feature_name.toLowerCase().includes(q) ||
+      String(t.display_name || '').toLowerCase().includes(q) ||
+      String(t.category || '').toLowerCase().includes(q)
+    );
+  });
+
+  const enabledCount = toggles.filter((t) => t.is_enabled).length;
+  const disabledCount = toggles.length - enabledCount;
 
   if (isLoading && auditLogs.length === 0) {
     return <DashboardSkeleton />;
@@ -100,7 +139,7 @@ export default function GovernancePage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-[22px] font-medium text-gray-900 tracking-tight">Governance & Security</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage tracking controls, privacy settings, and audit trails.</p>
+          <p className="text-sm text-gray-500 mt-1">Manage tracking controls, privacy settings.</p>
         </div>
       </div>
 
@@ -108,7 +147,6 @@ export default function GovernancePage() {
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
         {[
           { key: 'toggles', label: 'Tracking Controls', icon: Shield },
-          { key: 'audit', label: 'Config Audit Log', icon: History },
           { key: 'logs', label: 'Activity Logs', icon: ToggleLeft },
         ].map((tab) => (
           <button
@@ -155,20 +193,33 @@ export default function GovernancePage() {
 
           <div className="lg:col-span-2">
             <ChartContainer title="Feature Tracking Toggles" id="tracking-toggles">
-              <p className="text-xs text-gray-500 mt-1 mb-4">Enable or disable tracking for specific features. Changes are recorded in the audit log.</p>
+              <p className="text-xs text-gray-500 mt-1 mb-4">Enable or disable tracking per mapped feature.</p>
+              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">Total Features: <span className="font-semibold text-gray-900">{toggles.length}</span></div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">Tracking Enabled: <span className="font-semibold text-green-700">{enabledCount}</span></div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">Tracking Disabled: <span className="font-semibold text-amber-700">{disabledCount}</span></div>
+              </div>
+              <input
+                type="text"
+                value={featureSearch}
+                onChange={(e) => setFeatureSearch(e.target.value)}
+                placeholder="Search by feature key, label, or category"
+                className="mb-4 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-400"
+              />
               {loadingToggles ? (
                 <div className="p-4"><TableSkeleton rows={4} /></div>
-              ) : toggles.length === 0 ? (
+              ) : filteredToggles.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
-                  <p className="text-sm">No tracking toggles configured yet.</p>
-                  <p className="text-xs mt-1">Toggles are created when you disable tracking for a feature via the API.</p>
+                  <p className="text-sm">No features match your search.</p>
+                  <p className="text-xs mt-1">Try a different keyword or clear the filter.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {toggles.map((t: any) => (
+                  {filteredToggles.map((t) => (
                     <div key={t.feature_name} className="flex items-center justify-between p-4 border border-gray-100 rounded-lg hover:border-gray-200 transition-all">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900">{t.feature_name}</h4>
+                        <h4 className="text-sm font-medium text-gray-900">{t.display_name || t.feature_name}</h4>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{t.feature_name}{t.category ? ` · ${t.category}` : ''}</p>
                         <p className="text-xs text-gray-500 mt-0.5">
                           Last changed by <span className="font-medium">{t.changed_by || 'system'}</span> at {t.changed_at}
                         </p>
@@ -193,51 +244,6 @@ export default function GovernancePage() {
             </ChartContainer>
           </div>
         </div>
-      )}
-
-      {/* Config Audit Log Tab */}
-      {activeTab === 'audit' && (
-        <ChartContainer title="Configuration Change History" id="config-audit">
-          {loadingConfigLogs ? (
-            <div className="p-4"><TableSkeleton rows={4} /></div>
-          ) : (
-            <div className="overflow-x-auto mt-2">
-              <table className="w-full text-left text-sm text-gray-600">
-                <thead className="text-[13px] text-gray-500 font-medium border-y border-gray-200 bg-gray-100/50">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Timestamp</th>
-                    <th className="px-4 py-3 font-medium">Actor</th>
-                    <th className="px-4 py-3 font-medium">Action</th>
-                    <th className="px-4 py-3 font-medium">Target</th>
-                    <th className="px-4 py-3 font-medium">Old Value</th>
-                    <th className="px-4 py-3 font-medium">New Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {configLogs.map((log: any, i: number) => (
-                    <tr key={i} className="border-b border-gray-100 hover:bg-gray-100 transition-colors">
-                      <td className="px-4 py-3 text-gray-400 font-medium whitespace-nowrap">{log.timestamp}</td>
-                      <td className="px-4 py-3 text-gray-900 font-medium">{log.actor}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#1a73e8]/10 text-[#1a73e8] border border-[#1a73e8]/20">{log.action}</span>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs">{log.target}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-xs bg-white border border-gray-200 text-gray-500 line-through">{log.old_value}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-xs bg-white border border-gray-200 text-gray-700">{log.new_value}</span>
-                      </td>
-                    </tr>
-                  ))}
-                  {configLogs.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No configuration changes recorded yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </ChartContainer>
       )}
 
       {/* Activity Logs Tab (existing) */}
