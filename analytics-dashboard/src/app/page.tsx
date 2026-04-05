@@ -59,7 +59,7 @@ export default function AppSelectorPage() {
     return (
       <AuthGuard>
         <div className="flex h-screen items-center justify-center bg-white">
-          <Image src="/logo1.png" alt="Nucleus" width={48} height={48} className="animate-pulse" />
+          <Image src="/logo1.png" alt="FinInsights" width={48} height={48} className="animate-pulse" />
         </div>
       </AuthGuard>
     );
@@ -72,7 +72,7 @@ export default function AppSelectorPage() {
         <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-gray-100">
           <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <Image src="/logo1.png" alt="Nucleus Logo" width={32} height={32} className="object-contain" />
+              <Image src="/logo1.png" alt="FinInsights Logo" width={32} height={32} className="object-contain" />
               <span className="text-lg font-bold text-gray-900 tracking-tight">
                 <span className="text-[#1a73e8]">Fin</span>Insights
               </span>

@@ -28,7 +28,7 @@ export default function LoginPage() {
   if (status === 'loading' || status === 'authenticated') {
     return (
       <div className="flex h-screen items-center justify-center bg-white">
-        <Image src="/logo1.png" alt="Nucleus" width={48} height={48} className="animate-pulse" />
+        <Image src="/logo1.png" alt="FinInsights" width={48} height={48} className="animate-pulse" />
       </div>
     );
   }
@@ -44,7 +44,7 @@ export default function LoginPage() {
 
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <Image src="/logo1.png" alt="Nucleus Logo" width={40} height={40} className="object-contain" />
+            <Image src="/logo1.png" alt="FinInsights Logo" width={40} height={40} className="object-contain" />
             <span className="text-2xl font-bold tracking-tight">FinInsights</span>
           </div>
           <p className="text-white/60 text-sm mt-1">Feature Intelligence Platform</p>
@@ -83,8 +83,8 @@ export default function LoginPage() {
       <div className="flex-1 flex flex-col items-center justify-center p-8 md:p-16">
         {/* Mobile brand */}
         <div className="lg:hidden flex items-center gap-2 mb-10">
-          <Image src="/logo1.png" alt="Nucleus" width={32} height={32} />
-          <span className="text-xl font-bold text-gray-900 tracking-tight">Nucleus</span>
+          <Image src="/logo1.png" alt="FinInsights" width={32} height={32} />
+          <span className="text-xl font-bold text-gray-900 tracking-tight">FinInsights</span>
         </div>
 
         <div className="w-full max-w-sm">

@@ -186,13 +186,13 @@ function TopNavbar() {
             <div className="relative w-7 h-7">
               <Image
                 src="/logo1.png"
-                alt="Nucleus Logo"
+                alt="FinInsights Logo"
                 fill
                 className="object-contain"
                 sizes="28px"
               />
             </div>
-            <span className="text-base font-semibold text-gray-900 tracking-tight">Nucleus</span>
+            <span className="text-base font-semibold text-gray-900 tracking-tight">FinInsights</span>
           </div>
 
           {/* ── Tenant Selector Dropdown ── */}
