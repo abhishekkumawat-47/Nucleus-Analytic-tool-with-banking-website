@@ -1,143 +1,150 @@
-# NexaBank - Modern Fintech Solutions
+# NexaBank (Individual Docker Runbook)
 
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
-[![Express](https://img.shields.io/badge/Express-4.21-lightgrey?logo=express)](https://expressjs.com/)
-[![Prisma](https://img.shields.io/badge/Prisma-6.5-blue?logo=prisma)](https://prisma.io/)
-[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
-[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
+NexaBank is the product-side banking application used to generate realistic tenant activity for FinInsights.
 
-NexaBank is a premium, multi-tenant digital banking platform designed for the modern era. It features a robust backend powered by Node.js and Prisma, and a sleek, high-performance frontend built with Next.js 15. The platform supports complex banking operations, from secure fund transfers to detailed financial analytics.
+This README is focused on:
 
----
+- Running NexaBank with Docker
+- Required backend/frontend configuration
+- Mandatory simulation workflow
+- Visual explanation of major NexaBank modules
 
-## Key Features
+## 1. Mandatory First Action: Run Admin Simulation
 
-| Feature | Description |
-| :--- | :--- |
-| **Multi-Tenant Architecture** | Support for multiple banking brands (e.g., NexaBank, SafeX Bank) with distinct configurations. |
-| **Smart Transactions** | Real-time fund transfers, transaction categorization, and detailed history tracking. |
-| **Interactive Analytics** | Visual data representation of income, expenses, and spending habits using Recharts. |
-| **Secure Authentication** | Robust security with JWT and secure session-based authentication. |
-| **Loan Management** | End-to-end loan application process with KYC/AML verification steps. |
-| **Profile & Settings** | Comprehensive user profile management including security settings and preferences. |
-| **Responsive Design** | Pixel-perfect UI using Tailwind CSS, Radix UI, and Framer Motion for smooth animations. | ✅ Complete |
+After NexaBank starts, open:
 
----
+- `http://localhost:3002/admin/simulate`
 
-## 🛠️ Tech Stack
+Run simulation in this exact order:
 
-### Frontend
-- **Framework**: Next.js 15 (App Router)
-- **Styling**: Tailwind CSS & Lucide Icons
-- **UI Components**: Radix UI (Headless components)
-- **State/Data**: Axios & React Hook Form
-- **Animations**: Framer Motion
-- **Visualization**: Recharts
+1. Tenant: `NexaBank (bank_a)`
+2. User Count: `20`
+3. Historical Days: `10`
+4. Click `Run Simulation`
+5. Change tenant to `SafeX Bank (bank_b)`
+6. Keep User Count `20` and Historical Days `10`
+7. Click `Run Simulation` again
 
-### Backend
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Database**: PostgreSQL (via Supabaseconnection pooling)
-- **ORM**: Prisma
-- **Validation**: Zod & Express Validator
-- **Security**: Bcrypt, Helmet, & JWT
+This is the required warm-up step for multi-tenant analytics and demo readiness.
 
----
+## 2. Docker Run (NexaBank Only)
 
-## Getting Started
+From `NexaBank` folder:
 
-Follow these steps to set up the project locally on your machine.
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+ recommended)
-- [PostgreSQL](https://www.postgresql.org/) or [Supabase](https://supabase.com/) account
-- npm or yarn
-
----
-
-### Step 1: Backend Setup
-
-1. **Navigate to the backend directory:**
-   ```bash
-   cd backend
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables:**
-   Create a `.env` file in the `backend` folder and add the following:
-   ```env
-   PORT=5000
-   NODE_ENV="development"
-   JWT_SEC="your_secret_key_here"
-   DATABASE_URL="postgresql://user:password@localhost:5432/nexabank"
-   DIRECT_URL="postgresql://user:password@localhost:5432/nexabank"
-   FRONTEND_URL="http://localhost:3000"
-   ```
-
-4. **Run Database Migrations:**
-   ```bash
-   npx prisma generate
-   npx prisma db push
-   ```
-
-5. **Start the Backend Server:**
-   ```bash
-   npm run dev
-   ```
-
----
-
-### Step 2: Frontend Setup
-
-1. **Open a new terminal and navigate to the frontend directory:**
-   ```bash
-   cd frontend
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables (Optional):**
-   Create a `.env.local` file if you need to override defaults:
-   ```env
-   NEXT_PUBLIC_API_URL="http://localhost:5000/api"
-   ```
-
-4. **Start the Frontend Development Server:**
-   ```bash
-   npm run dev
-   ```
-
----
-
-## Project Structure
-
-```text
-├── backend
-│   ├── prisma         # Database schema & migrations
-│   ├── src
-│   │   ├── controllers # Request handlers
-│   │   ├── middleware  # Auth & validation
-│   │   ├── routes      # API endpoints
-│   │   └── server.ts   # Entry point
-│   └── .env           # Backend secrets
-├── frontend
-│   ├── app            # Next.js pages & layouts
-│   ├── components     # Reusable UI components
-│   ├── lib            # API client & utils
-│   └── tailwind.config.ts
-└── readme.md          # Project documentation
+```bash
+docker compose up --build
 ```
 
----
+Services:
 
+- Frontend: `http://localhost:3002`
+- Backend: `http://localhost:5000`
 
-*Developed with ❤️ for the future of Digital Banking.*
+Stop:
 
-***Designed and Developed by  Abhishek Kumawat*** 
+```bash
+docker compose down
+```
+
+## 3. Configuration
+
+### 3.1 Backend Environment
+
+Create or update `NexaBank/backend/.env`:
+
+```env
+PORT=5000
+NODE_ENV="development"
+JWT_SEC="REPLACE_WITH_A_LONG_RANDOM_SECRET"
+DATABASE_URL="postgresql://<user>:<password>@<host>:6543/postgres?pgbouncer=true&sslmode=require"
+DIRECT_URL="postgresql://<user>:<password>@<host>:5432/postgres?sslmode=require"
+FRONTEND_URL="http://localhost:3002"
+
+TENANT_A_ID=bank_a
+TENANT_A_NAME=NexaBank
+TENANT_A_IFSC=NEXA
+TENANT_A_BRANCH=0001
+TENANT_B_ID=bank_b
+TENANT_B_NAME=SafeX Bank
+TENANT_B_IFSC=SAFX
+TENANT_B_BRANCH=0001
+
+SYSTEM_EMAIL=system@nexabank.internal
+SYSTEM_NAME=NexaBank System
+SYSTEM_TENANT=bank_a
+```
+
+### 3.2 Frontend API Binding
+
+NexaBank frontend container uses:
+
+- `NEXT_PUBLIC_API_URL=http://localhost:5000/api`
+
+This is already wired in `NexaBank/docker-compose.yml`.
+
+## 4. How NexaBank Works
+
+1. User activity occurs in frontend modules (accounts, loans, crypto, payroll, wealth).
+2. Backend processes domain actions and persists operational records.
+3. Simulation endpoint generates synthetic journeys with tenant context.
+4. Events are available for downstream analytics processing in the full platform stack.
+
+## 5. Visual Walkthrough (NexaBank Wireframes)
+
+### 5.1 Home Experience
+
+<p align="center">
+  <img src="../wireframes/Nexabank/home.png" alt="NexaBank Home" width="94%" />
+</p>
+
+### 5.2 Loans Overview
+
+<p align="center">
+  <img src="../wireframes/Nexabank/loans.png" alt="NexaBank Loans" width="94%" />
+</p>
+
+### 5.3 Apply Loan Flow
+
+<p align="center">
+  <img src="../wireframes/Nexabank/apply_loan.png" alt="NexaBank Apply Loan" width="94%" />
+</p>
+
+### 5.4 Crypto Trading
+
+<p align="center">
+  <img src="../wireframes/Nexabank/crypto.png" alt="NexaBank Crypto" width="94%" />
+</p>
+
+### 5.5 Payroll Pro
+
+<p align="center">
+  <img src="../wireframes/Nexabank/payroll.png" alt="NexaBank Payroll" width="94%" />
+</p>
+
+### 5.6 Wealth Management
+
+<p align="center">
+  <img src="../wireframes/Nexabank/wealth_mgmt.png" alt="NexaBank Wealth Management" width="94%" />
+</p>
+
+### 5.7 Admin Simulation Console
+
+<p align="center">
+  <img src="../wireframes/Nexabank/simulate.png" alt="NexaBank Admin Simulation" width="94%" />
+</p>
+
+## 6. Quick Validation
+
+1. Login to NexaBank frontend successfully.
+2. Open Admin Simulation page and run both tenants one by one.
+3. Confirm success output for each run in simulation panel.
+4. Verify tenant-specific activity appears in FinInsights dashboard.
+
+## 7. Troubleshooting
+
+1. Frontend cannot reach backend:
+   verify backend is up at `http://localhost:5000`.
+2. Simulation fails:
+   confirm backend env and database credentials are valid.
+3. No analytics updates:
+   run the full root stack so ingestion and analytics services are active.
