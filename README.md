@@ -102,7 +102,6 @@ NexaBank App (:3002)  ──Events──>  Ingestion API (:8000)
 | **3002** | NexaBank Frontend | Next.js 15 | Full banking app UI (login, dashboard, transfers, loans, KYC) |
 | **5000** | NexaBank Backend | Node.js / Express / Prisma | Banking REST API + WebSocket (Supabase PostgreSQL) |
 | **3001** | Analytics Dashboard | Next.js 15 | Admin analytics UI with charts, funnels, AI reports |
-| **3000** | Twitter/X Demo | Next.js | Social media demo app showcasing SDK integration |
 | **8000** | Ingestion API | Python / FastAPI | Event ingestion endpoint → Kafka producer |
 | **8001** | Analytics API | Python / FastAPI | Read-heavy analytics queries → ClickHouse |
 | **9092** | Kafka Broker | Confluent Kafka 7.4 | Message broker for event streaming |

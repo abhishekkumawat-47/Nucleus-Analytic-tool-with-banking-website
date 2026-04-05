@@ -1,11 +1,12 @@
 export default function GlobalLoading() {
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
+    <div className="min-h-screen bg-white/80 backdrop-blur-sm flex items-center justify-center">
       <div className="w-full max-w-sm px-6">
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-blue-100 bg-white px-6 py-5 shadow-[0_20px_60px_rgba(26,115,232,0.12)]">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-              <div className="h-5 w-5 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+            <div className="relative h-10 w-10 shrink-0">
+              <div className="absolute inset-0 rounded-full border-2 border-blue-100" />
+              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#1a73e8] border-r-[#1a73e8] animate-spin" />
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-900">NexaBank</p>
@@ -13,10 +14,8 @@ export default function GlobalLoading() {
             </div>
           </div>
 
-          <div className="mt-5 flex gap-1.5">
-            <span className="h-1.5 flex-1 rounded-full bg-blue-100 animate-pulse" />
-            <span className="h-1.5 flex-1 rounded-full bg-blue-200 animate-pulse [animation-delay:120ms]" />
-            <span className="h-1.5 flex-1 rounded-full bg-blue-300 animate-pulse [animation-delay:240ms]" />
+          <div className="mt-5 h-1.5 w-full overflow-hidden rounded-full bg-blue-50">
+            <div className="h-full w-1/2 rounded-full bg-[#1a73e8] animate-pulse" />
           </div>
         </div>
       </div>

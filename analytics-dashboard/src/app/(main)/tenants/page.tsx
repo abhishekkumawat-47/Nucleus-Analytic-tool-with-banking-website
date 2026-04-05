@@ -604,7 +604,7 @@ export default function TenantsPage() {
                 <button
                   key={mode}
                   onClick={() => setTrendMode(mode)}
-                  className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+                  className={`rounded-full cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
                     trendMode === mode ? 'bg-[#1a73e8] text-white' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >

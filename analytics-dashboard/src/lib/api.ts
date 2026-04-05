@@ -24,6 +24,9 @@ import {
   FeatureConfig,
   RetentionData,
   AvailableTenant,
+  UserJourneyResponse,
+  JourneyUser,
+  JourneyEvent,
 } from '@/types';
 
 /** Base API configuration */
@@ -107,6 +110,7 @@ interface BackendInsight {
   type: string;
   message: string;
   severity: 'high' | 'medium' | 'low';
+  confidence?: number | string;
 }
 
 interface BackendAIReportResponse {
@@ -114,6 +118,7 @@ interface BackendAIReportResponse {
   report: string;
   cached?: boolean;
   generated_at?: string | null;
+  time_range?: string;
   insights?: BackendInsight[];
 }
 
@@ -122,6 +127,7 @@ interface AIReportPayload {
   report: string;
   cached?: boolean;
   generated_at?: string | null;
+  time_range?: string;
   insights: AIInsight[];
 }
 
@@ -177,6 +183,8 @@ interface AdminSummaryResponse {
   total_tenants: number;
   total_events: number;
   top_tenants: Array<{ id: string; name: string; events: number }>;
+  time_range?: string;
+  available?: boolean;
 }
 
 interface AdminAppSummaryResponse {
@@ -226,15 +234,8 @@ interface ConfigAuditResponse {
   logs: Array<{ timestamp: string; feature: string; action: string; by: string; reason?: string }>;
 }
 
-interface UserJourneyResponse {
-  events: Array<{ event_name: string; timestamp: string; channel?: string; metadata?: Record<string, string | number | boolean> }>;
-  sessions: Array<{ session_id: string; start_time: string; duration_seconds: number }>;
-  total_events: number;
-  total_sessions: number;
-}
-
 interface JourneyUsersResponse {
-  users: Array<{ user_id: string; total_events: number; last_active: string }>;
+  users: JourneyUser[];
 }
 
 interface SegmentationResponse {
@@ -256,6 +257,32 @@ interface PredictiveResponse {
     anomaly?: boolean;
   }>;
   total_users: number;
+}
+
+/* ─────────────── Error Caching for Resilient AI Insights ─────────────── */
+// Cache recent failures to avoid hammering backend when service is down
+const aiInsightsErrorCache: Record<string, { timestamp: number; error: string }> = {};
+const INSIGHTS_CACHE_TIMEOUT = 30000; // 30 seconds
+
+function normalizeConfidenceLabel(value?: number | string): 'High' | 'Medium' | 'Low' | undefined {
+  if (typeof value === 'number') {
+    if (value >= 0.75) return 'High';
+    if (value >= 0.5) return 'Medium';
+    return 'Low';
+  }
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (v === 'high') return 'High';
+    if (v === 'medium') return 'Medium';
+    if (v === 'low') return 'Low';
+  }
+  return undefined;
+}
+
+function confidenceFromSeverity(severity: BackendInsight['severity']): 'High' | 'Medium' | 'Low' {
+  if (severity === 'high') return 'High';
+  if (severity === 'medium') return 'Medium';
+  return 'Low';
 }
 
 /* ─────────────── API Methods ─────────────── */
@@ -435,16 +462,34 @@ export const dashboardAPI = {
     }
   },
 
+  // ─── Cache for AI Insights failures to avoid hammering backend ───
+
   /** Fetch AI-generated insights using backend /insights endpoint */
   async getAIInsights(tenants: string[], range: string): Promise<AIInsight[]> {
-    // Retry once on failure before returning fallback
+    const cacheKey = `${tenants.join(',')}-${range}`;
+    
+    // Check if we recently failed for this key (avoid retry spam)
+    const cached = aiInsightsErrorCache[cacheKey];
+    if (cached && Date.now() - cached.timestamp < INSIGHTS_CACHE_TIMEOUT) {
+      console.debug(`[AI Insights] Using cached error response for ${cacheKey}`);
+      return dashboardAPI.getAIInsightsFallback('Retrying automatically...');
+    }
+
+    // Exponential backoff: 1s, 3s
+    const delays = [1000, 3000];
+    
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await apiClient.get<{ insights: BackendInsight[] }>(
           `/insights?tenants=${tenants.join(',')}&range=${range}`,
-          { timeout: attempt === 0 ? 15000 : 30000 } // 15s first try, 30s retry
+          { timeout: 15000 }
         );
-        const insights = response.data.insights || [];
+        
+        const insights = response.data.insights ?? [];
+        
+        // Cache cleared on success
+        delete aiInsightsErrorCache[cacheKey];
+        
         return insights.map((insight: BackendInsight, ix: number) => ({
           id: `ai-${ix}`,
           type: insight.severity === 'high' ? 'warning' as const : insight.severity === 'medium' ? 'info' as const : 'success' as const,
@@ -452,49 +497,87 @@ export const dashboardAPI = {
           message: insight.message || String(insight),
           impact: insight.severity === 'high' ? 'High' : 'Medium',
           priority: insight.severity,
+          confidence: normalizeConfidenceLabel(insight.confidence) || confidenceFromSeverity(insight.severity),
           actionRequired: insight.severity === 'high',
         }));
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response?.status;
-        const isTimeout = (err as { code?: string })?.code === 'ECONNABORTED';
-        console.warn(`[AI Insights] Attempt ${attempt + 1} failed (status=${status}, timeout=${isTimeout})`);
+        const message = (err as { message?: string })?.message || String(err);
+        const isTimeout = message.includes('timeout') || (err as { code?: string })?.code === 'ECONNABORTED';
+        const isNetworkError = message.includes('ECONNREFUSED') || message.includes('ERR_');
         
-        // Don't retry on 403 (RBAC) or 404 
-        if (status === 403 || status === 404) break;
+        // Log with context for debugging
+        console.warn(
+          `[AI Insights] Attempt ${attempt + 1}/2 failed | ` +
+          `Status: ${status ?? 'N/A'} | ` +
+          `Timeout: ${isTimeout} | ` +
+          `Network: ${isNetworkError} | ` +
+          `Tenants: ${tenants.join(',')} | ` +
+          `Range: ${range}`
+        );
         
-        // Wait before retry
-        if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
+        // Don't retry on auth (403) or permission (404) issues
+        if (status === 403 || status === 404) {
+          aiInsightsErrorCache[cacheKey] = { timestamp: Date.now(), error: `${status}: ${message}` };
+          break;
+        }
+        
+        // Wait before retry with exponential backoff
+        if (attempt < delays.length) {
+          await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+        }
       }
     }
     
-    // Return informative fallback insights when backend is unavailable
-    console.error('Failed to fetch AI Insights after retries');
+    // Cache the failure to prevent hammering
+    aiInsightsErrorCache[cacheKey] = { timestamp: Date.now(), error: 'Max retries exceeded' };
+    
+    // Return informative fallback insights
+    return dashboardAPI.getAIInsightsFallback('AI insights service is temporarily unavailable');
+  },
+
+  /** Generate fallback insights when backend is unavailable */
+  getAIInsightsFallback(subtitle: string): AIInsight[] {
     return [{
       id: 'ai-fallback-0',
       type: 'info' as const,
-      title: 'Insights Temporarily Unavailable',
-      message: 'The AI insights engine is currently processing or unavailable. Insights will appear automatically once the backend is ready.',
+      title: 'Insights Engine Unavailable',
+      message: `${subtitle}. Insights will appear automatically once the backend is ready. Try refreshing in a few moments.`,
       impact: 'Low',
       priority: 'low',
+      confidence: 'Low',
       actionRequired: false,
     }];
   },
 
   /** Fetch AI Summarization Report */
-  async getAIReport(tenants: string[]): Promise<string> {
+  async getAIReport(tenants: string[], range: string = '30d'): Promise<string> {
     try {
-      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenants=${tenants.join(',')}`, { timeout: 1200000 });
+      const response = await apiClient.get<BackendAIReportResponse>(
+        `/ai_report?tenants=${tenants.join(',')}&range=${range}`,
+        { timeout: 120000 } // 120 seconds for report generation
+      );
       return response.data.report || '';
-    } catch {
-      console.error('Failed to fetch AI Report');
-      return '# AI Report Unavailable\n\nThe summarization model is currently unavailable or generating the report failed.';
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const message = (err as { message?: string })?.message || String(err);
+      console.warn(`[AI Report] Failed to fetch | Status: ${status ?? 'N/A'} | Tenants: ${tenants.join(',')}`);
+      
+      if (status === 403 || status === 404) {
+        return '# Access Denied\n\nYou do not have permission to view AI reports for the selected tenants.';
+      }
+      
+      return '# AI Report Temporarily Unavailable\n\nThe report generation system is currently processing or unavailable. Please try again in a few moments.';
     }
   },
 
   /** Fetch the latest stored AI report snapshot */
-  async getLatestAIReport(tenants: string[]): Promise<AIReportPayload> {
+  async getLatestAIReport(tenants: string[], range: string = '30d'): Promise<AIReportPayload> {
     try {
-      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenants=${tenants.join(',')}`, { timeout: 1200000 });
+      const response = await apiClient.get<BackendAIReportResponse>(
+        `/ai_report?tenants=${tenants.join(',')}&range=${range}`,
+        { timeout: 30000 } // 30 seconds for cached reports
+      );
       const insights: AIInsight[] = (response.data.insights || []).map((ins: BackendInsight, i: number) => ({
         id: `ai-${i}`,
         title: ins.type || 'Insight',
@@ -505,15 +588,26 @@ export const dashboardAPI = {
         actionRequired: ins.severity === 'high',
       }));
       return { ...response.data, insights };
-    } catch {
-      return { tenant_id: tenants.join(','), report: '', cached: true, generated_at: null, insights: [] };
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      console.debug(`[AI Report Latest] Failed to fetch | Status: ${status ?? 'N/A'} | Tenants: ${tenants.join(',')}`);
+      return {
+        tenant_id: tenants.join(','),
+        report: '',
+        cached: true,
+        generated_at: null,
+        insights: [],
+      };
     }
   },
 
   /** Generate a fresh AI report on demand */
-  async generateAIReport(tenants: string[]): Promise<AIReportPayload> {
+  async generateAIReport(tenants: string[], range: string = '30d'): Promise<AIReportPayload> {
     try {
-      const response = await apiClient.get<BackendAIReportResponse>(`/ai_report?tenants=${tenants.join(',')}&force_refresh=true`, { timeout: 1200000 });
+      const response = await apiClient.get<BackendAIReportResponse>(
+        `/ai_report?tenants=${tenants.join(',')}&range=${range}&force_refresh=true`,
+        { timeout: 120000 } // 120 seconds for report generation
+      );
       const insights: AIInsight[] = (response.data.insights || []).map((ins: BackendInsight, i: number) => ({
         id: `ai-${i}`,
         title: ins.type || 'Insight',
@@ -524,9 +618,27 @@ export const dashboardAPI = {
         actionRequired: ins.severity === 'high',
       }));
       return { ...response.data, insights };
-    } catch {
-      console.error('Failed to generate AI Report');
-      return { tenant_id: tenants.join(','), report: '', cached: false, generated_at: null, insights: [] };
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const fallbackSource = status === 404 ? 'latest snapshot unavailable' : 'generation failed';
+      console.warn(`[AI Report Generate] Failed | Status: ${status ?? 'N/A'} | Tenants: ${tenants.join(',')} | ${fallbackSource}`);
+
+      if (status === 404) {
+        try {
+          return await dashboardAPI.getLatestAIReport(tenants, range);
+        } catch {
+          // Fall through to the empty fallback below.
+        }
+      }
+      
+      return {
+        tenant_id: tenants.join(','),
+        report: '',
+        cached: false,
+        generated_at: null,
+        time_range: range,
+        insights: [],
+      };
     }
   },
 
@@ -655,13 +767,13 @@ export const dashboardAPI = {
     }
   },
 
-  async getAdminSummary(): Promise<AdminSummaryResponse> {
+  async getAdminSummary(range: string = '30d'): Promise<AdminSummaryResponse> {
     try {
-      const response = await apiClient.get<AdminSummaryResponse>('/admin/summary');
+      const response = await apiClient.get<AdminSummaryResponse>(`/admin/summary?range=${range}`);
       return response.data;
     } catch {
-      console.error('Failed to fetch admin summary');
-      return { total_tenants: 0, total_events: 0, top_tenants: [] };
+      console.warn(`Failed to fetch admin summary for range ${range}`);
+      return { total_tenants: 0, total_events: 0, top_tenants: [], time_range: range, available: false };
     }
   },
 
@@ -780,7 +892,7 @@ export const dashboardAPI = {
       return response.data;
     } catch {
       console.error('Failed to fetch user journey');
-      return { events: [], sessions: [], total_events: 0, total_sessions: 0 };
+      return { tenant_id: '', user_id: userId, total_events: 0, total_sessions: 0, events: [], sessions: [], last_event: null };
     }
   },
 

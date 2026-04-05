@@ -52,4 +52,21 @@ export const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions);
 
-export { handler as GET, handler as POST }
+function setRuntimeAuthUrl(req: Request) {
+  // Keep NextAuth URLs aligned with the actual request host/port.
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+  if (!host) return;
+
+  const proto = req.headers.get('x-forwarded-proto') || 'http';
+  process.env.NEXTAUTH_URL = `${proto}://${host}`;
+}
+
+export async function GET(req: Request, ctx: Parameters<typeof handler>[1]) {
+  setRuntimeAuthUrl(req);
+  return handler(req, ctx);
+}
+
+export async function POST(req: Request, ctx: Parameters<typeof handler>[1]) {
+  setRuntimeAuthUrl(req);
+  return handler(req, ctx);
+}

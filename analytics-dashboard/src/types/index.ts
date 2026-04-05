@@ -163,6 +163,7 @@ export interface AIInsight {
   message: string;
   type: 'warning' | 'info' | 'success';
   priority: 'high' | 'medium' | 'low';
+  confidence?: 'High' | 'Medium' | 'Low';
   impact?: string;
   actionRequired?: boolean;
 }

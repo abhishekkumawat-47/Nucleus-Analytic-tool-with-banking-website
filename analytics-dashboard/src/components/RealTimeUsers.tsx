@@ -187,7 +187,7 @@ function RealTimeUsers({ activeUsers, pagesPerMinute, timestampIST }: RealTimeUs
                   fontSize: '11px',
                   boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
                 }}
-                labelFormatter={(label: string | number) => `${label} IST`}
+                labelFormatter={(label: any) => `${label} IST`}
                 formatter={(value: any) => [`${value} pages`, 'Activity']}
               />
               <Bar

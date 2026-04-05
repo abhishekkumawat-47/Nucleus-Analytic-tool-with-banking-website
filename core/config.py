@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DEPLOYMENT_MODE: DeploymentMode = DeploymentMode.CLOUD
     
     # On-Prem: identifies the single tenant this instance serves
-    TENANT_ID: str = "twitter"
+    TENANT_ID: str = "default-app"
     
     # On-Prem: whether aggregate sync to central cloud is enabled
     SYNC_ENABLED: bool = False

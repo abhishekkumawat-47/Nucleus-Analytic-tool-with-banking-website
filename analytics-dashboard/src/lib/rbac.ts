@@ -2,9 +2,9 @@
  * RBAC Configuration — Central role whitelist.
  * 
  * Roles:
- *   super_admin → Overall platform admin (omeshmehta70@gmail.com)
+ *   super_admin → Overall platform admin
  *                 Sees aggregated cloud summary only. NO raw/detailed data.
- *   app_admin   → App-level admin for a specific app (omeshmehta03@gmail.com for Twitter)
+ *   app_admin   → App-level admin for a specific app
  *                 Sees the FULL detailed analytics dashboard for their app.
  *   user        → Normal user, can use apps but cannot access any dashboards.
  */
@@ -14,16 +14,16 @@ export type UserRole = 'super_admin' | 'app_admin' | 'user';
 /**
  * Strict route-based access control.
  * 
- * super_admin (overall admin — omeshmehta70):
+ * super_admin:
  *   ✅ / (landing), /admin (global summary), /apps/* (per-app summaries)
  *   ❌ /dashboard, /features, /funnel, /tenants, /settings, /governance
  * 
- * app_admin (twitter admin — omeshmehta03):
+ * app_admin:
  *   ✅ / (landing), /dashboard, /features, /funnel, /tenants, /settings, /governance
  *   ❌ /admin, /apps/* (these show cross-tenant data the app admin shouldn't see)
  * 
- * user (normal):
- *   ❌ Everything — should only use the Twitter app (port 3000)
+ * user:
+ *   ❌ Everything — should only use their assigned application
  */
 export function canAccessRoute(role: UserRole, pathname: string): boolean {
   // Login and unauthorized pages are always accessible

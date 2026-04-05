@@ -52,6 +52,13 @@ const insightStyles: Record<string, {
 function AIInsightsPanel({ insights }: AIInsightsPanelProps) {
   const [selectedInsight, setSelectedInsight] = useState<AIInsight | null>(null);
 
+  const getConfidenceLabel = (insight: AIInsight): 'High' | 'Medium' | 'Low' => {
+    if (insight.confidence) return insight.confidence;
+    if (insight.priority === 'high') return 'High';
+    if (insight.priority === 'medium') return 'Medium';
+    return 'Low';
+  };
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setSelectedInsight(null);
@@ -83,6 +90,7 @@ function AIInsightsPanel({ insights }: AIInsightsPanelProps) {
           const style = insightStyles[insight.type] || insightStyles.info;
           const Icon = style.icon;
           const insightKey = `${insight.id ?? 'insight'}-${insight.type}-${index}`;
+          const confidenceLabel = getConfidenceLabel(insight);
 
           return (
             <div
@@ -108,7 +116,7 @@ function AIInsightsPanel({ insights }: AIInsightsPanelProps) {
               <div className="flex items-center justify-between pt-3 mt-3 border-t border-gray-100">
                 <div className="flex items-center gap-1.5">
                   <TrendingUp className="w-3 h-3 text-[#1a73e8]" />
-                  <span className="text-[11px] text-gray-500 font-medium">Confidence: High</span>
+                  <span className="text-[11px] text-gray-500 font-medium">Confidence: {confidenceLabel}</span>
                 </div>
                 <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
                   View
@@ -156,7 +164,7 @@ function AIInsightsPanel({ insights }: AIInsightsPanelProps) {
               </p>
               <div className="mt-6 flex items-center gap-2 pt-4 border-t border-gray-100">
                 <TrendingUp className="w-4 h-4 text-[#1a73e8]" />
-                <span className="text-sm text-gray-500 font-medium">Confidence: High</span>
+                <span className="text-sm text-gray-500 font-medium">Confidence: {getConfidenceLabel(selectedInsight)}</span>
               </div>
             </div>
           </div>

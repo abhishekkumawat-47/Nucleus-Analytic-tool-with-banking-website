@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAppSelector } from "@/lib/store";
+import { resolveAnalyticsWsBaseUrl } from "@/lib/ws-url";
 
 export interface RealtimeEvent {
   type: string;
@@ -44,8 +45,8 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}) {
   const connect = useCallback(() => {
     if (!selectedTenant) return;
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_ANALYTICS_WS_URL || "ws://localhost:8001";
-      const wsUrl = `${baseUrl.replace(/^http/, "ws")}/ws/dashboard/${selectedTenant}`;
+      const baseUrl = resolveAnalyticsWsBaseUrl(process.env.NEXT_PUBLIC_ANALYTICS_WS_URL);
+      const wsUrl = `${baseUrl}/ws/dashboard/${selectedTenant}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

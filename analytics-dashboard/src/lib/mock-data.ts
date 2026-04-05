@@ -181,14 +181,6 @@ export const tenants: Tenant[] = [
     adoptionRate: 85,
     plan: 'enterprise',
   },
-  {
-    id: 'twitter',
-    name: 'Twitter',
-    featureUsage: 62,
-    errors: 8,
-    adoptionRate: 72,
-    plan: 'pro',
-  },
 ];
 
 /* ─────────────── AI Insights ─────────────── */

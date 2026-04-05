@@ -7,6 +7,7 @@ import { setTimeRange, setSelectedTenants, updateRealTimeUsers, updateKPIMetrics
 import { TimeRange } from '@/types';
 import { useSession } from 'next-auth/react';
 import { dashboardAPI } from '@/lib/api';
+import { resolveAnalyticsWsBaseUrl } from '@/lib/ws-url';
 
 /**
  * Converts the human-readable TimeRange into the API range param.
@@ -136,13 +137,14 @@ export function useDashboardData() {
 
   // ─── WebSocket for real-time metrics ───
   useEffect(() => {
-    const tenantId =
+    const selectedTenantRaw =
       dashboardState.selectedTenants.length > 0
         ? dashboardState.selectedTenants[0]
         : 'nexabank';
+    const tenantId = tenantAliasMap[String(selectedTenantRaw).toLowerCase()] || String(selectedTenantRaw).toLowerCase();
 
-    const baseUrl = process.env.NEXT_PUBLIC_ANALYTICS_WS_URL || 'ws://localhost:8001';
-    const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/ws/dashboard/${tenantId}`;
+    const baseUrl = resolveAnalyticsWsBaseUrl(process.env.NEXT_PUBLIC_ANALYTICS_WS_URL);
+    const wsUrl = `${baseUrl}/ws/dashboard/${tenantId}`;
 
     const ws = new WebSocket(wsUrl);
 
