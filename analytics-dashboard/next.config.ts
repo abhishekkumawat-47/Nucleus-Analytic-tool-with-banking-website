@@ -34,6 +34,8 @@ const nextConfig: NextConfig = {
         { source: '/api/admin/:path*', destination: `http://${analyticsApiHost}:8001/admin/:path*` },
         { source: '/api/ai/:path*', destination: `http://${analyticsApiHost}:8001/ai/:path*` },
         { source: '/api/license/:path*', destination: `http://${analyticsApiHost}:8001/license/:path*` },
+        { source: '/api/tracking/:path*', destination: `http://${analyticsApiHost}:8001/tracking/:path*` },
+        { source: '/api/config/:path*', destination: `http://${analyticsApiHost}:8001/config/:path*` },
         { source: '/api/transparency/:path*', destination: `http://${analyticsApiHost}:8001/transparency/:path*` },
         { source: '/api/journey/:path*', destination: `http://${analyticsApiHost}:8001/journey/:path*` },
         { source: '/api/segmentation/:path*', destination: `http://${analyticsApiHost}:8001/segmentation/:path*` },

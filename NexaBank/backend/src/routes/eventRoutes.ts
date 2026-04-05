@@ -3,8 +3,34 @@ import { prisma } from "../prisma";
 import { isLoggedIn, isAdmin } from "../middleware/IsLoggedIn";
 import { trackEvent } from "../middleware/eventTracker";
 import { UAParser } from "ua-parser-js";
+import axios from "axios";
 
 const router = express.Router();
+
+const ANALYTICS_API_URL = process.env.ANALYTICS_API_URL || "http://analytics-api:8001";
+const TENANT_ALIAS_MAP: Record<string, string> = {
+  bank_a: "nexabank",
+  bank_b: "safexbank",
+};
+const GLOBAL_ANALYTICS_TENANTS = "nexabank,safexbank";
+const GLOBAL_LOCAL_TENANTS = ["bank_a", "bank_b"];
+
+function normalizeToggleKey(rawKey: string): string {
+  const key = String(rawKey || "").trim().toLowerCase();
+  if (!key) return key;
+
+  return key
+    .replace(/_page[._]view$/i, ".page.view")
+    .replace(/\.page_view$/i, ".page.view")
+    .replace(/_dashboard[._]view$/i, ".dashboard.view")
+    .replace(/\.dashboard_view$/i, ".dashboard.view")
+    .replace(/\.{2,}/g, ".");
+}
+
+function toAnalyticsTenant(tenantId: string): string {
+  const key = String(tenantId || "").toLowerCase();
+  return TENANT_ALIAS_MAP[key] || key;
+}
 
 // ─── POST /events/track ────────────────────────────────────────
 // Generic custom event tracker for frontend
@@ -105,14 +131,42 @@ router.get(
   async (req: Request, res: Response): Promise<void> => {
     const { tenantId } = req.params;
     try {
-      const toggles = await prisma.featureToggle.findMany({
-        where: { tenantId },
+      const analyticsResp = await axios.get(`${ANALYTICS_API_URL}/tracking/toggles`, {
+        params: { tenants: GLOBAL_ANALYTICS_TENANTS },
+        headers: {
+          "X-User-Role": "super_admin",
+          "X-User-Email": "nexabank-toggle-bridge@system.local",
+        },
+        timeout: 15000,
       });
+
+      const togglesList = Array.isArray(analyticsResp.data?.toggles) ? analyticsResp.data.toggles : [];
+      const map: Record<string, boolean> = {};
+      for (const item of togglesList) {
+        if (item?.feature_name) {
+          const normalizedKey = normalizeToggleKey(String(item.feature_name));
+          if (normalizedKey) {
+            map[normalizedKey] = Boolean(item.is_enabled);
+          }
+        }
+      }
+
+      res.status(200).json(map);
+      return;
+    } catch {
+      // Fall back to local Prisma toggles to keep NexaBank operational if analytics API is unavailable.
+    }
+
+    try {
+      const toggles = await prisma.featureToggle.findMany({ where: { tenantId: { in: GLOBAL_LOCAL_TENANTS } } });
 
       // Return as map: { emi_calculator: true, kyc: true, loan_module: true }
       const map: Record<string, boolean> = {};
       for (const t of toggles) {
-        map[t.key] = t.enabled;
+        const normalizedKey = normalizeToggleKey(t.key);
+        if (!normalizedKey) continue;
+        const previous = map[normalizedKey];
+        map[normalizedKey] = previous === undefined ? t.enabled : previous && t.enabled;
       }
 
       res.status(200).json(map);
@@ -131,15 +185,39 @@ router.put(
   async (req: Request, res: Response): Promise<void> => {
     const { key } = req.params;
     const { enabled, tenantId } = req.body as { enabled: boolean; tenantId: string };
+    const normalizedKey = normalizeToggleKey(key);
 
     try {
-      const toggle = await prisma.featureToggle.upsert({
-        where: { key_tenantId: { key, tenantId } },
-        update: { enabled },
-        create: { key, enabled, tenantId },
-      });
+      const actorEmail = (req as any).user?.email || "nexabank-admin@system.local";
 
-      res.status(200).json(toggle);
+      await axios.post(
+        `${ANALYTICS_API_URL}/tracking/toggles`,
+        {
+          tenant_id: GLOBAL_ANALYTICS_TENANTS,
+          feature_name: normalizedKey,
+          is_enabled: enabled,
+          actor_email: actorEmail,
+        },
+        {
+          headers: {
+            "X-User-Role": "super_admin",
+            "X-User-Email": actorEmail,
+          },
+          timeout: 15000,
+        }
+      );
+
+      const updates = await Promise.all(
+        GLOBAL_LOCAL_TENANTS.map((tenant) =>
+          prisma.featureToggle.upsert({
+            where: { key_tenantId: { key: normalizedKey, tenantId: tenant } },
+            update: { enabled },
+            create: { key: normalizedKey, enabled, tenantId: tenant },
+          })
+        )
+      );
+
+      res.status(200).json({ key: normalizedKey, enabled, tenantsUpdated: GLOBAL_LOCAL_TENANTS, count: updates.length });
     } catch (err) {
       res.status(500).json({ error: "Failed to update toggle" });
     }

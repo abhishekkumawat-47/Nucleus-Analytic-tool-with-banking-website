@@ -227,11 +227,14 @@ interface LicenseUsageResponse {
 }
 
 interface TrackingToggleResponse {
-  toggles: Array<{ feature: string; enabled: boolean; description?: string }>;
-}
-
-interface ConfigAuditResponse {
-  logs: Array<{ timestamp: string; feature: string; action: string; by: string; reason?: string }>;
+  toggles: Array<{
+    feature_name: string;
+    display_name?: string;
+    category?: string;
+    is_enabled: boolean;
+    changed_by: string;
+    changed_at: string;
+  }>;
 }
 
 interface JourneyUsersResponse {
@@ -847,40 +850,48 @@ export const dashboardAPI = {
 
   /* ─────────────── Tracking Toggles ─────────────── */
 
-  async getTrackingToggles(tenants: string[]): Promise<TrackingToggleResponse> {
+  async getTrackingToggles(
+    tenants: string[],
+    auth?: { role?: string; email?: string }
+  ): Promise<TrackingToggleResponse> {
     try {
-      const response = await apiClient.get<TrackingToggleResponse>(`/tracking/toggles?tenants=${tenants.join(',')}`);
+      const headers: Record<string, string> = {};
+      if (auth?.role) headers['X-User-Role'] = auth.role;
+      if (auth?.email) headers['X-User-Email'] = auth.email;
+      const response = await apiClient.get<TrackingToggleResponse>(`/tracking/toggles?tenants=${tenants.join(',')}`, {
+        headers,
+      });
       return response.data;
     } catch {
-      console.error('Failed to fetch tracking toggles');
+      console.warn('Failed to fetch tracking toggles');
       return { toggles: [] };
     }
   },
 
-  async setTrackingToggle(tenants: string[], featureName: string, isEnabled: boolean, actorEmail: string): Promise<{ status: string }> {
+  async setTrackingToggle(
+    tenants: string[],
+    featureName: string,
+    isEnabled: boolean,
+    actorEmail: string,
+    auth?: { role?: string; email?: string }
+  ): Promise<{ status: string; feature_name?: string; is_enabled?: boolean; changed_by?: string; changed_at?: string }> {
     try {
-      const response = await apiClient.post<{ status: string }>('/tracking/toggles', {
+      const headers: Record<string, string> = {};
+      if (auth?.role) headers['X-User-Role'] = auth.role;
+      if (auth?.email) headers['X-User-Email'] = auth.email;
+      const tenantParam = encodeURIComponent(tenants.join(','));
+      const response = await apiClient.post<{ status: string; feature_name?: string; is_enabled?: boolean; changed_by?: string; changed_at?: string }>(`/tracking/toggles?tenants=${tenantParam}`, {
         tenant_id: tenants.join(','),
         feature_name: featureName,
         is_enabled: isEnabled,
         actor_email: actorEmail,
+      }, {
+        headers,
       });
       return response.data;
     } catch {
       console.error('Failed to set tracking toggle');
       return { status: 'error' };
-    }
-  },
-
-  /* ─────────────── Config Audit Log ─────────────── */
-
-  async getConfigAuditLog(tenants: string[]): Promise<ConfigAuditResponse> {
-    try {
-      const response = await apiClient.get<ConfigAuditResponse>(`/config/audit-log?tenants=${tenants.join(',')}`);
-      return response.data;
-    } catch {
-      console.error('Failed to fetch config audit log');
-      return { logs: [] };
     }
   },
 

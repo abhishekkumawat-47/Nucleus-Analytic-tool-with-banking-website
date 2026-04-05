@@ -34,13 +34,29 @@ interface Toggle {
   icon: any
 }
 
-const availableToggles: Toggle[] = [
-  { key: "core.payees.view", name: "Payees Management", description: "Track and toggle the payees management feature.", icon: Users },
-  { key: "core.transactions.view", name: "Transactions Tracker", description: "Track user interactions with their transaction history.", icon: Activity },
-  { key: "loans.dashboard.view", name: "Loan Origination", description: "Enable and track the loan application dashboard.", icon: Briefcase },
-  { key: "pro.crypto-trading.view", name: "Crypto Trading (Pro)", description: "Enterprise feature: Advanced cryptocurrency trading platform.", icon: Zap },
-  { key: "pro.wealth-management.view", name: "Wealth Management (Pro)", description: "Enterprise feature: Automated wealth rebalancing.", icon: TrendingUp },
-]
+const TOGGLE_METADATA: Record<string, Omit<Toggle, 'key'>> = {
+  'payee.page.view': { name: 'Payees Management', description: 'Track and toggle the payees management feature.', icon: Users },
+  'transaction.page.view': { name: 'Transactions Tracker', description: 'Track user interactions with transaction history.', icon: Activity },
+  'loan.page.view': { name: 'Loan Origination', description: 'Enable and track loan dashboard behavior.', icon: Briefcase },
+  'crypto-trading.page.view': { name: 'Crypto Trading (Pro)', description: 'Enterprise feature: Advanced cryptocurrency workflow.', icon: Zap },
+  'wealth-management-pro.page.view': { name: 'Wealth Management (Pro)', description: 'Enterprise feature: Automated wealth rebalancing.', icon: TrendingUp },
+}
+
+const formatToggleLabel = (key: string): string =>
+  key
+    .replace(/\./g, ' ')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+
+const normalizeToggleKey = (rawKey: string): string =>
+  String(rawKey || '')
+    .trim()
+    .toLowerCase()
+    .replace(/_page[._]view$/i, '.page.view')
+    .replace(/\.page_view$/i, '.page.view')
+    .replace(/_dashboard[._]view$/i, '.dashboard.view')
+    .replace(/\.dashboard_view$/i, '.dashboard.view')
+    .replace(/\.{2,}/g, '.')
 
 export default function AdminFeatureToggles() {
   const [activeTab, setActiveTab] = useState("bank_a")
@@ -48,7 +64,7 @@ export default function AdminFeatureToggles() {
     bank_a: {},
     bank_b: {}
   })
-  const [dynamicToggles, setDynamicToggles] = useState<Toggle[]>(availableToggles)
+  const [dynamicToggles, setDynamicToggles] = useState<Toggle[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
 
@@ -57,6 +73,12 @@ export default function AdminFeatureToggles() {
   useEffect(() => {
     track('admin_feature_toggles.page.view')
     fetchAllToggles()
+
+    const pollId = window.setInterval(() => {
+      fetchAllToggles()
+    }, 3000)
+
+    return () => window.clearInterval(pollId)
   }, [track])
 
   const fetchAllToggles = async () => {
@@ -67,29 +89,41 @@ export default function AdminFeatureToggles() {
         axios.get(`${API_BASE_URL}/events/toggles/bank_b`)
       ])
       
-      const aData = resA.data || {};
-      const bData = resB.data || {};
+      const rawAData = resA.data || {};
+      const rawBData = resB.data || {};
+
+      const normalizeMap = (source: Record<string, boolean>) => {
+        const out: Record<string, boolean> = {};
+        for (const [key, enabled] of Object.entries(source)) {
+          const normalizedKey = normalizeToggleKey(key);
+          if (!normalizedKey) continue;
+          out[normalizedKey] = Boolean(enabled);
+        }
+        return out;
+      };
+
+      const aData = normalizeMap(rawAData);
+      const bData = normalizeMap(rawBData);
 
       setToggles({
         bank_a: aData,
         bank_b: bData
       })
 
-      // Combine predefined toggles with dynamic ones from backend
+      // Build dynamic toggle cards from backend keys (single source of truth).
       const backendKeys = new Set([...Object.keys(aData), ...Object.keys(bData)]);
-      const combined = [...availableToggles];
+      const combined: Toggle[] = [];
       
       backendKeys.forEach(key => {
-        if (!combined.find(t => t.key === key)) {
-          combined.push({
-            key,
-            name: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-            description: `Dynamically tracked event: ${key}`,
-            icon: Settings2
-          });
-        }
+        const meta = TOGGLE_METADATA[key];
+        combined.push({
+          key,
+          name: meta?.name || formatToggleLabel(key),
+          description: meta?.description || `Dynamically tracked event: ${key}`,
+          icon: meta?.icon || Settings2,
+        });
       });
-      setDynamicToggles(combined);
+      setDynamicToggles(combined.sort((x, y) => x.key.localeCompare(y.key)));
 
     } catch (err) {
       console.error("Failed to fetch toggles:", err)

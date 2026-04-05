@@ -10,7 +10,7 @@ interface DecodedToken {
 }
 
 export interface RequestWithUser extends Request {
-  user?: { id: string; role: string; tenantId: string; pan: string };
+  user?: { id: string; role: string; tenantId: string; pan: string; email: string };
 }
 
 /**
@@ -100,7 +100,7 @@ export const isLoggedIn = async (
 
     const user = await prisma.customer.findUnique({
       where: { id: decoded.userId },
-      select: { role: true, tenantId: true, pan: true },
+      select: { role: true, tenantId: true, pan: true, email: true },
     });
 
     if (!user) {
@@ -112,7 +112,8 @@ export const isLoggedIn = async (
       id: decoded.userId, 
       role: user.role, 
       tenantId: user.tenantId || "bank_a", 
-      pan: user.pan || "" 
+      pan: user.pan || "",
+      email: user.email,
     };
     next();
   } catch (error: unknown) {
@@ -162,7 +163,7 @@ export const CookieSend = async (
 
     const user = await prisma.customer.findUnique({
       where: { id: decoded.userId },
-      select: { role: true, tenantId: true, pan: true },
+      select: { role: true, tenantId: true, pan: true, email: true },
     });
 
     if (!user) {
@@ -174,7 +175,8 @@ export const CookieSend = async (
       id: decoded.userId, 
       role: user.role, 
       tenantId: user.tenantId || "bank_a", 
-      pan: user.pan || "" 
+      pan: user.pan || "",
+      email: user.email,
     };
     res.status(200).json(req.user);
   } catch (error: unknown) {
