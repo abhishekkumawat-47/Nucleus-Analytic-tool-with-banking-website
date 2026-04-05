@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="analytics-dashboard/public/logo1.png" alt="Nucleus Logo" width="80" />
+  <img src="analytics-dashboard/public/logo1.png" alt="FinInsights Logo" width="80" />
 </p>
 
 <h1 align="center">FinInsights — Multi-Tenant Growth Analytics & Feature Intelligence Platform</h1>
@@ -28,8 +28,8 @@
 
 ### 2. Clone & Run
 ```bash
-git clone https://github.com/abhishekkumawat-47/Nucleus-Analytic-tool-with-banking-website.git
-cd Nucleus-Analytic-tool-with-banking-website
+git clone https://github.com/abhishekkumawat-47/FinInsights-Analytic-tool-with-banking-website.git
+cd FinInsights-Analytic-tool-with-banking-website
 
 # Start all 11 services
 docker compose up --build
@@ -183,7 +183,7 @@ You should see output like:
 
 ### Step 3: Add the Email to Analytics Dashboard RBAC
 
-To grant the new admin access to the **Nucleus Analytics Dashboard**, add their email to the `rbac.json` file in the project root:
+To grant the new admin access to the **FinInsights Analytics Dashboard**, add their email to the `rbac.json` file in the project root:
 
 ```jsonc
 // rbac.json
@@ -232,7 +232,7 @@ If the dashboard shows empty data, use NexaBank to generate real telemetry:
 
 1. **Log in** to NexaBank at [http://localhost:3002/login](http://localhost:3002/login) with the account you created.
 2. **Use the app** — browse the dashboard, check balances, attempt a transfer, start KYC, apply for a loan.
-3. **Each action generates telemetry events** that flow through the Nucleus pipeline and appear in the analytics dashboard within seconds.
+3. **Each action generates telemetry events** that flow through the FinInsights pipeline and appear in the analytics dashboard within seconds.
 
 For bulk test data, run the simulation endpoint in the NexaBank backend:
 ```bash
@@ -244,7 +244,7 @@ curl -X POST http://localhost:5000/api/events/simulate?days=7
 ## 📁 Project Structure
 
 ```
-Nucleus-Analytic-tool-with-banking-website/
+FinInsights-Analytic-tool-with-banking-website/
 │
 ├── 📊 Analytics Backend
 │   ├── api/                      # Analytics API (FastAPI, port 8001)
@@ -425,7 +425,7 @@ curl -X POST "http://localhost:5000/api/auth/register" \
 
 ## 🏛️ Multi-Tenant Architecture
 
-Nucleus is purpose-built for **true multi-tenancy** with complete data isolation, independent analytics, and configurable role hierarchies.
+FinInsights is purpose-built for **true multi-tenancy** with complete data isolation, independent analytics, and configurable role hierarchies.
 
 ### Tenant Identity
 
@@ -834,5 +834,5 @@ FinInsights powers real-time feature intelligence for **modern fintech and SaaS 
 ---
 
 <p align="center">
-  <sub>Built using Python, TypeScript, Kafka, ClickHouse, and Docker containers for FinSpark - Season 1 by Nucleus Softwares.</sub>
+  <sub>Built using Python, TypeScript, Kafka, ClickHouse, and Docker containers for FinSpark - Season 1 by FinInsights Softwares.</sub>
 </p>

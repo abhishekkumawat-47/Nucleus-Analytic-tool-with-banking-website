@@ -19,7 +19,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Nucleus | Feature Intelligence & Analytics",
+  title: "FinInsights | Feature Intelligence & Analytics",
   description:
     "Production-grade SaaS analytics dashboard for tracking feature usage, user behavior, funnel analysis, and tenant comparison with AI-powered insights.",
   keywords: [
