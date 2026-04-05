@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation, useIsMutating } from '@tanstack/react-query';
 import { dashboardAPI } from '@/lib/api';
 import { useDashboardData } from '@/hooks/useDashboard';
 import { AIInsight } from '@/types';
@@ -120,7 +120,10 @@ function extractStrategicBullets(md: string): string[] {
 export default function AIReportPage() {
   const { tenantsParam, selectedTenants, rangeParam, timeRange } = useDashboardData();
   const queryClient = useQueryClient();
-  const [generating, setGenerating] = useState<boolean>(false);
+  // Use React Query's global mutation tracking to survive unmounts
+  const mutationKey = ['generateAIReport', tenantsParam, rangeParam];
+  const activeMutations = useIsMutating({ mutationKey });
+  const generating = activeMutations > 0;
 
   const { data = {} as AIReportData, isLoading: loading, refetch } = useQuery<AIReportData>({
     queryKey: ['aiReport', tenantsParam, rangeParam],
@@ -132,11 +135,18 @@ export default function AIReportPage() {
   const generatedAt = data.generated_at || null;
   const cached = Boolean(data.cached);
 
-  const handleGenerate = async () => {
-    setGenerating(true);
-    const snapshot = await dashboardAPI.generateAIReport(tenantsParam, rangeParam);
-    queryClient.setQueryData(['aiReport', tenantsParam, rangeParam], snapshot);
-    setGenerating(false);
+  const generateMutation = useMutation({
+    mutationKey,
+    mutationFn: () => dashboardAPI.generateAIReport(tenantsParam, rangeParam),
+    onSuccess: (snapshot) => {
+      queryClient.setQueryData(['aiReport', tenantsParam, rangeParam], snapshot);
+    },
+  });
+
+  const handleGenerate = () => {
+    if (!generating) {
+      generateMutation.mutate();
+    }
   };
 
   const handlePrint = () => {
