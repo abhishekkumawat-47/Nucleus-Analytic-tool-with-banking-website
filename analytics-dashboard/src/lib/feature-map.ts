@@ -39,7 +39,14 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     icon: 'wallet',
     color: '#7C3AED',
     appUrl: process.env.NEXT_PUBLIC_NEXABANK_URL || 'http://localhost:3002',
-    funnelSteps: ['login', 'dashboard_view', 'kyc_started', 'kyc_completed', 'loan_applied'],
+    // Keep funnel steps in backend canonical form to prevent alias drift.
+    funnelSteps: [
+      'login.auth.success',
+      'dashboard.page.view',
+      'loan.kyc_started.success',
+      'loan.kyc_completed.success',
+      'loan.applied.success',
+    ],
     routes: [
       // Core Banking
       { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
@@ -77,7 +84,12 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     icon: 'shield',
     color: '#3B82F6',
     appUrl: process.env.NEXT_PUBLIC_SAFEXBANK_URL || 'http://localhost:3003',
-    funnelSteps: ['login', 'dashboard_view', 'transfer_started', 'authorizer_approved', 'transfer_completed'],
+    // Safex uses the same canonical taxonomy consumed by /funnels.
+    funnelSteps: [
+      'login.auth.success',
+      'dashboard.page.view',
+      'transaction.pay_now.success',
+    ],
     routes: [
       { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
       { pattern: '/dashboard',        featureName: 'core.dashboard.view',          category: 'navigation',    funnel: 2 },
