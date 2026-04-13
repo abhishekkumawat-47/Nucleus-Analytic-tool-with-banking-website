@@ -440,6 +440,7 @@ def normalize_event(event_name: str) -> str:
 CANONICAL_EVENT_ALIASES: dict[str, str | None] = {
     "free.dashboard.view": "dashboard.page.view",
     "core.dashboard.view": "dashboard.page.view",
+    "dashboard.view.action": "dashboard.page.view",
     "core.login.view": "login.page.view",
     "auth.login.success": "login.auth.success",
     "core.register.view": "register.page.view",
