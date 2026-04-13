@@ -59,10 +59,9 @@ class FeatureEvent(BaseModel):
         if TAXONOMY_REGEX.match(raw):
             page, feature, status = raw.split('.')
             if page in {'free', 'pro', 'core', 'enterprise', 'lending'}:
-                f2, s2 = split_feature_status(status)
-                candidate = f"{normalize_part(feature)}.{f2}.{normalize_status(s2)}"
-                if TAXONOMY_REGEX.match(candidate):
-                    return candidate
+                # Preserve prefixed 3-part taxonomy events as-is (with normalized status).
+                # Historical analytics aliases rely on keys like `free.dashboard.view`.
+                return f"{normalize_part(page)}.{normalize_part(feature)}.{normalize_status(status)}"
             if page == 'auth' and feature in {'login', 'register'}:
                 return f"{feature}.auth.{normalize_status(status)}"
             return f"{normalize_part(page)}.{normalize_part(feature)}.{normalize_status(status)}"

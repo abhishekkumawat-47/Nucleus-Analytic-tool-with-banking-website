@@ -372,13 +372,30 @@ export const dashboardAPI = {
       const { APP_REGISTRY } = await import('./feature-map');
       const canonicalStepMap: Record<string, string> = {
         login: 'login.auth.success',
+        'login.auth.success': 'login.auth.success',
         dashboard_view: 'dashboard.page.view',
+        'dashboard.page.view': 'dashboard.page.view',
         transfer_started: 'transaction.pay_now.success',
         transfer_completed: 'transaction.pay_now.success',
+        'transaction.pay_now.success': 'transaction.pay_now.success',
         loan_applied: 'loan.applied.success',
+        'loan.applied.success': 'loan.applied.success',
         kyc_started: 'loan.kyc_started.success',
         kyc_completed: 'loan.kyc_completed.success',
+        'loan.kyc_started.success': 'loan.kyc_started.success',
+        'loan.kyc_completed.success': 'loan.kyc_completed.success',
         authorizer_approved: 'transaction.pay_now.success',
+      };
+
+      const normalizeStepToken = (step: string): string =>
+        String(step || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '_');
+
+      const toCanonicalStep = (step: string): string => {
+        const normalized = normalizeStepToken(step);
+        return canonicalStepMap[normalized] || normalized;
       };
 
       const selectedConfigs = tenants
@@ -389,7 +406,10 @@ export const dashboardAPI = {
       const mergedSteps = selectedConfigs.length > 0
         ? Array.from(
             new Set(
-              selectedConfigs.flatMap((cfg) => cfg.funnelSteps || []).map((step) => canonicalStepMap[step] || step)
+              selectedConfigs
+                .flatMap((cfg) => cfg.funnelSteps || [])
+                .map((step) => toCanonicalStep(step))
+                .filter(Boolean)
             )
           )
         : fallbackSteps;
