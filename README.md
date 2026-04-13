@@ -18,7 +18,7 @@
 
 ## Table of Contents
 
-- [0. Critical First Step (Run Simulation First)](#0-critical-first-step-run-simulation-first)
+- [0. Critical First Step (Run Simulation After Setup)](#0-critical-first-step-run-simulation-first)
 - [1. What This Project Is](#1-what-this-project-is)
 - [2. How to Run (Docker-First)](#2-how-to-run-docker-first)
 - [3. Environment Configuration](#3-environment-configuration)
@@ -33,7 +33,7 @@
 
 ---
 
-## 0. Critical First Step (Run Simulation First)
+## 0. Critical First Step (Run Simulation After Setup)
 
 This is the most important startup action for demos and evaluations.
 
