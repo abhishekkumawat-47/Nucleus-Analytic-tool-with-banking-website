@@ -1,0 +1,28 @@
+[33m3adf7e1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: reset: moving to HEAD~1
+[33m90bbc3c[m HEAD@{1}: reset: moving to HEAD~1
+[33m66b5e90[m HEAD@{2}: commit: git ignore added
+[33m90bbc3c[m HEAD@{3}: commit: java springbott banking added
+[33m3adf7e1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{4}: pull: Fast-forward
+[33m8b80cac[m HEAD@{5}: commit: minor edits in naming conventions and docstrings
+[33m4e69a76[m HEAD@{6}: commit: minor edits
+[33maef82d4[m HEAD@{7}: commit: minor edits
+[33m53f0c82[m HEAD@{8}: pull: Fast-forward
+[33mb08fef2[m HEAD@{9}: commit: ai report fix
+[33mc92f917[m HEAD@{10}: pull: Fast-forward
+[33mb43423f[m HEAD@{11}: pull: Fast-forward
+[33md89282a[m HEAD@{12}: commit: ai report working
+[33mf9d8d77[m HEAD@{13}: pull: Fast-forward
+[33m5c8cc1e[m HEAD@{14}: pull: Fast-forward
+[33m739ae6c[m HEAD@{15}: commit: readme updated and superadmin fixed
+[33m057c858[m HEAD@{16}: pull --tags origin main: Merge made by the 'ort' strategy.
+[33m06d4548[m HEAD@{17}: commit: rename
+[33m9a8977d[m HEAD@{18}: commit: Readme Added
+[33m2dba6ee[m HEAD@{19}: commit: folder strucure cleaned
+[33m2d3505d[m HEAD@{20}: commit: twitter clone removed and file structure cleaned
+[33m8624d88[m HEAD@{21}: commit: folder structure cleaned
+[33m91e60b7[m HEAD@{22}: commit: test
+[33m0cdcb3d[m HEAD@{23}: pull: Fast-forward
+[33m5a9f0c4[m HEAD@{24}: commit: minor edit in governance page
+[33mdd8967b[m HEAD@{25}: pull --tags origin main: Merge made by the 'ort' strategy.
+[33m0a00067[m HEAD@{26}: commit: a report improved+ readme
+[33m9e18e04[m HEAD@{27}: clone: from https://github.com/abhishekkumawat-47/Nucleus-Analytic-tool-with-banking-website.git
