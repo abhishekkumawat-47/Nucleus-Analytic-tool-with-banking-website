@@ -74,11 +74,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             customer = customerRepository.save(customer);
         }
 
-        // Generate fingerprint and JWT
-        String ua = request.getHeader("User-Agent");
-        String ip = request.getRemoteAddr();
-        String fingerprint = sha256(ua + "|" + ip);
-
+        String fingerprint = JwtAuthFilter.generateFingerprint(request);
         String token = jwtUtil.generateToken(customer.getId().toString(), fingerprint);
 
         Cookie cookie = new Cookie("token", token);
@@ -90,15 +86,4 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         response.sendRedirect("/dashboard");
     }
 
-    private String sha256(String input) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder();
-            for (byte b : hash) hex.append(String.format("%02x", b));
-            return hex.toString();
-        } catch (Exception e) {
-            return input;
-        }
-    }
 }

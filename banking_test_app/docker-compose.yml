@@ -1,6 +1,21 @@
-version: "3.8"
-
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: nexabank-postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 880079870ruphimom314A*
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   banking-app:
     build:
       context: .
@@ -13,4 +28,13 @@ services:
     environment:
       - SERVER_PORT=3000
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/postgres
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=880079870ruphimom314A*
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  pgdata:
