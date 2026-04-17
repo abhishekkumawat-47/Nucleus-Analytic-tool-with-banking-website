@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Home')}"></head>
+<body>
+  <nav class="landing-nav">
+    <div class="brand">
+      <div class="sidebar-logo" style="width:28px;height:28px;font-size:13px;">N</div>
+      <span class="brand-name">NexaBank</span>
+    </div>
+    <div class="nav-actions">
+      <a href="/login" class="btn btn-ghost">Sign In</a>
+      <a href="/register" class="btn btn-primary">Open Account</a>
+    </div>
+  </nav>
+  <section class="hero-section">
+    <div>
+      <h1>Modern banking, <span class="highlight">simplified.</span></h1>
+      <p>Manage your finances, send payments, and grow your wealth — all from a single platform built for clarity.</p>
+      <div class="hero-actions">
+        <a href="/register" class="btn btn-primary btn-lg">Get Started</a>
+        <a href="/login" class="btn btn-secondary btn-lg">Sign In</a>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

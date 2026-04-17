@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Loans')}"></head>
+<body>
+  <div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+    <div class="main-content">
+      <header th:replace="~{fragments/layout :: topbar('Loans')}"></header>
+      <div class="page-content">
+        <div class="page-header"><h2 class="page-title">Loans</h2><p class="page-subtitle">View applications and apply for new loans.</p></div>
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab(this,'apps')">Applications</button>
+          <button class="tab" onclick="switchTab(this,'apply')">Apply</button>
+        </div>
+        <div id="apps"><div class="card"><div id="appsList"><div class="spinner"></div></div></div></div>
+        <div id="apply" style="display:none;">
+          <div class="card">
+            <div class="card-header"><span class="card-title">New Loan Application</span></div>
+            <form onsubmit="handleApply(event)">
+              <div class="grid-2">
+                <div class="form-group"><label class="form-label">Loan Type</label><select id="lType" class="form-select"><option>HOME</option><option>AUTO</option><option>PERSONAL</option><option>STUDENT</option></select></div>
+                <div class="form-group"><label class="form-label">Amount (₹)</label><input type="number" id="lAmt" class="form-input" min="10000" placeholder="100000" required></div>
+              </div>
+              <div class="grid-2">
+                <div class="form-group"><label class="form-label">Term (months)</label><input type="number" id="lTerm" class="form-input" value="12" min="6" max="360" required></div>
+                <div class="form-group"><label class="form-label">Interest Rate (%)</label><input type="number" id="lRate" class="form-input" value="8.5" step="0.1" required></div>
+              </div>
+              <button type="submit" class="btn btn-primary btn-lg">Submit Application</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/js/app.js"></script>
+  <script>
+    function switchTab(el, tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('apps').style.display = tab === 'apps' ? 'block' : 'none';
+      document.getElementById('apply').style.display = tab === 'apply' ? 'block' : 'none';
+    }
+    async function initPage() {
+      await initializeApp();
+      if (!currentUser) { window.location.href = '/login'; return; }
+      try {
+        const apps = await api.get('/applications/' + currentUser.id);
+        const el = document.getElementById('appsList');
+        if (apps.length === 0) { el.innerHTML = '<div class="empty-state"><div class="title">No applications</div><div class="desc">Apply for a loan to see your applications here.</div></div>'; return; }
+        el.innerHTML = `<table><thead><tr><th>Type</th><th>Amount</th><th>Term</th><th>Rate</th><th>Status</th><th>Date</th></tr></thead><tbody>${apps.map(a => `<tr><td>${a.loanType}</td><td style="font-weight:600;">${formatCurrency(a.principalAmount)}</td><td>${a.term} mo</td><td>${a.interestRate}%</td><td><span class="badge ${a.status==='APPROVED'?'badge-success':a.status==='REJECTED'?'badge-danger':'badge-warning'}">${a.status}</span></td><td>${formatDate(a.createdOn)}</td></tr>`).join('')}</tbody></table>`;
+      } catch(e) { document.getElementById('appsList').innerHTML = '<div class="empty-state"><div class="title">Error loading applications</div></div>'; }
+    }
+    async function handleApply(e) {
+      e.preventDefault();
+      try {
+        await api.post('/apply', { customerId: currentUser.id, loanType: document.getElementById('lType').value, principalAmount: Number(document.getElementById('lAmt').value), term: Number(document.getElementById('lTerm').value), interestRate: Number(document.getElementById('lRate').value) });
+        showToast('Application submitted.', 'success');
+        switchTab(document.querySelector('.tab'), 'apps'); initPage();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+    async function logout() { await api.post('/auth/logout'); window.location.href = '/'; }
+  </script>
+</body>
+</html>

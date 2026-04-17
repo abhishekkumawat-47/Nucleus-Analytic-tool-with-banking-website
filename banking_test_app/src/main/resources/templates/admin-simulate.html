@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Simulation')}"></head>
+<body>
+  <div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+    <div class="main-content">
+      <header th:replace="~{fragments/layout :: topbar('Simulation Console')}"></header>
+      <div class="page-content">
+        <div class="page-header"><h2 class="page-title">Simulation</h2><p class="page-subtitle">Generate synthetic banking data for testing and analytics.</p></div>
+        <div class="grid-4" id="adminStats" style="margin-bottom:24px;"><div class="spinner" style="grid-column:1/-1;"></div></div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Configure Simulation</span></div>
+          <form onsubmit="handleSimulate(event)">
+            <div class="grid-3">
+              <div class="form-group"><label class="form-label">Tenant</label><select id="simTenant" class="form-select"><option value="nexabank">NexaBank</option><option value="safexbank">SafeX Bank</option></select></div>
+              <div class="form-group"><label class="form-label">Users</label><input type="number" id="simCount" class="form-input" value="10" min="1" max="100"></div>
+              <div class="form-group"><label class="form-label">Duration (days)</label><input type="number" id="simDays" class="form-input" value="30" min="1" max="60"></div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg" id="simBtn">Run Simulation</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/js/app.js"></script>
+  <script>
+    async function initPage() {
+      await initializeApp();
+      if (!currentUser || currentUser.role !== 'ADMIN') { window.location.href = '/dashboard'; return; }
+      try {
+        const stats = await api.get('/events/admin/stats');
+        document.getElementById('adminStats').innerHTML = `
+          <div class="stat-card"><div class="stat-label">Users</div><div class="stat-value">${stats.totalUsers}</div></div>
+          <div class="stat-card"><div class="stat-label">Events</div><div class="stat-value">${stats.totalEvents}</div></div>
+          <div class="stat-card"><div class="stat-label">Transactions</div><div class="stat-value">${stats.totalTransactions}</div></div>
+          <div class="stat-card"><div class="stat-label">Loan Apps</div><div class="stat-value">${stats.totalLoanApps}</div></div>`;
+      } catch(e) { document.getElementById('adminStats').innerHTML = '<p style="grid-column:1/-1;color:var(--text-muted);font-size:13px;">Could not load stats.</p>'; }
+    }
+    async function handleSimulate(e) {
+      e.preventDefault();
+      const btn = document.getElementById('simBtn');
+      btn.disabled = true; btn.textContent = 'Running...';
+      try {
+        await api.post('/events/simulate', { tenantId: document.getElementById('simTenant').value, count: Number(document.getElementById('simCount').value), days: Number(document.getElementById('simDays').value) });
+        showToast('Simulation complete.', 'success');
+      } catch(e) { showToast(e.message, 'error'); }
+      btn.disabled = false; btn.textContent = 'Run Simulation';
+    }
+    async function logout() { await api.post('/auth/logout'); window.location.href = '/'; }
+  </script>
+</body>
+</html>

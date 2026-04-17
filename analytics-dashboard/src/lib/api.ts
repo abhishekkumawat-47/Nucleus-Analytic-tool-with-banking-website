@@ -77,7 +77,7 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const url = error.config?.url || 'unknown';
     const detail = error.response?.data?.detail || error.message;
-    
+
     // Only show toast for non-403 errors (403 = RBAC restriction, expected)
     if (status === 403) {
       console.warn(`[RBAC] Access denied for ${url}`);
@@ -86,7 +86,7 @@ apiClient.interceptors.response.use(
     } else if (status && status >= 400) {
       toast.error(`Request failed (${status})`, { description: detail, duration: 3000 });
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -405,20 +405,20 @@ export const dashboardAPI = {
       const fallbackSteps = ['login.auth.success', 'dashboard.page.view', 'transaction.pay_now.success', 'loan.applied.success'];
       const mergedSteps = selectedConfigs.length > 0
         ? Array.from(
-            new Set(
-              selectedConfigs
-                .flatMap((cfg) => cfg.funnelSteps || [])
-                .map((step) => toCanonicalStep(step))
-                .filter(Boolean)
-            )
+          new Set(
+            selectedConfigs
+              .flatMap((cfg) => cfg.funnelSteps || [])
+              .map((step) => toCanonicalStep(step))
+              .filter(Boolean)
           )
+        )
         : fallbackSteps;
 
       const steps = mergedSteps.length >= 2 ? mergedSteps.join(',') : fallbackSteps.join(',');
-      
+
       const response = await apiClient.get<{ funnel: BackendFunnelStep[] }>(`/funnels?tenants=${encodeURIComponent(tenants.join(','))}&steps=${encodeURIComponent(steps)}&window_minutes=60&range=${range}`);
       const funnel = response.data.funnel || [];
-      
+
       return funnel.map((step: BackendFunnelStep) => ({
         step: step.step,
         label: step.event_name,
@@ -490,7 +490,7 @@ export const dashboardAPI = {
   /** Fetch AI-generated insights using backend /insights endpoint */
   async getAIInsights(tenants: string[], range: string): Promise<AIInsight[]> {
     const cacheKey = `${tenants.join(',')}-${range}`;
-    
+
     // Check if we recently failed for this key (avoid retry spam)
     const cached = aiInsightsErrorCache[cacheKey];
     if (cached && Date.now() - cached.timestamp < INSIGHTS_CACHE_TIMEOUT) {
@@ -500,19 +500,19 @@ export const dashboardAPI = {
 
     // Exponential backoff: 1s, 3s
     const delays = [1000, 3000];
-    
+
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await apiClient.get<{ insights: BackendInsight[] }>(
           `/insights?tenants=${tenants.join(',')}&range=${range}`,
           { timeout: 15000 }
         );
-        
+
         const insights = response.data.insights ?? [];
-        
+
         // Cache cleared on success
         delete aiInsightsErrorCache[cacheKey];
-        
+
         return insights.map((insight: BackendInsight, ix: number) => ({
           id: `ai-${ix}`,
           type: insight.severity === 'high' ? 'warning' as const : insight.severity === 'medium' ? 'info' as const : 'success' as const,
@@ -528,7 +528,7 @@ export const dashboardAPI = {
         const message = (err as { message?: string })?.message || String(err);
         const isTimeout = message.includes('timeout') || (err as { code?: string })?.code === 'ECONNABORTED';
         const isNetworkError = message.includes('ECONNREFUSED') || message.includes('ERR_');
-        
+
         // Log with context for debugging
         console.warn(
           `[AI Insights] Attempt ${attempt + 1}/2 failed | ` +
@@ -538,23 +538,23 @@ export const dashboardAPI = {
           `Tenants: ${tenants.join(',')} | ` +
           `Range: ${range}`
         );
-        
+
         // Don't retry on auth (403) or permission (404) issues
         if (status === 403 || status === 404) {
           aiInsightsErrorCache[cacheKey] = { timestamp: Date.now(), error: `${status}: ${message}` };
           break;
         }
-        
+
         // Wait before retry with exponential backoff
         if (attempt < delays.length) {
           await new Promise(resolve => setTimeout(resolve, delays[attempt]));
         }
       }
     }
-    
+
     // Cache the failure to prevent hammering
     aiInsightsErrorCache[cacheKey] = { timestamp: Date.now(), error: 'Max retries exceeded' };
-    
+
     // Return informative fallback insights
     return dashboardAPI.getAIInsightsFallback('AI insights service is temporarily unavailable');
   },
@@ -585,11 +585,11 @@ export const dashboardAPI = {
       const status = (err as { response?: { status?: number } })?.response?.status;
       const message = (err as { message?: string })?.message || String(err);
       console.warn(`[AI Report] Failed to fetch | Status: ${status ?? 'N/A'} | Tenants: ${tenants.join(',')}`);
-      
+
       if (status === 403 || status === 404) {
         return '# Access Denied\n\nYou do not have permission to view AI reports for the selected tenants.';
       }
-      
+
       return '# AI Report Temporarily Unavailable\n\nThe report generation system is currently processing or unavailable. Please try again in a few moments.';
     }
   },
@@ -653,7 +653,7 @@ export const dashboardAPI = {
           // Fall through to the empty fallback below.
         }
       }
-      
+
       return {
         tenant_id: tenants.join(','),
         report: '',
@@ -804,7 +804,7 @@ export const dashboardAPI = {
     try {
       const response = await apiClient.get<AdminAppSummaryResponse>(`/admin/app/${tenants.join(',')}/summary`);
       const payload = response.data;
-      
+
       const insights: AIInsight[] = (payload.insights || []).map((insight: BackendInsight, ix: number) => ({
         id: `ai-${ix}`,
         type: insight.severity === 'high' ? 'warning' as const : insight.severity === 'medium' ? 'info' as const : 'success' as const,

@@ -1,0 +1,77 @@
+server:
+  port: ${SERVER_PORT:3000}
+
+spring:
+  application:
+    name: banking-test-app
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/nexabank}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    open-in-view: false
+
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+
+app:
+  jwt:
+    secret: ${JWT_SEC:default-dev-secret-change-me}
+    expiration-ms: 43200000  # 12 hours
+
+  tenant:
+    a:
+      id: ${TENANT_A_ID:bank_a}
+      name: ${TENANT_A_NAME:NexaBank}
+      ifsc: ${TENANT_A_IFSC:NEXA}
+      branch: ${TENANT_A_BRANCH:0001}
+    b:
+      id: ${TENANT_B_ID:bank_b}
+      name: ${TENANT_B_NAME:SafeX Bank}
+      ifsc: ${TENANT_B_IFSC:SAFX}
+      branch: ${TENANT_B_BRANCH:0001}
+
+  system:
+    email: ${SYSTEM_EMAIL:system@nexabank.internal}
+    name: ${SYSTEM_NAME:NexaBank System}
+    tenant: ${SYSTEM_TENANT:bank_a}
+
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+
+logging:
+  level:
+    com.nexabank: DEBUG
+    org.hibernate.SQL: WARN

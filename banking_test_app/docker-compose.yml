@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  banking-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexabank-springboot
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - SERVER_PORT=3000
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    restart: unless-stopped
