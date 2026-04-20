@@ -31,6 +31,7 @@ import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { toggleSidebar } from '@/lib/dashboardSlice';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { buildAppScopedPath, resolveAppIdFromPathname, resolvePrimaryAppIdFromAdminApps } from '@/lib/feature-map';
 
 /** Maps icon string identifiers to Lucide icon components */
 const iconMap: Record<string, React.ElementType> = {
@@ -58,6 +59,7 @@ function Sidebar(_props: SidebarProps) {
   const { data: session } = useSession();
   const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'Admin';
   const role = session?.user?.role || 'user';
+  const activeAppId = resolveAppIdFromPathname(pathname) || resolvePrimaryAppIdFromAdminApps(session?.user?.adminApps || []) || 'nexabank';
 
   // Build nav items based on role
   let navItems: { id: string; label: string; icon: string; href: string }[] = [];
@@ -65,17 +67,17 @@ function Sidebar(_props: SidebarProps) {
   if (role === 'app_admin') {
     // App admin sees full detailed analytics for their app
     navItems = [
-      { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', href: '/dashboard' },
-      { id: 'features', label: 'Feature Analytics', icon: 'bar-chart-3', href: '/features' },
-      { id: 'funnel', label: 'Funnel Analysis', icon: 'filter', href: '/funnel' },
-      { id: 'user-journey', label: 'User Journey', icon: 'route', href: '/user-journey' },
-      { id: 'license-usage', label: 'License vs Usage', icon: 'key', href: '/license-usage' },
-      { id: 'predictive', label: 'Predictive Insights', icon: 'trending-up', href: '/predictive' },
-      { id: 'tenants', label: 'Tenants', icon: 'users', href: '/tenants' },
-      { id: 'config', label: 'Configuration', icon: 'settings', href: '/settings' },
-      { id: 'governance', label: 'Governance', icon: 'shield', href: '/governance' },
-      { id: 'transparency', label: 'Trust & Transparency', icon: 'eye', href: '/transparency' },
-      { id: 'ai-report', label: 'AI Report', icon: 'file-text', href: '/ai-report' }
+      { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', href: buildAppScopedPath(activeAppId, '/dashboard') },
+      { id: 'features', label: 'Feature Analytics', icon: 'bar-chart-3', href: buildAppScopedPath(activeAppId, '/features') },
+      { id: 'funnel', label: 'Funnel Analysis', icon: 'filter', href: buildAppScopedPath(activeAppId, '/funnel') },
+      { id: 'user-journey', label: 'User Journey', icon: 'route', href: buildAppScopedPath(activeAppId, '/user-journey') },
+      { id: 'license-usage', label: 'License vs Usage', icon: 'key', href: buildAppScopedPath(activeAppId, '/license-usage') },
+      { id: 'predictive', label: 'Predictive Insights', icon: 'trending-up', href: buildAppScopedPath(activeAppId, '/predictive') },
+      { id: 'tenants', label: 'Tenants', icon: 'users', href: buildAppScopedPath(activeAppId, '/tenants') },
+      { id: 'config', label: 'Configuration', icon: 'settings', href: buildAppScopedPath(activeAppId, '/settings') },
+      { id: 'governance', label: 'Governance', icon: 'shield', href: buildAppScopedPath(activeAppId, '/governance') },
+      { id: 'transparency', label: 'Trust & Transparency', icon: 'eye', href: buildAppScopedPath(activeAppId, '/transparency') },
+      { id: 'ai-report', label: 'AI Report', icon: 'file-text', href: buildAppScopedPath(activeAppId, '/ai-report') }
     ];
   } else if (role === 'super_admin') {
     // Super admin sees only the Global Admin view
@@ -92,7 +94,7 @@ function Sidebar(_props: SidebarProps) {
     >
       {/* Logo / Brand */}
       <div className={`flex items-center gap-2 border-b border-gray-100 h-16 ${sidebarCollapsed ? 'justify-center' : 'px-6'}`}>
-        <Link href="/" className="relative w-10 h-10 flex-shrink-0 transition-transform duration-300">
+        <Link href="/" className="relative w-10 h-10 shrink-0 transition-transform duration-300">
           <Image
             src="/logo1.png"
             alt="FinInsightsLogo"
@@ -145,7 +147,7 @@ function Sidebar(_props: SidebarProps) {
               title={sidebarCollapsed ? item.label : undefined}
             >
               <IconComponent
-                className={`w-[18px] h-[18px] flex-shrink-0 transition-colors
+                className={`w-[18px] h-[18px] shrink-0 transition-colors
         ${sidebarCollapsed
                     ? isActive
                       ? 'text-[#1a73e8]'

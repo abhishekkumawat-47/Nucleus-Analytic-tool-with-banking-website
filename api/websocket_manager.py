@@ -28,15 +28,19 @@ class ConnectionManager:
         logger.info(f"WebSocket disconnected for tenant: {tenant_id}")
 
     async def broadcast_to_tenant(self, tenant_id: str, message: dict):
-        if tenant_id in self.active_connections:
-            dead_sockets = set()
-            for connection in self.active_connections[tenant_id]:
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    dead_sockets.add(connection)
-            for dead in dead_sockets:
-                self.disconnect(dead, tenant_id)
+        connections = self.active_connections.get(tenant_id)
+        if not connections:
+            return
+
+        dead_sockets = set()
+        for connection in connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                dead_sockets.add(connection)
+
+        for dead in dead_sockets:
+            self.disconnect(dead, tenant_id)
 
 manager = ConnectionManager()
 
@@ -68,17 +72,18 @@ async def consume_kafka_events():
     try:
         async for msg in consumer:
             try:
+                if not manager.active_connections:
+                    continue
+
                 event = json.loads(msg.value.decode('utf-8'))
                 tenant_id = event.get("tenant_id")
-                
-                # Broadcast to any connection that includes this tenant in its comma-separated list
+
+                # Connections are keyed by tenant_id, so fan-out is O(1).
                 if tenant_id:
-                    for conn_id in manager.active_connections.keys():
-                        if tenant_id in [t.strip() for t in conn_id.split(",")]:
-                            await manager.broadcast_to_tenant(conn_id, {
-                                "type": "REALTIME_EVENT", 
-                                "payload": event
-                            })
+                    await manager.broadcast_to_tenant(tenant_id, {
+                        "type": "REALTIME_EVENT",
+                        "payload": event
+                    })
             except json.JSONDecodeError:
                 continue
     finally:

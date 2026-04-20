@@ -1,6 +1,8 @@
 /**
  * Redux store with redux-persist for localStorage persistence.
- * Persists the dashboard slice (timeRange, selectedTenants, deploymentMode).
+ * Persists stable dashboard preferences (timeRange, deploymentMode).
+ * Tenant selection is intentionally not persisted to avoid cross-app bleed
+ * when multiple bank dashboards are opened side-by-side.
  * Transient state (realTimeUsers, kpiMetrics) is handled via rehydration transforms.
  */
 
@@ -43,12 +45,12 @@ const storage =
 /* ---------- persist config ---------- */
 
 // Apply persistence directly to the dashboard reducer so whitelist
-// targets the slice's own keys (timeRange, selectedTenants, deploymentMode).
+// targets the slice's own keys (timeRange, deploymentMode).
 // Transient keys like realTimeUsers, kpiMetrics are excluded.
 const dashboardPersistConfig = {
   key: 'nucleus-dashboard',
   storage,
-  whitelist: ['timeRange', 'selectedTenants', 'deploymentMode'],
+  whitelist: ['timeRange', 'deploymentMode'],
 };
 
 const persistedDashboardReducer = persistReducer(dashboardPersistConfig, dashboardReducer);

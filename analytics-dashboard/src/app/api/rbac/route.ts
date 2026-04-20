@@ -5,9 +5,10 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { authOptions } from '../auth/[...nextauth]/route';
+import { SUPPORTED_RBAC_APPS } from '@/lib/feature-map';
 
 const execFileAsync = promisify(execFile);
-const SUPPORTED_APPS = new Set(['nexabank', 'safexbank']);
+const SUPPORTED_APPS = new Set(SUPPORTED_RBAC_APPS);
 
 function resolveByWalkingUp(relativePath: string, maxLevels = 8) {
   const attempted: string[] = [];
@@ -169,7 +170,7 @@ export async function POST(req: Request) {
     }
 
     if (!SUPPORTED_APPS.has(normalizedAppId)) {
-      return NextResponse.json({ error: 'Only nexabank and safexbank are supported' }, { status: 400 });
+      return NextResponse.json({ error: `Supported apps: ${Array.from(SUPPORTED_APPS).join(', ')}` }, { status: 400 });
     }
 
     const configPath = getRbacFilePath();

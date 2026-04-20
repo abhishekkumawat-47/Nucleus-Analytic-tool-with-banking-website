@@ -3,6 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAppSelector } from "@/lib/store";
 import { resolveAnalyticsWsBaseUrl } from "@/lib/ws-url";
+import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import {
+  normalizeTenantId,
+  resolveAppIdFromPathname,
+  resolvePrimaryAppIdFromAdminApps,
+  resolvePrimaryTenantForApp,
+} from '@/lib/feature-map';
 
 export interface RealtimeEvent {
   type: string;
@@ -33,14 +41,17 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pathname = usePathname();
+  const { data: session } = useSession();
   
   const selectedTenants = useAppSelector((state) => state.dashboard.selectedTenants);
-  const tenantAliasMap: Record<string, string> = {
-    bank_a: 'nexabank',
-    bank_b: 'safexbank',
-  };
-  const selectedTenantRaw = selectedTenants.length > 0 ? selectedTenants[0] : 'nexabank';
-  const selectedTenant = tenantAliasMap[String(selectedTenantRaw).toLowerCase()] || String(selectedTenantRaw).toLowerCase();
+  const routeAppId = resolveAppIdFromPathname(pathname);
+  const sessionAppId = resolvePrimaryAppIdFromAdminApps(session?.user?.adminApps || []);
+  const activeAppId = routeAppId || sessionAppId || 'nexabank';
+  const selectedTenantRaw = selectedTenants.length > 0
+    ? selectedTenants[0]
+    : resolvePrimaryTenantForApp(activeAppId);
+  const selectedTenant = normalizeTenantId(selectedTenantRaw);
 
   const connect = useCallback(() => {
     if (!selectedTenant) return;

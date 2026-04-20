@@ -1,10 +1,11 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
 import { ShieldCheck, Activity, Layers } from 'lucide-react';
 import Image from 'next/image';
+import { buildAppScopedPath, resolvePrimaryAppIdFromAdminApps } from '@/lib/feature-map';
 
 export default function LoginPage() {
   const { data: session, status } = useSession();
@@ -15,14 +16,21 @@ export default function LoginPage() {
     if (status === 'authenticated') {
       const role = session.user.role;
       if (role === 'super_admin') router.replace('/admin');
-      else if (role === 'app_admin') router.replace('/dashboard');
+      else if (role === 'app_admin') {
+        const appId = resolvePrimaryAppIdFromAdminApps(session.user.adminApps || []) || 'nexabank';
+        router.replace(buildAppScopedPath(appId, '/dashboard'));
+      }
       else router.replace('/unauthorized');
     }
   }, [session, status, router]);
 
   const handleLogin = async () => {
-    setLoading(true);
-    await signIn('google', { callbackUrl: '/' });
+    try {
+      setLoading(true);
+      await signIn('google', { callbackUrl: '/login' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (status === 'loading' || status === 'authenticated') {

@@ -5,6 +5,9 @@ const analyticsApiHost = process.env.ANALYTICS_API_HOST || '127.0.0.1';
 const ingestionApiHost = process.env.INGESTION_API_HOST || '127.0.0.1';
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: process.cwd(),
+  },
   rewrites: async () => {
     return {
       beforeFiles: [],
