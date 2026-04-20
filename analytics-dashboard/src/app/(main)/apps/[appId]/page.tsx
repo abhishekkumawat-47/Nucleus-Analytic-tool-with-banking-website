@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { usePathname } from 'next/navigation';
 import { dashboardAPI } from '@/lib/api';
 import { DashboardSkeleton } from '@/components/Skeletons';
 import AuthGuard from '@/components/AuthGuard';
@@ -10,7 +9,7 @@ import { Activity, Users, MousePointerClick, Shield, ArrowLeft } from 'lucide-re
 import Link from 'next/link';
 
 export default function AppOverviewPage({ params }: { params: { appId: string } }) {
-  const appId = params.appId;
+  const appId = params.appId.toLowerCase();
 
   const { data: kpi = [], isLoading: loading } = useQuery({
     queryKey: ['appKpiMetrics', appId],

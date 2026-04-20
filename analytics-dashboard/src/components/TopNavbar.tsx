@@ -22,6 +22,17 @@ import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { dashboardAPI } from '@/lib/api';
 import { useSession, signOut } from 'next-auth/react';
 import {
+  ALL_TENANT_IDS,
+  APP_TO_TENANTS,
+  TENANT_LABELS,
+  TENANT_TO_APP,
+  resolveAppIdFromPathname,
+  resolvePrimaryAppIdFromAdminApps,
+  resolvePrimaryTenantForApp,
+  normalizeTenantId,
+} from '@/lib/feature-map';
+import { usePathname } from 'next/navigation';
+import {
   setTimeRange,
   setSelectedTenants,
   toggleSidebar,
@@ -58,6 +69,7 @@ function TopNavbar() {
   } = useAppSelector((state) => state.dashboard);
   const rangeParam = useMemo(() => timeRangeToParam(timeRange), [timeRange]);
   const { data: session } = useSession();
+  const pathname = usePathname();
 
   const { data: availableTenants = [], isFetching } = useQuery({
     queryKey: ['availableTenants', rangeParam],
@@ -65,24 +77,45 @@ function TopNavbar() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const TENANT_LABELS: Record<string, string> = {
-    nexabank: 'NexaBank (bank_a)',
-    safexbank: 'SafeXBank (bank_b)',
-  };
+  const activeAppId = useMemo(() => {
+    const routeAppId = resolveAppIdFromPathname(pathname);
+    if (routeAppId) return routeAppId;
+
+    const adminApp = ((session?.user?.adminApps || []) as string[])
+      .map((appId) => TENANT_TO_APP[String(appId).toLowerCase()] || String(appId).toLowerCase())
+      .find((appId) => Boolean(APP_TO_TENANTS[appId]));
+    if (adminApp) return adminApp;
+
+    const selectedApp = (selectedTenants || [])
+      .map((tenantId) => TENANT_TO_APP[normalizeTenantId(String(tenantId))])
+      .find(Boolean);
+    if (selectedApp) return selectedApp;
+
+    const sessionApp = resolvePrimaryAppIdFromAdminApps(session?.user?.adminApps || []);
+    if (sessionApp) return sessionApp;
+
+    return 'nexabank';
+  }, [selectedTenants, session, pathname]);
+
+  const scopedTenantIds = useMemo(() => {
+    return APP_TO_TENANTS[activeAppId] || ALL_TENANT_IDS;
+  }, [activeAppId]);
 
   /**
    * Build the tenant options list:
    *  - "All Tenants" → all tenant IDs
    */
   const tenantOptions = useMemo((): AvailableTenant[] => {
-    const defaults: AvailableTenant[] = [
-      { id: 'nexabank', name: 'NexaBank', eventCount: 0, uniqueUsers: 0 },
-      { id: 'safexbank', name: 'SafeXBank', eventCount: 0, uniqueUsers: 0 },
-    ];
+    const defaults: AvailableTenant[] = scopedTenantIds.map((tenantId) => ({
+      id: tenantId,
+      name: TENANT_LABELS[tenantId] || tenantId,
+      eventCount: 0,
+      uniqueUsers: 0,
+    }));
 
     const indexed = new Map<string, AvailableTenant>();
     [...defaults, ...availableTenants].forEach((tenant) => {
-      if (tenant.id === 'nexabank' || tenant.id === 'safexbank') {
+      if (scopedTenantIds.includes(tenant.id)) {
         indexed.set(tenant.id, {
           ...tenant,
           name: TENANT_LABELS[tenant.id] || tenant.name,
@@ -90,10 +123,10 @@ function TopNavbar() {
       }
     });
 
-    return ['nexabank', 'safexbank']
+    return scopedTenantIds
       .map((id) => indexed.get(id))
       .filter(Boolean) as AvailableTenant[];
-  }, [availableTenants]);
+  }, [availableTenants, scopedTenantIds]);
 
   // Log for debugging
   useEffect(() => {
@@ -147,7 +180,9 @@ function TopNavbar() {
     if (!showTransparency && !transparencyData) {
       setTransparencyLoading(true);
       const activeTenant =
-        selectedTenants.length > 0 ? selectedTenants.join(',') : 'nexabank';
+        selectedTenants.length > 0
+          ? selectedTenants.map((tenantId) => normalizeTenantId(tenantId)).join(',')
+          : resolvePrimaryTenantForApp(activeAppId);
       const data = await dashboardAPI.getTransparencyInfo(activeTenant);
       setTransparencyData(data as TransparencyData | null);
       setTransparencyLoading(false);
@@ -159,7 +194,7 @@ function TopNavbar() {
   /** Compute display label for the currently-selected tenant */
   const selectedLabel = useMemo(() => {
     if (!selectedTenants || selectedTenants.length === 0) return 'Select Tenant';
-    if (isAllTenantsSelected) return 'Both Banks';
+    if (isAllTenantsSelected) return 'All Tenants';
     if (selectedTenants.length > 1) return `${selectedTenants.length} Tenants`;
     const singleTenantId = selectedTenants[0];
     const found = availableTenants.find((t) => t.id === singleTenantId);
@@ -224,7 +259,7 @@ function TopNavbar() {
                 >
                   <span className="flex items-center gap-2">
                     <span className={`inline-block w-2 h-2 rounded-full ${isAllTenantsSelected ? 'bg-blue-500' : 'bg-gray-300'}`} />
-                    Both Banks
+                    All Tenants
                   </span>
                 </button>
 

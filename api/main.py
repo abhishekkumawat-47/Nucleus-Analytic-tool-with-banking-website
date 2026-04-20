@@ -32,6 +32,18 @@ TENANT_ALIAS_MAP = {
     "bank_b": "safexbank",
 }
 
+APP_TENANT_SCOPES = {
+    "nexabank": {"nexabank", "safexbank"},
+    "javabank": {"jbank", "obank"},
+}
+
+TENANT_TO_APP = {
+    "nexabank": "nexabank",
+    "safexbank": "nexabank",
+    "jbank": "javabank",
+    "obank": "javabank",
+}
+
 
 def normalize_tenant_csv(raw_value: str) -> str:
     if not raw_value:
@@ -64,6 +76,62 @@ def rewrite_tenant_query_aliases(request: Request) -> None:
 
     if changed:
         request.scope["query_string"] = urlencode(rewritten).encode("utf-8")
+
+
+def parse_admin_apps(raw_admin_apps: str) -> set[str]:
+    if not raw_admin_apps:
+        return set()
+    return {a.strip().lower() for a in raw_admin_apps.split(",") if a.strip()}
+
+
+def expand_admin_scoped_tenants(admin_apps: set[str]) -> set[str]:
+    if not admin_apps:
+        return set()
+
+    scoped_tenants: set[str] = set()
+    for app in admin_apps:
+        if app in APP_TENANT_SCOPES:
+            scoped_tenants.update(APP_TENANT_SCOPES[app])
+            continue
+        mapped_app = TENANT_TO_APP.get(app)
+        if mapped_app and mapped_app in APP_TENANT_SCOPES:
+            scoped_tenants.update(APP_TENANT_SCOPES[mapped_app])
+    return scoped_tenants
+
+
+def normalize_app_id(raw_app: str) -> str:
+    if not raw_app:
+        return ""
+    normalized = raw_app.strip().lower()
+    return TENANT_TO_APP.get(normalized, normalized)
+
+
+def admin_has_app_scope(admin_apps: set[str], app_id: str) -> bool:
+    if not app_id:
+        return False
+    normalized_app = normalize_app_id(app_id)
+    for app in admin_apps:
+        if normalize_app_id(app) == normalized_app:
+            return True
+    return False
+
+
+def resolve_effective_allowed_tenants(admin_apps: set[str], active_app: str | None) -> set[str]:
+    allowed_tenants = expand_admin_scoped_tenants(admin_apps)
+    if not active_app:
+        return allowed_tenants
+
+    normalized_active_app = normalize_app_id(active_app)
+    if normalized_active_app in APP_TENANT_SCOPES:
+        return set(APP_TENANT_SCOPES[normalized_active_app])
+    return set()
+
+
+def tenants_resolve_to_single_app(requested_tenants: set[str]) -> bool:
+    if not requested_tenants:
+        return True
+    resolved_apps = {TENANT_TO_APP.get(tenant, tenant) for tenant in requested_tenants}
+    return len(resolved_apps) <= 1
 
 def build_heatmap_group_labels(days: int, groups: List[str], is_compare: bool) -> List[str]:
     if is_compare:
@@ -181,15 +249,48 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if role == "app_admin":
             tenant_id = request.query_params.get("tenant_id") or request.query_params.get("tenants")
             email = request.headers.get("X-User-Email")
+            admin_apps = parse_admin_apps(request.headers.get("X-Admin-Apps", ""))
+            active_app = normalize_app_id(request.headers.get("X-Active-App", ""))
+            allowed_tenants = resolve_effective_allowed_tenants(admin_apps, active_app)
+
+            if not email or not allowed_tenants:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Forbidden: app_admin is not assigned to any app tenants."}
+                )
+
+            if active_app and not admin_has_app_scope(admin_apps, active_app):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Forbidden: requested app scope is not assigned to this admin."}
+                )
             
             # Some endpoints don't require tenant_id (they are global or use request body)
             tenant_optional_paths = ["/tenants", "/deployment", "/license/sync", "/config"]
             is_tenant_optional = any(path.startswith(p) for p in tenant_optional_paths)
             
-            if is_tenant_optional and email:
+            if is_tenant_optional:
                 pass  # Allow without tenant_id
-            elif tenant_id and email:
-                pass  # Normal tenant-scoped access
+            elif tenant_id:
+                requested_tenants = {t.strip().lower() for t in str(tenant_id).split(",") if t.strip()}
+                if not requested_tenants:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Forbidden: tenant scope is required for this endpoint."}
+                    )
+
+                if not tenants_resolve_to_single_app(requested_tenants):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Forbidden: cross-app tenant comparison is not allowed."}
+                    )
+
+                if not requested_tenants.issubset(allowed_tenants):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Forbidden: requested tenants are outside your bank app scope."}
+                    )
+                pass
             else:
                 return JSONResponse(
                     status_code=403, 
@@ -210,13 +311,21 @@ async def startup_event():
 
 @app.websocket("/ws/dashboard/{tenant_id}")
 async def websocket_dashboard(websocket: WebSocket, tenant_id: str):
-    await manager.connect(websocket, tenant_id)
+    normalized_tenant = tenant_id.strip().lower()
+    if normalized_tenant in TENANT_ALIAS_MAP:
+        normalized_tenant = TENANT_ALIAS_MAP[normalized_tenant]
+
+    if normalized_tenant not in TENANT_TO_APP:
+        await websocket.close(code=1008)
+        return
+
+    await manager.connect(websocket, normalized_tenant)
     try:
         while True:
             # Wait for any incoming keep-alive or message
             _ = await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(websocket, tenant_id)
+        manager.disconnect(websocket, normalized_tenant)
 
 
 @app.get("/tenants/available")
@@ -231,7 +340,14 @@ def get_available_tenants(
     KNOWN_TENANTS = [
         {"id": "nexabank", "name": "NexaBank", "eventCount": 0, "uniqueUsers": 0},
         {"id": "safexbank", "name": "SafexBank", "eventCount": 0, "uniqueUsers": 0},
+        {"id": "jbank", "name": "JBank", "eventCount": 0, "uniqueUsers": 0},
+        {"id": "obank", "name": "OBank", "eventCount": 0, "uniqueUsers": 0},
     ]
+    admin_apps = parse_admin_apps(request.headers.get("X-Admin-Apps", ""))
+    active_app = normalize_app_id(request.headers.get("X-Active-App", ""))
+    allowed_tenants = resolve_effective_allowed_tenants(admin_apps, active_app)
+    if _role == "app_admin" and not allowed_tenants:
+        return []
     try:
         sql = """
             SELECT
@@ -266,10 +382,14 @@ def get_available_tenants(
             if tid not in seen:
                 merged.append(tdata)
                 
-        # Tenant selector should reflect actual discovered tenant ids in analytics data.
-        # Do not hard-filter by admin account aliases here, which can hide valid tenants.
+        if _role == "app_admin" and allowed_tenants:
+            return [tenant for tenant in merged if tenant["id"].lower() in allowed_tenants]
         return merged
     except Exception:
+        if _role == "app_admin" and allowed_tenants:
+            return [tenant for tenant in KNOWN_TENANTS if tenant["id"].lower() in allowed_tenants]
+        if _role == "app_admin":
+            return []
         return KNOWN_TENANTS
 
 

@@ -19,7 +19,7 @@ interface OpenAccountModalProps {
 const OpenAccountModal = ({ isOpen, onClose, userId, onSuccess }: OpenAccountModalProps) => {
   const { measureAndTrack } = useEventTracker();
   const [accountType, setAccountType] = useState('SAVINGS');
-  const [ifsc, setIfsc] = useState('SFXB0000123');
+  const [ifsc, setIfsc] = useState('NEXA0001');
   const [initialDeposit, setInitialDeposit] = useState('1000');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -85,7 +85,7 @@ const OpenAccountModal = ({ isOpen, onClose, userId, onSuccess }: OpenAccountMod
             <Input
               value={ifsc}
               onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-              placeholder="e.g. SFXB0000123"
+              placeholder="e.g. NEXA0001 / SAFX0001"
               className="rounded-lg font-mono uppercase"
             />
           </div>

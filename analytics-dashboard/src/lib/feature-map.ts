@@ -26,11 +26,114 @@ export interface AppConfig {
   routes: FeatureMapping[];
 }
 
+export interface AppSuiteConfig {
+  id: string;
+  displayName: string;
+  description: string;
+  tenantIds: string[];
+  primaryAppId: string;
+  color: string;
+  appUrl: string;
+}
+
 /**
  * Registry of all connected applications.
  * Add new apps here — no code changes needed elsewhere.
  */
 export const APP_REGISTRY: Record<string, AppConfig> = {
+  jbank: {
+    appId: 'jbank',
+    displayName: 'JBank',
+    description: 'JavaBank tenant A analytics stream',
+    tenantId: 'jbank',
+    icon: 'building-2',
+    color: '#16A34A',
+    appUrl: process.env.NEXT_PUBLIC_JAVABANK_URL || 'http://localhost:3000',
+    funnelSteps: [
+      'login.auth.success',
+      'dashboard.page.view',
+      'loan.kyc_started.success',
+      'loan.kyc_completed.success',
+      'loan.applied.success',
+    ],
+    routes: [
+      { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
+      { pattern: '/register',         featureName: 'auth.register.view',           category: 'navigation' },
+      { pattern: '/dashboard',        featureName: 'core.dashboard.view',          category: 'navigation',    funnel: 2 },
+      { pattern: '/accounts',         featureName: 'core.accounts.view',           category: 'navigation' },
+      { pattern: '/transactions',     featureName: 'core.transactions.view',       category: 'navigation' },
+      { pattern: '/payees',           featureName: 'core.payees.view',             category: 'navigation' },
+      { pattern: '/profile',          featureName: 'core.profile.view',            category: 'navigation' },
+      { pattern: '/loans',            featureName: 'loans.dashboard.view',         category: 'navigation',    funnel: 3 },
+      { pattern: '/pro-feature?id=ai-insights',            featureName: 'pro.finance-library.view',     category: 'navigation' },
+      { pattern: '/pro-feature?id=crypto-trading',          featureName: 'pro.crypto-trading.view',      category: 'navigation' },
+      { pattern: '/pro-feature?id=wealth-management-pro',   featureName: 'pro.wealth-management.view',   category: 'navigation' },
+      { pattern: '/pro-feature?id=bulk-payroll-processing', featureName: 'pro.payroll-pro.view',         category: 'navigation' },
+      { pattern: '/admin*',           featureName: 'admin.dashboard.view',         category: 'system' },
+    ],
+  },
+  obank: {
+    appId: 'obank',
+    displayName: 'OBank',
+    description: 'JavaBank tenant B analytics stream',
+    tenantId: 'obank',
+    icon: 'building-2',
+    color: '#22C55E',
+    appUrl: process.env.NEXT_PUBLIC_JAVABANK_URL || 'http://localhost:3000',
+    funnelSteps: [
+      'login.auth.success',
+      'dashboard.page.view',
+      'loan.kyc_started.success',
+      'loan.kyc_completed.success',
+      'loan.applied.success',
+    ],
+    routes: [
+      { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
+      { pattern: '/register',         featureName: 'auth.register.view',           category: 'navigation' },
+      { pattern: '/dashboard',        featureName: 'core.dashboard.view',          category: 'navigation',    funnel: 2 },
+      { pattern: '/accounts',         featureName: 'core.accounts.view',           category: 'navigation' },
+      { pattern: '/transactions',     featureName: 'core.transactions.view',       category: 'navigation' },
+      { pattern: '/payees',           featureName: 'core.payees.view',             category: 'navigation' },
+      { pattern: '/profile',          featureName: 'core.profile.view',            category: 'navigation' },
+      { pattern: '/loans',            featureName: 'loans.dashboard.view',         category: 'navigation',    funnel: 3 },
+      { pattern: '/pro-feature?id=ai-insights',            featureName: 'pro.finance-library.view',     category: 'navigation' },
+      { pattern: '/pro-feature?id=crypto-trading',          featureName: 'pro.crypto-trading.view',      category: 'navigation' },
+      { pattern: '/pro-feature?id=wealth-management-pro',   featureName: 'pro.wealth-management.view',   category: 'navigation' },
+      { pattern: '/pro-feature?id=bulk-payroll-processing', featureName: 'pro.payroll-pro.view',         category: 'navigation' },
+      { pattern: '/admin*',           featureName: 'admin.dashboard.view',         category: 'system' },
+    ],
+  },
+  javabank: {
+    appId: 'javabank',
+    displayName: 'JavaBank',
+    description: 'Java Spring powered digital banking platform',
+    tenantId: 'javabank',
+    icon: 'building-2',
+    color: '#16A34A',
+    appUrl: process.env.NEXT_PUBLIC_JAVABANK_URL || 'http://localhost:3000',
+    funnelSteps: [
+      'login.auth.success',
+      'dashboard.page.view',
+      'loan.kyc_started.success',
+      'loan.kyc_completed.success',
+      'loan.applied.success',
+    ],
+    routes: [
+      { pattern: '/login',            featureName: 'auth.login.view',              category: 'navigation',    funnel: 1 },
+      { pattern: '/register',         featureName: 'auth.register.view',           category: 'navigation' },
+      { pattern: '/dashboard',        featureName: 'core.dashboard.view',          category: 'navigation',    funnel: 2 },
+      { pattern: '/accounts',         featureName: 'core.accounts.view',           category: 'navigation' },
+      { pattern: '/transactions',     featureName: 'core.transactions.view',       category: 'navigation' },
+      { pattern: '/payees',           featureName: 'core.payees.view',             category: 'navigation' },
+      { pattern: '/profile',          featureName: 'core.profile.view',            category: 'navigation' },
+      { pattern: '/loans',            featureName: 'loans.dashboard.view',         category: 'navigation',    funnel: 3 },
+      { pattern: '/pro-feature?id=ai-insights',            featureName: 'pro.finance-library.view',     category: 'navigation' },
+      { pattern: '/pro-feature?id=crypto-trading',          featureName: 'pro.crypto-trading.view',      category: 'navigation' },
+      { pattern: '/pro-feature?id=wealth-management-pro',   featureName: 'pro.wealth-management.view',   category: 'navigation' },
+      { pattern: '/pro-feature?id=bulk-payroll-processing', featureName: 'pro.payroll-pro.view',         category: 'navigation' },
+      { pattern: '/admin*',           featureName: 'admin.dashboard.view',         category: 'system' },
+    ],
+  },
   nexabank: {
     appId: 'nexabank',
     displayName: 'NexaBank',
@@ -100,6 +203,119 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     ],
   },
 };
+
+export const APP_SUITES: AppSuiteConfig[] = [
+  {
+    id: 'nexabank',
+    displayName: 'NexaBank',
+    description: 'NexaBank tenants and analytics views',
+    tenantIds: ['nexabank', 'safexbank'],
+    primaryAppId: 'nexabank',
+    color: APP_REGISTRY.nexabank.color,
+    appUrl: APP_REGISTRY.nexabank.appUrl,
+  },
+  {
+    id: 'javabank',
+    displayName: 'JavaBank',
+    description: 'JavaBank tenants and analytics views',
+    tenantIds: ['jbank', 'obank'],
+    primaryAppId: 'javabank',
+    color: APP_REGISTRY.javabank.color,
+    appUrl: APP_REGISTRY.javabank.appUrl,
+  },
+];
+
+export const TENANT_LABELS: Record<string, string> = {
+  nexabank: 'NexaBank',
+  safexbank: 'SafexBank',
+  jbank: 'JBank',
+  obank: 'OBank',
+};
+
+export const TENANT_TO_APP: Record<string, 'nexabank' | 'javabank'> = {
+  nexabank: 'nexabank',
+  safexbank: 'nexabank',
+  jbank: 'javabank',
+  obank: 'javabank',
+};
+
+export const TENANT_TO_APP_NAME: Record<string, 'Nexabank' | 'Javabank'> = {
+  nexabank: 'Nexabank',
+  safexbank: 'Nexabank',
+  jbank: 'Javabank',
+  obank: 'Javabank',
+};
+
+export const TENANT_CANONICAL_MAP: Record<string, string> = {
+  nexabank: 'nexabank',
+  safexbank: 'safexbank',
+  jbank: 'jbank',
+  obank: 'obank',
+  bank_a: 'nexabank',
+  bank_b: 'safexbank',
+  javabank: 'jbank',
+};
+
+export const ALL_TENANT_IDS = APP_SUITES.flatMap((suite) => suite.tenantIds);
+
+export const APP_TO_TENANTS: Record<string, string[]> = APP_SUITES.reduce<Record<string, string[]>>((acc, suite) => {
+  acc[suite.id] = suite.tenantIds;
+  return acc;
+}, {});
+
+export const SUPPORTED_RBAC_APPS = Array.from(
+  new Set([...APP_SUITES.map((suite) => suite.id), ...ALL_TENANT_IDS, 'javabank'])
+);
+
+export const SUPPORTED_APP_IDS = APP_SUITES.map((suite) => suite.id);
+
+export function normalizeAppSlug(value: string): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+export function normalizeTenantId(value: string): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  return TENANT_CANONICAL_MAP[normalized] || normalized;
+}
+
+export function resolvePrimaryTenantForApp(appId: string): string {
+  const normalizedAppId = normalizeAppSlug(appId);
+  const tenants = APP_TO_TENANTS[normalizedAppId] || [];
+  if (tenants.length > 0) {
+    return tenants[0];
+  }
+  return 'nexabank';
+}
+
+export function resolveAppIdFromPathname(pathname?: string | null): string | null {
+  if (!pathname) return null;
+  const appId = normalizeAppSlug(pathname.split('/').filter(Boolean)[0] || '');
+  return SUPPORTED_APP_IDS.includes(appId) ? appId : null;
+}
+
+export function resolvePrimaryAppIdFromAdminApps(adminApps: string[] | undefined | null): string | null {
+  if (!adminApps || adminApps.length === 0) return null;
+
+  for (const app of adminApps) {
+    const normalized = normalizeAppSlug(app);
+    const appId = TENANT_TO_APP[normalized] || normalized;
+    if (SUPPORTED_APP_IDS.includes(appId)) {
+      return appId;
+    }
+  }
+
+  return null;
+}
+
+export function resolveTenantIdsForApp(appId: string): string[] {
+  return APP_TO_TENANTS[normalizeAppSlug(appId)] || [];
+}
+
+export function buildAppScopedPath(appId: string, pathname: string): string {
+  const normalizedAppId = normalizeAppSlug(appId);
+  const trimmedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  return `/${normalizedAppId}${trimmedPath}`;
+}
 
 /**
  * Resolves a URL path to its business-level feature name.

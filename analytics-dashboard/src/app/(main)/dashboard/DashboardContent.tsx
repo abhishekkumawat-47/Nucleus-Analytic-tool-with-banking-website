@@ -4,7 +4,6 @@
  * Main Dashboard page component.
  * Assembles all dashboard widgets in a responsive grid layout.
  * Shows full skeleton only on first load (no data yet).
- * Background refreshes show a thin progress bar via isFetching.
  */
 
 import React from 'react';
@@ -21,7 +20,6 @@ import TopLocations from '@/components/TopLocations';
 export default function DashboardContent() {
   const {
     isLoading,
-    isFetching,
     kpiMetrics,
     secondaryKpiMetrics,
     trafficData,

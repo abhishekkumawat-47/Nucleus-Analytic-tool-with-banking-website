@@ -19,7 +19,7 @@ export interface DashboardState {
 
 const initialState: DashboardState = {
   timeRange: 'Last 7 Days',
-  selectedTenants: ['nexabank'],
+  selectedTenants: [],
   deploymentMode: 'cloud',
   sidebarCollapsed: false,
   realTimeUsers: 0,

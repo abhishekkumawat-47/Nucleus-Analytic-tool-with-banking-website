@@ -15,11 +15,12 @@ import {
 import ChartContainer from '@/components/ChartContainer';
 import { TenantsPageSkeleton } from '@/components/Skeletons';
 import { dashboardAPI } from '@/lib/api';
-import { APP_REGISTRY } from '@/lib/feature-map';
+import { APP_REGISTRY, APP_SUITES, TENANT_LABELS, TENANT_TO_APP } from '@/lib/feature-map';
 import { useDashboardData } from '@/hooks/useDashboard';
+import { useSession } from 'next-auth/react';
+import { useAppSelector } from '@/lib/store';
 
-type TenantId = 'nexabank' | 'safexbank';
-type TenantKey = { id: TenantId; name: string; accent: string; subtle: string };
+type TenantKey = { id: string; name: string; accent: string; subtle: string };
 
 type ComparisonTenant = Awaited<ReturnType<typeof dashboardAPI.getTenantComparison>>['tenants'][number];
 type KpiMetrics = Awaited<ReturnType<typeof dashboardAPI.getKPIMetrics>>;
@@ -27,11 +28,6 @@ type SecondaryMetrics = Awaited<ReturnType<typeof dashboardAPI.getSecondaryKPIMe
 type FunnelRows = Awaited<ReturnType<typeof dashboardAPI.getFunnelData>>;
 type TrafficRows = Awaited<ReturnType<typeof dashboardAPI.getTrafficData>>;
 type ComparisonTrendPoint = NonNullable<ComparisonTenant['trend']>[number];
-
-const TENANTS: TenantKey[] = [
-  { id: 'nexabank', name: APP_REGISTRY.nexabank.displayName, accent: '#1a73e8', subtle: '#93c5fd' },
-  { id: 'safexbank', name: APP_REGISTRY.safexbank.displayName, accent: '#0f172a', subtle: '#64748b' },
-];
 
 function toTitleCase(value: string): string {
   return value
@@ -180,14 +176,51 @@ function SectionHeader({
 }
 
 export default function TenantsPage() {
-  const { rangeParam, timeRange } = useDashboardData();
+  const { rangeParam, timeRange, activeAppId } = useDashboardData();
+  const { data: session } = useSession();
+  const selectedTenants = useAppSelector((state) => state.dashboard.selectedTenants);
   const [trendMode, setTrendMode] = useState<'events' | 'users'>('events');
   const { lastEvent } = useRealtimeEvents({ maxEvents: 1 });
   const lastRealtimeRefetchAt = useRef(0);
 
+  const activeSuite = useMemo(() => {
+    if (activeAppId) {
+      const routeSuite = APP_SUITES.find((suite) => suite.id === activeAppId);
+      if (routeSuite) {
+        return routeSuite;
+      }
+    }
+
+    const selectedTenant = (selectedTenants || []).find((tenantId) => TENANT_TO_APP[String(tenantId).toLowerCase()]);
+    const selectedAppId = selectedTenant ? TENANT_TO_APP[String(selectedTenant).toLowerCase()] : null;
+    if (selectedAppId) {
+      return APP_SUITES.find((suite) => suite.id === selectedAppId) || APP_SUITES[0];
+    }
+
+    const adminApps: string[] = (session?.user?.adminApps || [])
+      .map((appId) => TENANT_TO_APP[String(appId).toLowerCase()] || String(appId).toLowerCase());
+    const adminAppSet = new Set(adminApps);
+    const adminSuite = APP_SUITES.find((suite) => adminAppSet.has(suite.id));
+    return adminSuite || APP_SUITES[0];
+  }, [activeAppId, selectedTenants, session]);
+
+  const TENANTS = useMemo<TenantKey[]>(() => {
+    const palette = [
+      { accent: '#1a73e8', subtle: '#93c5fd' },
+      { accent: '#0f172a', subtle: '#64748b' },
+    ];
+
+    return activeSuite.tenantIds.slice(0, 2).map((tenantId, index) => ({
+      id: tenantId,
+      name: TENANT_LABELS[tenantId] || APP_REGISTRY[tenantId]?.displayName || toTitleCase(tenantId),
+      accent: palette[index]?.accent || '#1a73e8',
+      subtle: palette[index]?.subtle || '#93c5fd',
+    }));
+  }, [activeSuite]);
+
   const comparisonQuery = useQuery({
-    queryKey: ['tenant-comparison', rangeParam],
-    queryFn: () => dashboardAPI.getTenantComparison(['nexabank', 'safexbank'], rangeParam),
+    queryKey: ['tenant-comparison', rangeParam, TENANTS.map((tenant) => tenant.id).join(',')],
+    queryFn: () => dashboardAPI.getTenantComparison(TENANTS.map((tenant) => tenant.id), rangeParam),
     staleTime: 20 * 1000,
     refetchInterval: 20 * 1000,
     refetchIntervalInBackground: false,
@@ -195,8 +228,8 @@ export default function TenantsPage() {
   });
 
   const trafficQuery = useQuery({
-    queryKey: ['tenant-traffic', rangeParam],
-    queryFn: () => dashboardAPI.getTrafficData(['nexabank', 'safexbank'], rangeParam),
+    queryKey: ['tenant-traffic', rangeParam, TENANTS.map((tenant) => tenant.id).join(',')],
+    queryFn: () => dashboardAPI.getTrafficData(TENANTS.map((tenant) => tenant.id), rangeParam),
     staleTime: 20 * 1000,
     refetchInterval: 20 * 1000,
     refetchIntervalInBackground: false,
@@ -304,14 +337,16 @@ export default function TenantsPage() {
 
   const leftTenant = tenantSnapshots[0];
   const rightTenant = tenantSnapshots[1];
+  const leftTenantId = leftTenant?.id || 'left';
+  const rightTenantId = rightTenant?.id || 'right';
 
   const trendChartData = useMemo(() => {
     if (trendMode === 'users') {
       const rows = trafficData || [];
       return rows.map((row: TrafficRows[number]) => ({
         date: String(row.date),
-        nexabank: toNumber((row as Record<string, string | number>)['nexabank_visitors']),
-        safexbank: toNumber((row as Record<string, string | number>)['safexbank_visitors']),
+        [leftTenantId]: toNumber((row as Record<string, string | number>)[`${leftTenantId}_visitors`]),
+        [rightTenantId]: toNumber((row as Record<string, string | number>)[`${rightTenantId}_visitors`]),
       }));
     }
 
@@ -324,16 +359,16 @@ export default function TenantsPage() {
       .sort()
       .map((date) => ({
         date,
-        nexabank: toNumber(tenantSnapshots[0].comparison?.trend.find((point) => point.date === date)?.events),
-        safexbank: toNumber(tenantSnapshots[1].comparison?.trend.find((point) => point.date === date)?.events),
+        [leftTenantId]: toNumber(tenantSnapshots[0].comparison?.trend.find((point) => point.date === date)?.events),
+        [rightTenantId]: toNumber(tenantSnapshots[1].comparison?.trend.find((point) => point.date === date)?.events),
       }));
-  }, [tenantSnapshots, trafficData, trendMode]);
+  }, [tenantSnapshots, trafficData, trendMode, leftTenantId, rightTenantId]);
 
   const featureRows = useMemo(() => {
     const featureMap = new Map<string, {
       feature: string;
-      nexabank: { usage: number; users: number; totalUsers: number };
-      safexbank: { usage: number; users: number; totalUsers: number };
+      left: { usage: number; users: number; totalUsers: number };
+      right: { usage: number; users: number; totalUsers: number };
     }>();
 
     tenantSnapshots.forEach((tenant) => {
@@ -344,11 +379,12 @@ export default function TenantsPage() {
         if ((row.plan_tier || '').toLowerCase() !== 'enterprise') return;
         const current = featureMap.get(row.feature_name) || {
           feature: row.feature_name,
-          nexabank: { usage: 0, users: 0, totalUsers: 0 },
-          safexbank: { usage: 0, users: 0, totalUsers: 0 },
+          left: { usage: 0, users: 0, totalUsers: 0 },
+          right: { usage: 0, users: 0, totalUsers: 0 },
         };
 
-        current[tenant.id] = {
+        const side = tenant.id === leftTenantId ? 'left' : 'right';
+        current[side] = {
           usage: row.usage_count || 0,
           users: row.unique_users || 0,
           totalUsers,
@@ -359,41 +395,41 @@ export default function TenantsPage() {
 
     return Array.from(featureMap.values())
       .map((row) => {
-        const nexaAdoption = row.nexabank.totalUsers > 0 ? (row.nexabank.users / row.nexabank.totalUsers) * 100 : 0;
-        const safexAdoption = row.safexbank.totalUsers > 0 ? (row.safexbank.users / row.safexbank.totalUsers) * 100 : 0;
-        const winner = getComparisonWinner(nexaAdoption, safexAdoption, true);
-        const winnerLabel = winner === 'left' ? 'NexaBank' : winner === 'right' ? 'SafexBank' : 'Even';
-        const maxUsage = Math.max(row.nexabank.usage, row.safexbank.usage, 1);
+        const leftAdoption = row.left.totalUsers > 0 ? (row.left.users / row.left.totalUsers) * 100 : 0;
+        const rightAdoption = row.right.totalUsers > 0 ? (row.right.users / row.right.totalUsers) * 100 : 0;
+        const winner = getComparisonWinner(leftAdoption, rightAdoption, true);
+        const winnerLabel = winner === 'left' ? leftTenant?.name || 'Left' : winner === 'right' ? rightTenant?.name || 'Right' : 'Even';
+        const maxUsage = Math.max(row.left.usage, row.right.usage, 1);
         return {
           feature: row.feature,
           label: humanizeFeature(row.feature),
-          nexaUsage: row.nexabank.usage,
-          safexUsage: row.safexbank.usage,
-          nexaUsers: row.nexabank.users,
-          safexUsers: row.safexbank.users,
-          nexaAdoption,
-          safexAdoption,
+          leftUsage: row.left.usage,
+          rightUsage: row.right.usage,
+          leftUsers: row.left.users,
+          rightUsers: row.right.users,
+          leftAdoption,
+          rightAdoption,
           winner: winnerLabel,
           maxUsage,
           insight:
-            nexaAdoption < 10 && safexAdoption < 10
+            leftAdoption < 10 && rightAdoption < 10
               ? 'Underused in both tenants.'
               : winner === 'left'
-                ? `NexaBank leads by ${(nexaAdoption - safexAdoption).toFixed(1)} points.`
+                ? `${leftTenant?.name || 'Left'} leads by ${(leftAdoption - rightAdoption).toFixed(1)} points.`
                 : winner === 'right'
-                  ? `SafexBank leads by ${(safexAdoption - nexaAdoption).toFixed(1)} points.`
+                  ? `${rightTenant?.name || 'Right'} leads by ${(rightAdoption - leftAdoption).toFixed(1)} points.`
                   : 'Both tenants are evenly matched.',
         };
       })
-      .sort((a, b) => Math.max(b.nexaUsage, b.safexUsage) - Math.max(a.nexaUsage, a.safexUsage));
-  }, [tenantSnapshots]);
+      .sort((a, b) => Math.max(b.leftUsage, b.rightUsage) - Math.max(a.leftUsage, a.rightUsage));
+  }, [tenantSnapshots, leftTenantId, leftTenant, rightTenant]);
 
   const topUtilizationRows = useMemo(() => {
     return [...featureRows]
       .map((row) => ({
         ...row,
-        combinedUsage: row.nexaUsage + row.safexUsage,
-        utilizationGap: Math.abs(row.nexaAdoption - row.safexAdoption),
+        combinedUsage: row.leftUsage + row.rightUsage,
+        utilizationGap: Math.abs(row.leftAdoption - row.rightAdoption),
       }))
       .sort((a, b) => b.combinedUsage - a.combinedUsage)
       .slice(0, 6);
@@ -455,15 +491,15 @@ export default function TenantsPage() {
     const wasteDelta = toNumber(leftTenant.license.summary.waste_pct) - toNumber(rightTenant.license.summary.waste_pct);
     const growthDelta = toNumber(leftTenant.comparison?.growth_rate) - toNumber(rightTenant.comparison?.growth_rate);
 
-    const topFeatureGap = featureRows.find((row: any) => Math.max(row.nexaAdoption, row.safexAdoption) >= 20 && Math.abs(row.nexaAdoption - row.safexAdoption) >= 15);
-    const underusedFeature = featureRows.find((row: any) => row.nexaAdoption < 10 && row.safexAdoption < 10);
+    const topFeatureGap = featureRows.find((row: any) => Math.max(row.leftAdoption, row.rightAdoption) >= 20 && Math.abs(row.leftAdoption - row.rightAdoption) >= 15);
+    const underusedFeature = featureRows.find((row: any) => row.leftAdoption < 10 && row.rightAdoption < 10);
 
     items.push({
       title: 'Revenue Opportunity',
       message:
         revenueDelta === 0
           ? 'Both tenants are generating the same estimated revenue in the selected period.'
-          : `${revenueDelta > 0 ? 'NexaBank' : 'SafexBank'} is generating ${formatCurrency(Math.abs(revenueDelta))} more estimated revenue than its peer.`,
+          : `${revenueDelta > 0 ? (leftTenant?.name || 'Left') : (rightTenant?.name || 'Right')} is generating ${formatCurrency(Math.abs(revenueDelta))} more estimated revenue than its peer.`,
     });
 
     items.push({
@@ -471,13 +507,13 @@ export default function TenantsPage() {
       message:
         wasteDelta === 0
           ? 'Both tenants are using licensed features at similar rates.'
-          : `${wasteDelta > 0 ? 'NexaBank' : 'SafexBank'} has ${formatPercent(Math.abs(wasteDelta))} higher license waste, signaling unused paid capacity.`,
+          : `${wasteDelta > 0 ? (leftTenant?.name || 'Left') : (rightTenant?.name || 'Right')} has ${formatPercent(Math.abs(wasteDelta))} higher license waste, signaling unused paid capacity.`,
     });
 
     if (topFeatureGap) {
       items.push({
         title: 'Feature Adoption Gap',
-        message: `${humanizeFeature(topFeatureGap.feature)} has a clear adoption lead in ${topFeatureGap.nexaAdoption > topFeatureGap.safexAdoption ? 'NexaBank' : 'SafexBank'}.`,
+        message: `${humanizeFeature(topFeatureGap.feature)} has a clear adoption lead in ${topFeatureGap.leftAdoption > topFeatureGap.rightAdoption ? (leftTenant?.name || 'Left') : (rightTenant?.name || 'Right')}.`,
       });
     }
 
@@ -493,7 +529,7 @@ export default function TenantsPage() {
       message:
         growthDelta === 0
           ? 'Both tenants are growing at a similar pace.'
-          : `${growthDelta > 0 ? 'NexaBank' : 'SafexBank'} is growing faster by ${Math.abs(growthDelta).toFixed(1)} percentage points.`,
+          : `${growthDelta > 0 ? (leftTenant?.name || 'Left') : (rightTenant?.name || 'Right')} is growing faster by ${Math.abs(growthDelta).toFixed(1)} percentage points.`,
     });
 
     const performanceGap = performanceSummary[0] && performanceSummary[1]
@@ -505,7 +541,7 @@ export default function TenantsPage() {
       message:
         performanceGap === 0
           ? 'Response times are aligned across both tenants.'
-          : `${performanceGap < 0 ? 'NexaBank' : 'SafexBank'} has the faster average response time by ${Math.abs(performanceGap).toFixed(0)} ms.`,
+          : `${performanceGap < 0 ? (leftTenant?.name || 'Left') : (rightTenant?.name || 'Right')} has the faster average response time by ${Math.abs(performanceGap).toFixed(0)} ms.`,
     });
 
     return items.slice(0, 5);
@@ -523,7 +559,7 @@ export default function TenantsPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Multi-tenant comparison</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Tenant Performance Comparison</h1>
             <p className="mt-3 text-sm leading-6 text-slate-500">
-              Compare NexaBank and SafexBank across usage, adoption, retention, performance, and revenue opportunity.
+              Compare {leftTenant?.name || 'Tenant A'} and {rightTenant?.name || 'Tenant B'} across usage, adoption, retention, performance, and revenue opportunity.
               The layout is intentionally minimal: blue indicates strength, slate indicates the comparison baseline.
             </p>
           </div>
@@ -625,8 +661,8 @@ export default function TenantsPage() {
                   contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0', background: '#ffffff' }}
                   labelStyle={{ color: '#0f172a', fontWeight: 600 }}
                 />
-                <Line type="monotone" dataKey="nexabank" name="NexaBank" stroke="#1a73e8" strokeWidth={3} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="safexbank" name="SafexBank" stroke="#334155" strokeWidth={3} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey={leftTenantId} name={leftTenant?.name || leftTenantId} stroke="#1a73e8" strokeWidth={3} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey={rightTenantId} name={rightTenant?.name || rightTenantId} stroke="#334155" strokeWidth={3} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -662,8 +698,8 @@ export default function TenantsPage() {
               <thead>
                 <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   <th className="pb-3 pr-4">Feature</th>
-                  <th className="pb-3 pr-4">NexaBank</th>
-                  <th className="pb-3 pr-4">SafexBank</th>
+                  <th className="pb-3 pr-4">{leftTenant?.name || 'Left'}</th>
+                  <th className="pb-3 pr-4">{rightTenant?.name || 'Right'}</th>
                   <th className="pb-3 pr-4">Winner</th>
                   <th className="pb-3">Insight</th>
                 </tr>
@@ -679,16 +715,16 @@ export default function TenantsPage() {
                     </td>
                     <td className="py-4 pr-4">
                       <div className="space-y-2">
-                        <p className="text-sm font-semibold text-slate-900">{formatPercent(row.nexaAdoption)}</p>
-                        <p className="text-[11px] text-slate-500">{formatCount(row.nexaUsers)} active users</p>
-                        <p className="text-[11px] text-slate-400">{formatCount(row.nexaUsage)} usage events</p>
+                        <p className="text-sm font-semibold text-slate-900">{formatPercent(row.leftAdoption)}</p>
+                        <p className="text-[11px] text-slate-500">{formatCount(row.leftUsers)} active users</p>
+                        <p className="text-[11px] text-slate-400">{formatCount(row.leftUsage)} usage events</p>
                       </div>
                     </td>
                     <td className="py-4 pr-4">
                       <div className="space-y-2">
-                        <p className="text-sm font-semibold text-slate-900">{formatPercent(row.safexAdoption)}</p>
-                        <p className="text-[11px] text-slate-500">{formatCount(row.safexUsers)} active users</p>
-                        <p className="text-[11px] text-slate-400">{formatCount(row.safexUsage)} usage events</p>
+                        <p className="text-sm font-semibold text-slate-900">{formatPercent(row.rightAdoption)}</p>
+                        <p className="text-[11px] text-slate-500">{formatCount(row.rightUsers)} active users</p>
+                        <p className="text-[11px] text-slate-400">{formatCount(row.rightUsage)} usage events</p>
                       </div>
                     </td>
                     <td className="py-4 pr-4">
@@ -727,23 +763,23 @@ export default function TenantsPage() {
                 <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                      <span>NexaBank</span>
-                      <span>{formatPercent(row.nexaAdoption)}</span>
+                      <span>{leftTenant?.name || 'Left'}</span>
+                      <span>{formatPercent(row.leftAdoption)}</span>
                     </div>
                     <div className="mt-2 h-2 rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-[#1a73e8]" style={{ width: `${Math.min(row.nexaAdoption, 100)}%` }} />
+                      <div className="h-full rounded-full bg-[#1a73e8]" style={{ width: `${Math.min(row.leftAdoption, 100)}%` }} />
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">{formatCount(row.nexaUsers)} active users, {formatCount(row.nexaUsage)} usage events</p>
+                    <p className="mt-2 text-xs text-slate-500">{formatCount(row.leftUsers)} active users, {formatCount(row.leftUsage)} usage events</p>
                   </div>
                   <div>
                     <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                      <span>SafexBank</span>
-                      <span>{formatPercent(row.safexAdoption)}</span>
+                      <span>{rightTenant?.name || 'Right'}</span>
+                      <span>{formatPercent(row.rightAdoption)}</span>
                     </div>
                     <div className="mt-2 h-2 rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-slate-700" style={{ width: `${Math.min(row.safexAdoption, 100)}%` }} />
+                      <div className="h-full rounded-full bg-slate-700" style={{ width: `${Math.min(row.rightAdoption, 100)}%` }} />
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">{formatCount(row.safexUsers)} active users, {formatCount(row.safexUsage)} usage events</p>
+                    <p className="mt-2 text-xs text-slate-500">{formatCount(row.rightUsers)} active users, {formatCount(row.rightUsage)} usage events</p>
                   </div>
                 </div>
               </div>
@@ -763,8 +799,8 @@ export default function TenantsPage() {
               <thead>
                 <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   <th className="pb-3 pr-4">Step</th>
-                  <th className="pb-3 pr-4">NexaBank Conversion</th>
-                  <th className="pb-3 pr-4">SafexBank Conversion</th>
+                  <th className="pb-3 pr-4">{leftTenant?.name || 'Left'} Conversion</th>
+                  <th className="pb-3 pr-4">{rightTenant?.name || 'Right'} Conversion</th>
                   <th className="pb-3 pr-4">Drop-off</th>
                   <th className="pb-3">Winner</th>
                 </tr>
@@ -791,11 +827,11 @@ export default function TenantsPage() {
                       </div>
                     </td>
                     <td className="py-4 pr-4 text-sm text-slate-600">
-                      NexaBank {row.leftDropOff.toFixed(1)}% / SafexBank {row.rightDropOff.toFixed(1)}%
+                      {leftTenant?.name || 'Left'} {row.leftDropOff.toFixed(1)}% / {rightTenant?.name || 'Right'} {row.rightDropOff.toFixed(1)}%
                     </td>
                     <td className="py-4">
                       <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                        {row.winner === 'left' ? 'NexaBank' : row.winner === 'right' ? 'SafexBank' : 'Even'}
+                        {row.winner === 'left' ? (leftTenant?.name || 'Left') : row.winner === 'right' ? (rightTenant?.name || 'Right') : 'Even'}
                       </span>
                     </td>
                   </tr>

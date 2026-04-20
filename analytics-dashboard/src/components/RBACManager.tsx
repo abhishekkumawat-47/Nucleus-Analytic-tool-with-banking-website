@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Shield, Database, Info } from 'lucide-react';
 import { dashboardAPI } from '@/lib/api';
+import { ALL_TENANT_IDS, SUPPORTED_RBAC_APPS, TENANT_LABELS } from '@/lib/feature-map';
 
 type RbacConfig = {
   super_admins: string[];
@@ -14,7 +15,7 @@ export default function RBACManager() {
   const [config, setConfig] = useState<RbacConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedTenant, setSelectedTenant] = useState<'nexabank' | 'safexbank'>('nexabank');
+  const [selectedTenant, setSelectedTenant] = useState<string>(ALL_TENANT_IDS[0] || 'nexabank');
 
   useEffect(() => {
     fetchConfig();
@@ -69,14 +70,14 @@ export default function RBACManager() {
         <p className="text-xs text-gray-500 mb-3">Configured admins per application.</p>
         {config ? (
           <div className="space-y-4">
-            {(['nexabank', 'safexbank'] as const).map((appId) => (
+            {SUPPORTED_RBAC_APPS.map((appId) => (
               <div key={appId} className="border border-gray-100 rounded-lg overflow-hidden">
                 <div className="bg-gray-100 px-4 py-2 border-b border-gray-100">
                   <span className="text-xs font-bold uppercase text-gray-700 tracking-wider">App: {appId}</span>
                 </div>
                 <ul className="divide-y divide-gray-100">
                   {(config.app_admins?.[appId] || []).length > 0 ? (
-                    (config.app_admins?.[appId] || []).map((email) => (
+                    (config.app_admins?.[appId] || []).map((email: string) => (
                       <li key={email} className="px-4 py-3 bg-white">
                         <span className="text-sm text-gray-900 font-medium">{email}</span>
                       </li>
@@ -105,11 +106,14 @@ export default function RBACManager() {
           </h4>
           <select
             value={selectedTenant}
-            onChange={(e) => setSelectedTenant(e.target.value as 'nexabank' | 'safexbank')}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTenant(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
           >
-            <option value="nexabank">NexaBank</option>
-            <option value="safexbank">SafexBank</option>
+            {ALL_TENANT_IDS.map((tenantId) => (
+              <option key={tenantId} value={tenantId}>
+                {TENANT_LABELS[tenantId] || tenantId}
+              </option>
+            ))}
           </select>
         </div>
 

@@ -6,8 +6,19 @@ import { useAppDispatch, useAppSelector } from '@/lib/store';
 import { setTimeRange, setSelectedTenants, updateRealTimeUsers, updateKPIMetrics } from '@/lib/dashboardSlice';
 import { TimeRange } from '@/types';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { dashboardAPI } from '@/lib/api';
 import { resolveAnalyticsWsBaseUrl } from '@/lib/ws-url';
+import {
+  APP_TO_TENANTS,
+  ALL_TENANT_IDS,
+  TENANT_TO_APP,
+  resolveAppIdFromPathname,
+  resolvePrimaryAppIdFromAdminApps,
+  resolveTenantIdsForApp,
+  normalizeTenantId,
+  resolvePrimaryTenantForApp,
+} from '@/lib/feature-map';
 
 /**
  * Converts the human-readable TimeRange into the API range param.
@@ -29,30 +40,83 @@ export function useDashboardData() {
   const queryClient = useQueryClient();
   const dashboardState = useAppSelector((state) => state.dashboard);
   const { data: session } = useSession();
+  const pathname = usePathname();
   const lastInvalidateAtRef = useRef(0);
-  const tenantAliasMap: Record<string, string> = {
-    bank_a: 'nexabank',
-    bank_b: 'safexbank',
-  };
+
+  const routeAppId = useMemo(() => resolveAppIdFromPathname(pathname), [pathname]);
+
+  const sessionAppId = useMemo(() => {
+    if (session?.user?.role !== 'app_admin') {
+      return null;
+    }
+    return resolvePrimaryAppIdFromAdminApps(session.user.adminApps || []);
+  }, [session]);
+
+  const scopedAppId = routeAppId || sessionAppId;
+
+  const scopedTenants = useMemo(() => {
+    if (scopedAppId) {
+      return resolveTenantIdsForApp(scopedAppId).map(normalizeTenantId);
+    }
+
+    if (session?.user?.role !== 'app_admin') {
+      return [] as string[];
+    }
+
+    return Array.from(
+      new Set(
+        (session.user.adminApps || [])
+          .filter(Boolean)
+          .flatMap((app) => {
+            const normalized = String(app).toLowerCase();
+            const appId = TENANT_TO_APP[normalized] || normalized;
+            return (APP_TO_TENANTS[appId] || []).map(normalizeTenantId);
+          })
+      )
+    );
+  }, [scopedAppId, session]);
+
+  const effectiveTenants = useMemo(() => {
+    const current = dashboardState.selectedTenants.filter(Boolean).map(normalizeTenantId);
+    if (current.length > 0) {
+      if (scopedTenants.length === 0) {
+        return current;
+      }
+      const validCurrent = current.filter((tenantId) => scopedTenants.includes(tenantId));
+      if (validCurrent.length > 0) {
+        return validCurrent;
+      }
+    }
+
+    // Avoid empty tenant queries: default super admins to all known tenants.
+    if (scopedTenants.length === 0 && session?.user?.role === 'super_admin') {
+      return ALL_TENANT_IDS.map(normalizeTenantId);
+    }
+
+    return scopedTenants;
+  }, [dashboardState.selectedTenants, scopedTenants, session]);
 
   // Auto-pin app_admins to their assigned tenants
   useEffect(() => {
-    if (session?.user?.role === 'app_admin') {
-      const adminApps = (session.user.adminApps || [])
-        .filter(Boolean)
-        .map((app) => tenantAliasMap[String(app).toLowerCase()] || String(app).toLowerCase());
-      if (adminApps.length > 0 && dashboardState.selectedTenants.length === 0) {
-        dispatch(setSelectedTenants([adminApps[0]]));
-      }
+    if (session?.user?.role !== 'app_admin') {
+      return;
     }
-  }, [dispatch, session, dashboardState.selectedTenants]);
+
+    if (scopedTenants.length === 0) {
+      return;
+    }
+
+    const current = dashboardState.selectedTenants.filter(Boolean).map(normalizeTenantId);
+    const isValid = current.length > 0 && current.every((tenantId) => scopedTenants.includes(tenantId));
+    if (!isValid) {
+      dispatch(setSelectedTenants(scopedTenants));
+    }
+  }, [dispatch, session, dashboardState.selectedTenants, scopedTenants]);
 
   // ─── Derived API params (stable references) ───
   const tenantsParam: string[] = useMemo(() => {
-    return dashboardState.selectedTenants.length > 0
-      ? dashboardState.selectedTenants
-      : ['nexabank'];
-  }, [dashboardState.selectedTenants]);
+    return effectiveTenants;
+  }, [effectiveTenants]);
 
   const rangeParam: string = useMemo(() => {
     return timeRangeToParam(dashboardState.timeRange);
@@ -138,10 +202,10 @@ export function useDashboardData() {
   // ─── WebSocket for real-time metrics ───
   useEffect(() => {
     const selectedTenantRaw =
-      dashboardState.selectedTenants.length > 0
-        ? dashboardState.selectedTenants[0]
-        : 'nexabank';
-    const tenantId = tenantAliasMap[String(selectedTenantRaw).toLowerCase()] || String(selectedTenantRaw).toLowerCase();
+      effectiveTenants.length > 0
+        ? effectiveTenants[0]
+        : resolvePrimaryTenantForApp(scopedAppId || 'nexabank');
+    const tenantId = normalizeTenantId(selectedTenantRaw);
 
     const baseUrl = resolveAnalyticsWsBaseUrl(process.env.NEXT_PUBLIC_ANALYTICS_WS_URL);
     const wsUrl = `${baseUrl}/ws/dashboard/${tenantId}`;
@@ -175,7 +239,7 @@ export function useDashboardData() {
     };
 
     return () => { ws.close(); };
-  }, [dispatch, dashboardState.selectedTenants, queryClient, tenantsParam, rangeParam]);
+  }, [dispatch, effectiveTenants, queryClient, tenantsParam, rangeParam, scopedAppId]);
 
   // ─── Actions ───
   const changeTimeRange = useCallback(
@@ -189,8 +253,9 @@ export function useDashboardData() {
   );
 
   return {
+    activeAppId: scopedAppId,
     // Redux state (single source of truth)
-    selectedTenants: dashboardState.selectedTenants,
+    selectedTenants: effectiveTenants,
     timeRange: dashboardState.timeRange,
     deploymentMode: dashboardState.deploymentMode,
     sidebarCollapsed: dashboardState.sidebarCollapsed,

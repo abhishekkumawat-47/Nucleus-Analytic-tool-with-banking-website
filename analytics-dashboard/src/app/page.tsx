@@ -17,31 +17,41 @@ import {
   Cloud,
   LayoutDashboard,
   Eye,
-  Wallet,
   ExternalLink,
 } from 'lucide-react';
-import { APP_REGISTRY } from '@/lib/feature-map';
-import { useAppDispatch, useAppSelector } from '@/lib/store';
+import { APP_REGISTRY, APP_SUITES, ALL_TENANT_IDS, TENANT_LABELS } from '@/lib/feature-map';
+import { buildAppScopedPath } from '@/lib/feature-map';
+import { useAppDispatch } from '@/lib/store';
 import { setSelectedTenants } from '@/lib/dashboardSlice';
 import { useSession } from 'next-auth/react';
 import AuthGuard from '@/components/AuthGuard';
 
 export default function AppSelectorPage() {
   const dispatch = useAppDispatch();
-  const { deploymentMode } = useAppSelector((state) => state.dashboard);
   const { data: session, status } = useSession();
   const router = useRouter();
 
   // Deployment info is now fetched via React Query / API — no thunk needed
 
-  const handleViewDashboard = (appId: string) => {
-    dispatch(setSelectedTenants([appId]));
-    router.push('/dashboard');
+  const handleViewDashboard = (appId: string, tenantIds: string[]) => {
+    const knownTenants = tenantIds.filter((tenantId) => ALL_TENANT_IDS.includes(tenantId));
+    const selected = knownTenants.length > 0 ? knownTenants : tenantIds;
+    dispatch(setSelectedTenants(selected));
+    router.push(buildAppScopedPath(appId, '/dashboard'));
   };
 
-  const allApps = Object.values(APP_REGISTRY);
   const userRole = session?.user?.role || 'user';
   const adminApps: string[] = session?.user?.adminApps || [];
+
+  const appGroups = APP_SUITES.map((suite) => {
+    const tenantConfigs = suite.tenantIds.map((tenantId) => APP_REGISTRY[tenantId]).filter(Boolean);
+    return {
+      ...suite,
+      tenantLabels: suite.tenantIds.map((tenantId) => TENANT_LABELS[tenantId] || tenantId),
+      routesTracked: tenantConfigs.reduce((sum, config) => sum + (config?.routes.length || 0), 0),
+      funnelSteps: tenantConfigs.reduce((max, config) => Math.max(max, config?.funnelSteps.length || 0), 0),
+    };
+  });
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -52,8 +62,10 @@ export default function AppSelectorPage() {
 
   const apps =
     userRole === 'super_admin'
-      ? allApps
-      : allApps.filter((app) => adminApps.includes(app.appId));
+      ? appGroups
+      : appGroups.filter((group) =>
+          adminApps.includes(group.id) || group.tenantIds.some((tenantId) => adminApps.includes(tenantId))
+        );
 
   if (status === 'authenticated' && userRole === 'super_admin') {
     return (
@@ -112,42 +124,29 @@ export default function AppSelectorPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {apps.map((app) => (
               <div
-                key={app.appId}
+                key={app.id}
                 className="bg-white border border-gray-200 rounded-2xl p-6 hover:border-[#1a73e8]/30 hover:shadow-lg hover:shadow-blue-50 transition-all duration-300 group"
               >
                 {/* App Header */}
                 <div className="flex items-center gap-3 mb-5">
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: app.color + '15' }}
-                  >
-                    {app.icon === 'wallet' ? (
-                      <Wallet className="w-5 h-5" style={{ color: app.color }} />
-                    ) : (
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-5 h-5 fill-current"
-                        style={{ color: app.color }}
-                      >
-                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                      </svg>
-                    )}
-                  </div>
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#1a73e8] transition-colors">
                       {app.displayName}
                     </h2>
                     <p className="text-gray-400 text-xs">{app.description}</p>
+                    <p className="text-gray-500 text-xs mt-2">
+                      Tenants: {app.tenantLabels.join(', ')}
+                    </p>
                   </div>
                 </div>
 
                 {/* Stats Row */}
                 <div className="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100">
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <span>{app.routes.length} routes tracked</span>
+                    <span>{app.routesTracked} routes tracked</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <span>{app.funnelSteps.length}-step funnel</span>
+                    <span>{app.funnelSteps}-step funnel</span>
                   </div>
                 </div>
 
@@ -156,7 +155,7 @@ export default function AppSelectorPage() {
                   {userRole === 'app_admin' && (
                     <>
                       <button
-                        onClick={() => handleViewDashboard(app.appId)}
+                        onClick={() => handleViewDashboard(app.id, app.tenantIds)}
                         className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 cursor-pointer"
                         style={{ backgroundColor: app.color }}
                       >
@@ -179,7 +178,7 @@ export default function AppSelectorPage() {
                   )}
                   {userRole === 'super_admin' && (
                     <Link
-                      href={`/apps/${app.appId}`}
+                      href={`/apps/${app.primaryAppId}`}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90"
                       style={{ backgroundColor: app.color }}
                     >

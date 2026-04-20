@@ -91,42 +91,22 @@ export default function HistoryPage() {
       if (!userId || !isAuth) return;
       setIsLoading(true);
       try {
-        // Fetch accounts first to get Main Account No
+        // Fetch accounts for account-level actions (e.g. statement export)
         const accountsRes = await axios.get(`${API_BASE_URL}/customers/accounts/${userId}`, {
           withCredentials: true
         });
-        
+
         let primaryAccount = "";
         if (accountsRes.data && accountsRes.data.length > 0) {
            primaryAccount = accountsRes.data[0].accNo;
            setAccountNo(primaryAccount);
-        } else {
-           setIsLoading(false);
-           return;
         }
 
-        const response = await fetch(
-          `${API_BASE_URL}/byUserAcc/${primaryAccount}`,
-          {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-          }
-        );
-        
-        // Temporarily, if endpoint isn't working, fallback to getting all
-        if (!response.ok && response.status === 404) {
-             const fallbackResponse = await fetch(`${API_BASE_URL}/bySenderAccTransactions/${primaryAccount}`, { credentials: "include" });
-             if (fallbackResponse.ok) {
-                 const data = await fallbackResponse.json();
-                 setAllTransactions(data || []);
-             }
-        } else if (response.ok) {
-           const data = await response.json();
-           setAllTransactions(data || []);
-        } else {
-           throw new Error(`HTTP error! Status: ${response.status}`);
-        }
+        // Fetch all transactions across all active customer accounts.
+        const txRes = await axios.get(`${API_BASE_URL}/byCustomer/${userId}`, {
+          withCredentials: true,
+        });
+        setAllTransactions(txRes.data || []);
         
         setError(null);
       } catch (error) {
@@ -139,7 +119,7 @@ export default function HistoryPage() {
     };
 
     fetchUserAndTransactions();
-  }, [userId]);
+  }, [userId, isAuth]);
 
   useEffect(() => {
     setCurrentPage(1);

@@ -55,24 +55,6 @@ export default function DashboardLayoutClient({ children }: DashboardLayoutProps
           {children}
         </main>
       </div>
-
-      {/* Realtime Event Feed Overlay */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none items-end print:hidden">
-        {lastEvent && (
-          <div key={lastEvent.timestamp} className="animate-in slide-in-from-bottom-5 fade-in duration-500 bg-white p-3 rounded-xl shadow-2xl border border-zinc-100 flex items-center gap-4 self-end pointer-events-auto min-w-[250px]">
-            <div className="bg-blue-100 text-blue-600 p-2 rounded-lg flex-shrink-0">
-              <Activity className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-zinc-500 font-bold uppercase mb-0.5 tracking-wide">Live Event</p>
-              <p className="text-sm font-bold text-zinc-900 truncate">
-                {lastEvent.data.eventName.replace(/_/g, ' ').toUpperCase()}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
     </div>
     </AuthGuard>
   );

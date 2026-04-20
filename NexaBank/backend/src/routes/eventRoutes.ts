@@ -426,8 +426,8 @@ const LAST_NAMES_POOL: Record<string, string[]> = {
 };
 
 const SPEND_CATEGORIES = ["FOOD", "SHOPPING", "ENTERTAINMENT", "HOUSING", "OTHERS", "TRANSPORT", "UTILITIES", "HEALTHCARE"];
-const CHANNELS: ("WEB" | "MOBILE" | "ATM" | "POS")[] = ["WEB", "MOBILE", "ATM", "POS"];
-const CHANNEL_WEIGHTS = [35, 40, 10, 15]; // Mobile-first era
+const CHANNELS: ("WEB" | "MOBILE")[] = ["WEB", "MOBILE"];
+const CHANNEL_WEIGHTS = [45, 55]; // Mobile-first, no ATM/POS simulation noise
 const LOAN_TYPES = ["HOME", "AUTO", "PERSONAL", "STUDENT"] as ("HOME" | "AUTO" | "PERSONAL" | "STUDENT")[];
 const PRO_FEATURES = ["pro-feature?id=crypto-trading", "wealth_rebalance", "pro-feature?id=bulk-payroll-processing", "ai_insight_download"];
 const DEVICE_TYPES = ["desktop", "mobile", "tablet"];
@@ -445,6 +445,7 @@ const STREET_NAMES: Record<string, string[]> = {
 };
 
 interface UserPersona {
+  userType: "casual_user" | "salary_user" | "power_user" | "business_user";
   loginProbability: number;     // 0.15–0.95 (daily chance of logging in)
   spendingRate: number;         // 0.1–0.8 (chance of spending per login)
   averageSpend: number;         // mean spend amount
@@ -453,7 +454,7 @@ interface UserPersona {
   failureRate: number;          // 0.02–0.06 (chance of transaction failure)
   loanInterest: number;        // 0.1–0.6 (chance of applying for loan)
   salaryRange: [number, number]; // [min, max]
-  preferredChannel: "WEB" | "MOBILE" | "ATM" | "POS";
+  preferredChannel: "WEB" | "MOBILE";
   deviceType: string;
   browser: string;
   isEnterprise: boolean;
@@ -462,8 +463,18 @@ interface UserPersona {
 function generatePersona(): UserPersona {
   const isWhale = Math.random() < 0.15; // 15% are high-value customers
   const isCasual = Math.random() < 0.3; // 30% are casual users
+  const isBusiness = !isCasual && Math.random() < 0.2;
+
+  const userType: UserPersona["userType"] = isBusiness
+    ? "business_user"
+    : isWhale
+      ? "power_user"
+      : isCasual
+        ? "casual_user"
+        : "salary_user";
 
   return {
+    userType,
     loginProbability: isCasual ? 0.15 + Math.random() * 0.25 : 0.5 + Math.random() * 0.45,
     spendingRate: isCasual ? 0.1 + Math.random() * 0.2 : 0.3 + Math.random() * 0.5,
     averageSpend: isWhale ? 5000 + Math.random() * 20000 : 500 + Math.random() * 3000,
@@ -485,6 +496,7 @@ function locationMeta(loc: WorldCity, persona: UserPersona) {
     continent: loc.continent,
     country: loc.country,
     city: loc.city,
+    user_type: persona.userType,
     location: loc.country, // backwards compat with analytics /locations endpoint
     device_type: persona.deviceType,
     browser: persona.browser,
@@ -868,21 +880,22 @@ router.post(
             }
           }
 
-          // ── ATM Withdrawal (round numbers) ────────────────
+          // ── Cash/Card Withdrawal (digital channels only for cleaner distribution) ────────────────
           if (Math.random() < 0.08 && currentBalance > 5000) {
-            const atmAmounts = [500, 1000, 2000, 5000, 10000];
-            const atmAmount = pick(atmAmounts.filter(a => a < currentBalance * 0.3));
-            if (atmAmount) {
+            const withdrawalAmounts = [500, 1000, 2000, 5000, 10000];
+            const withdrawalAmount = pick(withdrawalAmounts.filter(a => a < currentBalance * 0.3));
+            if (withdrawalAmount) {
+              const withdrawalChannel = Math.random() < 0.6 ? "MOBILE" : "WEB";
               await prisma.transaction.create({
                 data: {
                   transactionType: "WITHDRAWAL",
                   senderAccNo: accNo, receiverAccNo: "EXTERNAL-BANK",
-                  amount: atmAmount, status: "SUCCESS",
-                  category: "ATM Withdrawal", channel: "ATM",
+                  amount: withdrawalAmount, status: "SUCCESS",
+                  category: "Cash Withdrawal", channel: withdrawalChannel,
                   timestamp: new Date((dayTs + 8000) * 1000),
                 }
               });
-              currentBalance -= atmAmount;
+              currentBalance -= withdrawalAmount;
               await prisma.account.update({ where: { accNo }, data: { balance: currentBalance } });
               transactionsCreated++;
             }

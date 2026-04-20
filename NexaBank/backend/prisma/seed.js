@@ -162,22 +162,22 @@ async function main() {
 
     const accountsTemplate = [
         {
-            ifsc: 'IFSC001',
+        ifsc: 'NEXA0001',
             accountType: 'SAVINGS',
             balance: 1000,
         },
         {
-            ifsc: 'IFSC002',
+        ifsc: 'NEXA0001',
             accountType: 'CURRENT',
             balance: 2000,
         },
         {
-            ifsc: 'IFSC003',
+        ifsc: 'SAFX0001',
             accountType: 'CREDIT_CARD',
             balance: 5000,
         },
         {
-            ifsc: 'IFSC004',
+        ifsc: 'SAFX0001',
             accountType: 'CURRENT',
             balance: 3000,
         },

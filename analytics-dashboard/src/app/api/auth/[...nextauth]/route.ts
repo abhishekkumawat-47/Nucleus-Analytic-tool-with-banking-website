@@ -34,6 +34,12 @@ export const authOptions: NextAuthOptions = {
         token.role = getUserRole(user.email);
         token.adminApps = getAdminApps(user.email);
       }
+
+      // Keep RBAC in sync on subsequent requests as well.
+      if (token.email) {
+        token.role = getUserRole(token.email);
+        token.adminApps = getAdminApps(token.email);
+      }
       return token;
     },
     async session({ session, token }) {
